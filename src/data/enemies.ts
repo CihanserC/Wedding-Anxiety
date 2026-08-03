@@ -4,6 +4,8 @@ export type EnemyType =
   | 'zaman-canavari'
   | 'beklenti-golgesi';
 
+export type EnemyBehavior = 'chase' | 'stalker' | 'dasher' | 'floater';
+
 export interface EnemyStats {
   type: EnemyType;
   displayName: string;
@@ -18,6 +20,7 @@ export interface EnemyStats {
   anxietyReward: number;
   contactAnxietyPerSecond: number;
   isBoss?: boolean;
+  behavior: EnemyBehavior;
 }
 
 export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
@@ -28,12 +31,13 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     speed: 1.4,
     contactDamage: 6,
     radius: 0.45,
-    height: 1.7,
-    color: 0xc078d8,
-    accentColor: 0xffd1e8,
+    height: 1.9,
+    color: 0x4a1d5c,
+    accentColor: 0xc9a3b3,
     scoreValue: 50,
     anxietyReward: 6,
     contactAnxietyPerSecond: 14,
+    behavior: 'chase',
   },
   'mukemmeliyetci-kuzen': {
     type: 'mukemmeliyetci-kuzen',
@@ -42,12 +46,13 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     speed: 2.2,
     contactDamage: 8,
     radius: 0.45,
-    height: 1.8,
-    color: 0x38c8c0,
-    accentColor: 0xe8fff8,
+    height: 2.1,
+    color: 0x0d2b3a,
+    accentColor: 0x88b0c0,
     scoreValue: 80,
     anxietyReward: 8,
     contactAnxietyPerSecond: 18,
+    behavior: 'stalker',
   },
   'zaman-canavari': {
     type: 'zaman-canavari',
@@ -56,12 +61,13 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     speed: 3.6,
     contactDamage: 10,
     radius: 0.4,
-    height: 1.5,
-    color: 0xff7a3d,
-    accentColor: 0xffe28a,
+    height: 1.7,
+    color: 0xd5c7a8,
+    accentColor: 0x8b3a1a,
     scoreValue: 120,
     anxietyReward: 10,
     contactAnxietyPerSecond: 22,
+    behavior: 'dasher',
   },
   'beklenti-golgesi': {
     type: 'beklenti-golgesi',
@@ -69,13 +75,14 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     hp: 45,
     speed: 1.9,
     contactDamage: 22,
-    radius: 0.9,
-    height: 3.2,
-    color: 0x2c1a52,
-    accentColor: 0x7a4bd6,
+    radius: 1.0,
+    height: 3.6,
+    color: 0x160828,
+    accentColor: 0x9a6cff,
     scoreValue: 1000,
     anxietyReward: 40,
     contactAnxietyPerSecond: 32,
     isBoss: true,
+    behavior: 'floater',
   },
 };

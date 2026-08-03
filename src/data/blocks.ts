@@ -1,4 +1,4 @@
-export type BlockId = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export type BlockId = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
 export interface BlockDefinition {
   id: BlockId;
@@ -16,6 +16,8 @@ export const BLOCK_FLOWER: BlockId = 4;
 export const BLOCK_CARPET: BlockId = 5;
 export const BLOCK_GLASS: BlockId = 6;
 export const BLOCK_GOLD: BlockId = 7;
+export const BLOCK_PATH: BlockId = 8;
+export const BLOCK_HEDGE: BlockId = 9;
 
 export const BLOCKS: Record<BlockId, BlockDefinition> = {
   0: { id: 0, name: 'air', color: 0x000000, solid: false, opacity: 0 },
@@ -26,6 +28,8 @@ export const BLOCKS: Record<BlockId, BlockDefinition> = {
   5: { id: 5, name: 'carpet', color: 0xb43a4e, solid: false, opacity: 1 },
   6: { id: 6, name: 'glass', color: 0xbfe6ff, solid: true, opacity: 0.35 },
   7: { id: 7, name: 'gold', color: 0xf5c542, solid: true, opacity: 1 },
+  8: { id: 8, name: 'path', color: 0xc8bfa8, solid: true, opacity: 1 },
+  9: { id: 9, name: 'hedge', color: 0x2f5f2f, solid: true, opacity: 1 },
 };
 
 export function isSolidBlock(id: BlockId): boolean {

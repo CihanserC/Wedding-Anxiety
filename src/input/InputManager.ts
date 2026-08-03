@@ -25,6 +25,8 @@ export class InputManager {
   private mouseDx = 0;
   private mouseDy = 0;
   private firePressed = false;
+  private weaponSelect: number | null = null;
+  private weaponScroll = 0;
   private pointerLocked = false;
   private readonly target: HTMLElement;
   private readonly listeners = new Set<() => void>();
@@ -39,6 +41,7 @@ export class InputManager {
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('mousemove', this.onMouseMove);
     window.addEventListener('mousedown', this.onMouseDown);
+    window.addEventListener('wheel', this.onWheel, { passive: false });
     document.addEventListener('pointerlockchange', this.onPointerLockChange);
     window.addEventListener('blur', this.clearAll);
   }
@@ -48,6 +51,7 @@ export class InputManager {
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('mousemove', this.onMouseMove);
     window.removeEventListener('mousedown', this.onMouseDown);
+    window.removeEventListener('wheel', this.onWheel);
     document.removeEventListener('pointerlockchange', this.onPointerLockChange);
     window.removeEventListener('blur', this.clearAll);
   }
@@ -57,6 +61,8 @@ export class InputManager {
     this.mouseDx = 0;
     this.mouseDy = 0;
     this.firePressed = false;
+    this.weaponSelect = null;
+    this.weaponScroll = 0;
   };
 
   private onKeyDown = (event: KeyboardEvent): void => {
@@ -64,7 +70,11 @@ export class InputManager {
     if (binding) {
       this.keys.add(binding);
       event.preventDefault();
+      return;
     }
+    if (event.code === 'Digit1') this.weaponSelect = 0;
+    else if (event.code === 'Digit2') this.weaponSelect = 1;
+    else if (event.code === 'Digit3') this.weaponSelect = 2;
   };
 
   private onKeyUp = (event: KeyboardEvent): void => {
@@ -85,6 +95,13 @@ export class InputManager {
     if (event.button !== 0) return;
     if (!this.pointerLocked) return;
     this.firePressed = true;
+  };
+
+  private onWheel = (event: WheelEvent): void => {
+    if (!this.pointerLocked) return;
+    if (event.deltaY > 0) this.weaponScroll += 1;
+    else if (event.deltaY < 0) this.weaponScroll -= 1;
+    event.preventDefault();
   };
 
   private onPointerLockChange = (): void => {
@@ -134,5 +151,17 @@ export class InputManager {
     const fired = this.firePressed;
     this.firePressed = false;
     return fired;
+  }
+
+  consumeWeaponSelect(): number | null {
+    const s = this.weaponSelect;
+    this.weaponSelect = null;
+    return s;
+  }
+
+  consumeWeaponScroll(): number {
+    const s = this.weaponScroll;
+    this.weaponScroll = 0;
+    return s;
   }
 }

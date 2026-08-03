@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { ENEMY_STATS, type EnemyStats, type EnemyType } from '../data/enemies';
 import type { World } from '../game/World';
+import { buildEnemyMesh } from './enemyMeshes';
 
 let __enemyId = 0;
 
 /**
- * Blocky voxel-look enemy: head + body + eyes assembled from simple boxes,
- * tinted per enemy type. AI simply walks toward the player on the XZ plane
- * while gravity pins it to the floor.
+ * Voxel-style enemy. Silhouette and animation are type-specific (built via
+ * enemyMeshes factory); AI is chase-based with light behavior variations
+ * per stats.behavior (stalker pauses, dasher bursts, floater bobs high).
  */
 export class Enemy {
   readonly id: number;
@@ -16,6 +17,8 @@ export class Enemy {
   readonly position: THREE.Vector3;
   hp: number;
   dead = false;
+  dying = false;
+  private deathTimer = 0;
   contactAccumulator = 0;
   private vy = 0;
   private readonly world: World;
@@ -23,6 +26,13 @@ export class Enemy {
   private time = 0;
   private hitFlashRemaining = 0;
   private readonly materials: THREE.MeshLambertMaterial[] = [];
+  private readonly headGroup?: THREE.Group;
+  private readonly armGroups?: THREE.Group[];
+  private readonly jitterMeshes?: THREE.Object3D[];
+  private readonly floatBody?: THREE.Object3D;
+  private dashCooldown = 0;
+  private dashRemaining = 0;
+  private pauseTimer = 0;
 
   constructor(world: World, type: EnemyType, position: THREE.Vector3) {
     this.id = ++__enemyId;
@@ -30,63 +40,18 @@ export class Enemy {
     this.hp = this.stats.hp;
     this.position = position.clone();
     this.world = world;
-    this.root = this.buildMesh();
+    const mesh = buildEnemyMesh(type, this.stats);
+    this.root = mesh.root;
+    this.materials = mesh.materials;
+    this.headGroup = mesh.headGroup;
+    this.armGroups = mesh.armGroups;
+    this.jitterMeshes = mesh.jitterMeshes;
+    this.floatBody = mesh.floatBody;
     this.root.position.copy(this.position);
   }
 
-  private buildMesh(): THREE.Group {
-    const stats = this.stats;
-    const group = new THREE.Group();
-    const scale = stats.isBoss ? 1.6 : 1;
-
-    const bodyMat = new THREE.MeshLambertMaterial({ color: stats.color });
-    const accentMat = new THREE.MeshLambertMaterial({ color: stats.accentColor });
-    const eyeMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
-    this.materials.push(bodyMat, accentMat, eyeMat);
-
-    const bodyH = 0.9 * scale;
-    const bodyW = 0.7 * scale;
-    const body = new THREE.Mesh(new THREE.BoxGeometry(bodyW, bodyH, bodyW), bodyMat);
-    body.position.y = bodyH * 0.5;
-    group.add(body);
-
-    const headSize = 0.55 * scale;
-    const head = new THREE.Mesh(new THREE.BoxGeometry(headSize, headSize, headSize), accentMat);
-    head.position.y = bodyH + headSize * 0.5;
-    group.add(head);
-
-    const eyeGeo = new THREE.BoxGeometry(0.08 * scale, 0.08 * scale, 0.05 * scale);
-    const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
-    const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
-    eyeL.position.set(-0.13 * scale, bodyH + headSize * 0.65, headSize * 0.5);
-    eyeR.position.set(0.13 * scale, bodyH + headSize * 0.65, headSize * 0.5);
-    group.add(eyeL, eyeR);
-
-    if (stats.isBoss) {
-      const crown = new THREE.Mesh(
-        new THREE.BoxGeometry(headSize * 1.2, 0.2 * scale, headSize * 1.2),
-        new THREE.MeshLambertMaterial({ color: 0xffd54a }),
-      );
-      crown.position.y = bodyH + headSize + 0.15 * scale;
-      group.add(crown);
-      this.materials.push(crown.material as THREE.MeshLambertMaterial);
-
-      const aura = new THREE.Mesh(
-        new THREE.BoxGeometry(bodyW * 2.2, 0.1, bodyW * 2.2),
-        new THREE.MeshBasicMaterial({
-          color: 0x7a4bd6,
-          transparent: true,
-          opacity: 0.35,
-        }),
-      );
-      aura.position.y = 0.05;
-      group.add(aura);
-    }
-
-    return group;
-  }
-
   applyHit(damage: number): boolean {
+    if (this.dying) return false;
     this.hp -= damage;
     this.hitFlashRemaining = 0.15;
     for (const mat of this.materials) {
@@ -94,7 +59,8 @@ export class Enemy {
       mat.emissiveIntensity = 1;
     }
     if (this.hp <= 0) {
-      this.dead = true;
+      this.dying = true;
+      this.deathTimer = 0.35;
       return true;
     }
     return false;
@@ -102,6 +68,18 @@ export class Enemy {
 
   update(dt: number, target: THREE.Vector3): void {
     this.time += dt;
+
+    if (this.dying) {
+      this.deathTimer -= dt;
+      const t = Math.max(0, this.deathTimer / 0.35);
+      this.root.scale.setScalar(t);
+      for (const mat of this.materials) {
+        mat.transparent = true;
+        mat.opacity = t;
+      }
+      if (this.deathTimer <= 0) this.dead = true;
+      return;
+    }
 
     if (this.hitFlashRemaining > 0) {
       this.hitFlashRemaining -= dt;
@@ -121,16 +99,38 @@ export class Enemy {
     const distXZ = toTarget.length();
     if (distXZ > 0.001) {
       toTarget.divideScalar(distXZ);
-      const step = this.stats.speed * dt;
+
+      let speed = this.stats.speed;
+      if (this.stats.behavior === 'stalker') {
+        this.pauseTimer -= dt;
+        if (this.pauseTimer <= 0) {
+          this.pauseTimer = distXZ < 6 ? -1.2 : 1.5 + Math.random() * 1.2;
+        }
+        if (this.pauseTimer > 0) speed *= 0.15;
+      } else if (this.stats.behavior === 'dasher') {
+        this.dashCooldown -= dt;
+        this.dashRemaining -= dt;
+        if (this.dashCooldown <= 0 && distXZ < 10) {
+          this.dashRemaining = 0.4;
+          this.dashCooldown = 2.5 + Math.random();
+        }
+        if (this.dashRemaining > 0) speed *= 2.4;
+      }
+
+      const step = speed * dt;
       const move = Math.min(step, distXZ);
       this.tryMove(toTarget.x * move, 0, toTarget.z * move);
     }
 
-    this.vy -= 22 * dt;
-    if (this.vy < -30) this.vy = -30;
-    const groundedBefore = this.isGrounded();
-    if (groundedBefore && this.vy < 0) this.vy = 0;
-    this.tryMove(0, this.vy * dt, 0);
+    if (this.stats.behavior === 'floater') {
+      this.vy = 0;
+    } else {
+      this.vy -= 22 * dt;
+      if (this.vy < -30) this.vy = -30;
+      const groundedBefore = this.isGrounded();
+      if (groundedBefore && this.vy < 0) this.vy = 0;
+      this.tryMove(0, this.vy * dt, 0);
+    }
 
     this.contactAccumulator = Math.max(0, this.contactAccumulator - dt);
 
@@ -138,8 +138,60 @@ export class Enemy {
       const facing = Math.atan2(toTarget.x, toTarget.z);
       this.root.rotation.y = facing;
     }
-    const bob = Math.sin(this.time * 6 + this.bobPhase) * 0.05;
-    this.root.position.set(this.position.x, this.position.y + bob, this.position.z);
+
+    this.applyTypeAnimation(dt);
+  }
+
+  private applyTypeAnimation(_dt: number): void {
+    const t = this.time;
+    let baseBob = Math.sin(t * 6 + this.bobPhase) * 0.05;
+
+    switch (this.stats.behavior) {
+      case 'chase': {
+        if (this.headGroup) {
+          this.headGroup.rotation.z = Math.sin(t * 3) * 0.15;
+          this.headGroup.rotation.x = 0.15 + Math.sin(t * 4) * 0.05;
+        }
+        if (this.armGroups) {
+          this.armGroups[0].rotation.x = Math.sin(t * 4) * 0.4 - 0.1;
+          this.armGroups[1].rotation.x = Math.sin(t * 4 + Math.PI) * 0.4 - 0.1;
+        }
+        break;
+      }
+      case 'stalker': {
+        if (this.headGroup) {
+          this.headGroup.rotation.z = Math.sin(t * 1.5) * 0.08;
+          this.headGroup.position.y = 1.85 + Math.sin(t * 2) * 0.03;
+        }
+        baseBob = Math.sin(t * 2 + this.bobPhase) * 0.02;
+        break;
+      }
+      case 'dasher': {
+        const jitterAmt = this.dashRemaining > 0 ? 0.08 : 0.03;
+        if (this.jitterMeshes) {
+          for (const m of this.jitterMeshes) {
+            m.position.x = (Math.random() - 0.5) * jitterAmt;
+          }
+        }
+        baseBob = Math.sin(t * 10 + this.bobPhase) * 0.06;
+        break;
+      }
+      case 'floater': {
+        if (this.floatBody) {
+          this.floatBody.position.y = Math.sin(t * 1.5) * 0.25 + 0.3;
+          this.floatBody.rotation.y = t * 0.5;
+        }
+        if (this.armGroups) {
+          for (let i = 0; i < this.armGroups.length; i++) {
+            this.armGroups[i].rotation.z = Math.sin(t * 2 + i) * 0.3;
+          }
+        }
+        baseBob = 0;
+        break;
+      }
+    }
+
+    this.root.position.set(this.position.x, this.position.y + baseBob, this.position.z);
   }
 
   private tryMove(dx: number, dy: number, dz: number): void {

@@ -18,6 +18,8 @@ import { WAVES, makeWaveState, totalWaveCount, type WaveState } from './WaveMana
 import { World } from './World';
 import { ProjectileEffects } from '../entities/Projectile';
 import type { Enemy } from '../entities/Enemy';
+import { WEAPONS, WEAPON_ORDER, type WeaponId } from '../data/weapons';
+import { createWallSign } from '../rendering/WallSign';
 
 type GameState = 'menu' | 'wave-intro' | 'playing' | 'wave-transition' | 'win' | 'lose';
 
@@ -43,6 +45,7 @@ export class Game {
   private lastTime = 0;
   private running = false;
   private worldGroup: THREE.Group;
+  private activeWeapon: WeaponId = 'pistol';
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -55,12 +58,14 @@ export class Game {
     this.scene = new THREE.Scene();
     createLighting(this.scene);
 
-    this.world = new World(32, 32, 10);
+    this.world = new World(48, 56, 10);
     this.worldGroup = this.world.buildMesh();
     this.scene.add(this.worldGroup);
+    this.addWeddingBanner();
 
     this.input = new InputManager(this.renderer.domElement);
     this.player = new Player(this.world, this.input, container.clientWidth / container.clientHeight);
+    this.scene.add(this.player.camera);
 
     this.effects = new ProjectileEffects(this.scene);
     this.weapon = new WeaponSystem(this.world, this.effects);
@@ -137,12 +142,20 @@ export class Game {
       this.anxiety.update(dt, true);
       this.tickWave(dt);
 
+      if (active) {
+        const requested = this.input.consumeWeaponSelect();
+        if (requested !== null) this.setActiveWeapon(WEAPON_ORDER[requested]);
+        const wheel = this.input.consumeWeaponScroll();
+        if (wheel !== 0) this.cycleWeapon(wheel);
+      }
+
       if (active && this.input.consumeFire()) {
         const origin = this.player.getEyePosition();
         const dir = this.player.getAimDirection();
-        const result = this.weapon.fire(origin, dir, this.enemies.enemies);
+        const result = this.weapon.fire(this.activeWeapon, origin, dir, this.enemies.enemies);
         if (result) {
           this.audio.play('shoot');
+          this.player.rig.onFire(result.recoil);
           if (result.hitEnemy) this.audio.play('hit');
         }
       }
@@ -159,7 +172,30 @@ export class Game {
       score: this.score,
       enemiesLeft: Math.max(0, this.waveState.wave.totalEnemies - this.waveState.killedTotal),
       reloadRatio: this.weapon.cooldownRatio(),
+      weaponName: WEAPONS[this.activeWeapon].displayName,
     });
+  }
+
+  private addWeddingBanner(): void {
+    const hall = this.world.hall;
+    const sign = createWallSign('Hilal & Cihanser', 8, 2);
+    const wallX = hall.x0 + hall.width / 2;
+    const wallZ = hall.northWallZ - 0.01;
+    sign.position.set(wallX, 4.2, wallZ);
+    sign.rotation.y = Math.PI;
+    this.worldGroup.add(sign);
+  }
+
+  private setActiveWeapon(id: WeaponId | undefined): void {
+    if (!id) return;
+    this.activeWeapon = id;
+    this.player.rig.setActive(id);
+  }
+
+  private cycleWeapon(direction: number): void {
+    const idx = WEAPON_ORDER.indexOf(this.activeWeapon);
+    const next = (idx + direction + WEAPON_ORDER.length) % WEAPON_ORDER.length;
+    this.setActiveWeapon(WEAPON_ORDER[next]);
   }
 
   private tickWave(dt: number): void {
@@ -256,6 +292,7 @@ export class Game {
     this.effects.dispose();
     this.anxiety.reset();
     this.score = 0;
+    this.setActiveWeapon('pistol');
     this.player.respawn();
     this.menu.hide();
     this.hud.show();

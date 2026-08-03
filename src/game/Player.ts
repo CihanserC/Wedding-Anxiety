@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { InputManager } from '../input/InputManager';
 import type { World } from './World';
+import { PlayerRig } from '../entities/PlayerRig';
 
 const PLAYER_RADIUS = 0.35;
 const PLAYER_HEIGHT = 1.75;
@@ -15,6 +16,7 @@ const MAX_PITCH = Math.PI / 2 - 0.05;
 export class Player {
   readonly camera: THREE.PerspectiveCamera;
   readonly position: THREE.Vector3;
+  readonly rig: PlayerRig;
   private velocity = new THREE.Vector3();
   private yaw = 0;
   private pitch = 0;
@@ -26,8 +28,11 @@ export class Player {
     this.world = world;
     this.input = input;
     this.camera = new THREE.PerspectiveCamera(75, aspect, 0.05, 250);
-    this.position = new THREE.Vector3(world.width * 0.5, world.bounds().floorY + 0.01, world.depth * 0.15);
+    const spawn = world.playerSpawn();
+    this.position = new THREE.Vector3(spawn.x, spawn.y, spawn.z);
     this.camera.rotation.order = 'YXZ';
+    this.rig = new PlayerRig();
+    this.rig.attachTo(this.camera);
     this.syncCamera();
   }
 
@@ -37,7 +42,8 @@ export class Player {
   }
 
   respawn(): void {
-    this.position.set(this.world.width * 0.5, this.world.bounds().floorY + 0.01, this.world.depth * 0.15);
+    const spawn = this.world.playerSpawn();
+    this.position.set(spawn.x, spawn.y, spawn.z);
     this.velocity.set(0, 0, 0);
     this.yaw = 0;
     this.pitch = 0;
@@ -96,6 +102,9 @@ export class Player {
 
     this.moveWithCollisions(dt);
     this.syncCamera();
+
+    const moving = wish.lengthSq() > 0.001 && this.onGround;
+    this.rig.update(dt, moving);
   }
 
   private moveWithCollisions(dt: number): void {

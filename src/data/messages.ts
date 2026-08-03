@@ -7,7 +7,9 @@ export const START_MESSAGES = {
   controls: [
     'W A S D — Hareket',
     'Fare — Bakış',
-    'Sol Tık — Ateş (Gülümseme Tabancası)',
+    'Sol Tık — Ateş',
+    '1 · 2 · 3 — Silah Değiştir (Tabanca · Tüfek · Enerji Kalkanı)',
+    'Fare Tekerleği — Silahlar arası geçiş',
     'Space — Zıpla',
     'Shift — Koş',
     'Esc — Fareyi Serbest Bırak',

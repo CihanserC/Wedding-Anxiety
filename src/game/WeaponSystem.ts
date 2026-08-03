@@ -2,19 +2,18 @@ import * as THREE from 'three';
 import type { Enemy } from '../entities/Enemy';
 import type { ProjectileEffects } from '../entities/Projectile';
 import type { World } from './World';
-
-const RAY_MAX = 60;
-const DAMAGE = 1;
-const COOLDOWN = 0.22;
+import { WEAPONS, type WeaponDefinition, type WeaponId } from '../data/weapons';
 
 export interface FireResult {
   hitEnemy: Enemy | null;
   killedEnemy: Enemy | null;
   hitPoint: THREE.Vector3;
+  recoil: number;
 }
 
 export class WeaponSystem {
   private cooldown = 0;
+  private currentCooldownMax = 0.22;
   private readonly effects: ProjectileEffects;
   private readonly world: World;
 
@@ -32,46 +31,97 @@ export class WeaponSystem {
   }
 
   cooldownRatio(): number {
-    return Math.max(0, Math.min(1, this.cooldown / COOLDOWN));
+    if (this.currentCooldownMax <= 0) return 0;
+    return Math.max(0, Math.min(1, this.cooldown / this.currentCooldownMax));
   }
 
-  fire(origin: THREE.Vector3, direction: THREE.Vector3, enemies: Enemy[]): FireResult | null {
+  fire(
+    weaponId: WeaponId,
+    origin: THREE.Vector3,
+    direction: THREE.Vector3,
+    enemies: Enemy[],
+  ): FireResult | null {
     if (!this.canFire()) return null;
-    this.cooldown = COOLDOWN;
+    const weapon = WEAPONS[weaponId];
+    this.cooldown = weapon.cooldown;
+    this.currentCooldownMax = weapon.cooldown;
 
-    const worldHit = this.raycastWorld(origin, direction);
-    const enemyHit = this.raycastEnemies(origin, direction, enemies, worldHit?.distance ?? RAY_MAX);
+    let bestHitEnemy: Enemy | null = null;
+    let killed: Enemy | null = null;
+    let hitPoint = origin.clone().addScaledVector(direction, weapon.range);
+
+    const right = tempRight(direction);
+    const up = tempUp(direction, right);
+
+    for (let p = 0; p < weapon.pellets; p++) {
+      const pelletDir = direction.clone();
+      if (weapon.spread > 0) {
+        const angleX = (Math.random() - 0.5) * weapon.spread;
+        const angleY = (Math.random() - 0.5) * weapon.spread;
+        pelletDir.addScaledVector(right, angleX).addScaledVector(up, angleY).normalize();
+      }
+
+      const end = this.fireOneRay(weapon, origin, pelletDir, enemies);
+      if (end.hitEnemy && !bestHitEnemy) bestHitEnemy = end.hitEnemy;
+      if (end.killedEnemy && !killed) killed = end.killedEnemy;
+      if (p === 0) hitPoint = end.point;
+    }
+
+    const muzzle = origin.clone().addScaledVector(direction, 0.6);
+    muzzle.y -= 0.15;
+    this.effects.spawnMuzzleFlash(muzzle, weapon.muzzleColor, weapon.muzzleSize);
+
+    return {
+      hitEnemy: bestHitEnemy,
+      killedEnemy: killed,
+      hitPoint,
+      recoil: weapon.recoil,
+    };
+  }
+
+  private fireOneRay(
+    weapon: WeaponDefinition,
+    origin: THREE.Vector3,
+    direction: THREE.Vector3,
+    enemies: Enemy[],
+  ): { point: THREE.Vector3; hitEnemy: Enemy | null; killedEnemy: Enemy | null } {
+    const worldHit = this.raycastWorld(origin, direction, weapon.range);
+    const enemyHit = this.raycastEnemies(
+      origin,
+      direction,
+      enemies,
+      worldHit?.distance ?? weapon.range,
+    );
 
     let end: THREE.Vector3;
-    let killed: Enemy | null = null;
-    let hitEnemyResult: Enemy | null = null;
+    let hitEnemy: Enemy | null = null;
+    let killedEnemy: Enemy | null = null;
 
     if (enemyHit) {
       end = enemyHit.point;
-      const killedNow = enemyHit.enemy.applyHit(DAMAGE);
-      hitEnemyResult = enemyHit.enemy;
-      if (killedNow) killed = enemyHit.enemy;
+      hitEnemy = enemyHit.enemy;
+      const killedNow = enemyHit.enemy.applyHit(weapon.damage);
+      if (killedNow) killedEnemy = enemyHit.enemy;
       this.effects.spawnHitSpark(end, enemyHit.enemy.stats.accentColor);
     } else if (worldHit) {
       end = worldHit.point;
       this.effects.spawnHitSpark(end, 0xfff4a0);
     } else {
-      end = origin.clone().addScaledVector(direction, RAY_MAX);
+      end = origin.clone().addScaledVector(direction, weapon.range);
     }
 
     const muzzle = origin.clone().addScaledVector(direction, 0.6);
     muzzle.y -= 0.15;
-    this.effects.spawnMuzzleFlash(muzzle);
-    this.effects.spawnTracer(muzzle, end);
+    this.effects.spawnTracer(muzzle, end, weapon.tracerColor);
 
-    return { hitEnemy: hitEnemyResult, killedEnemy: killed, hitPoint: end };
+    return { point: end, hitEnemy, killedEnemy };
   }
 
-  /**
-   * Cheap voxel raycast using a bounded DDA. Steps up to RAY_MAX voxels.
-   * Returns the world-space hit point on the first solid block or null.
-   */
-  private raycastWorld(origin: THREE.Vector3, dir: THREE.Vector3): { point: THREE.Vector3; distance: number } | null {
+  private raycastWorld(
+    origin: THREE.Vector3,
+    dir: THREE.Vector3,
+    maxRange: number,
+  ): { point: THREE.Vector3; distance: number } | null {
     let x = Math.floor(origin.x);
     let y = Math.floor(origin.y);
     let z = Math.floor(origin.z);
@@ -91,7 +141,7 @@ export class WeaponSystem {
     let tMaxZ = stepZ !== 0 ? (nextBoundary(origin.z, stepZ) - origin.z) / dir.z : Infinity;
 
     let t = 0;
-    for (let i = 0; i < RAY_MAX * 3; i++) {
+    for (let i = 0; i < maxRange * 3; i++) {
       if (this.world.isSolidAt(x, y, z)) {
         const point = origin.clone().addScaledVector(dir, t);
         return { point, distance: t };
@@ -109,7 +159,7 @@ export class WeaponSystem {
         tMaxZ += tDeltaZ;
         z += stepZ;
       }
-      if (t > RAY_MAX) break;
+      if (t > maxRange) break;
     }
     return null;
   }
@@ -124,7 +174,7 @@ export class WeaponSystem {
     let best: { enemy: Enemy; point: THREE.Vector3; distance: number } | null = null;
     const tmp = new THREE.Vector3();
     for (const enemy of enemies) {
-      if (enemy.dead) continue;
+      if (enemy.dead || enemy.dying) continue;
       const box = enemy.getBox();
       const hit = ray.intersectBox(box, tmp);
       if (!hit) continue;
@@ -136,4 +186,15 @@ export class WeaponSystem {
     }
     return best;
   }
+}
+
+function tempRight(dir: THREE.Vector3): THREE.Vector3 {
+  const up = new THREE.Vector3(0, 1, 0);
+  const r = new THREE.Vector3().crossVectors(dir, up);
+  if (r.lengthSq() < 1e-6) r.set(1, 0, 0);
+  return r.normalize();
+}
+
+function tempUp(dir: THREE.Vector3, right: THREE.Vector3): THREE.Vector3 {
+  return new THREE.Vector3().crossVectors(right, dir).normalize();
 }

@@ -7,6 +7,7 @@ export interface HUDState {
   score: number;
   enemiesLeft: number;
   reloadRatio: number;
+  weaponName: string;
 }
 
 export class HUD {
@@ -19,6 +20,7 @@ export class HUD {
   private readonly enemiesLabel: HTMLDivElement;
   private readonly reloadRing: HTMLDivElement;
   private readonly damageFlash: HTMLDivElement;
+  private readonly weaponLabel: HTMLDivElement;
 
   constructor(container: HTMLElement) {
     this.root = document.createElement('div');
@@ -40,6 +42,7 @@ export class HUD {
       </div>
       <div class="wa-reload-ring"></div>
       <div class="wa-damage-flash"></div>
+      <div class="wa-weapon"></div>
     `;
     container.appendChild(this.root);
     this.crosshair = this.root.querySelector('.wa-crosshair') as HTMLDivElement;
@@ -50,6 +53,7 @@ export class HUD {
     this.enemiesLabel = this.root.querySelector('.wa-enemies') as HTMLDivElement;
     this.reloadRing = this.root.querySelector('.wa-reload-ring') as HTMLDivElement;
     this.damageFlash = this.root.querySelector('.wa-damage-flash') as HTMLDivElement;
+    this.weaponLabel = this.root.querySelector('.wa-weapon') as HTMLDivElement;
 
     HUD.ensureStyles();
     this.hide();
@@ -79,6 +83,8 @@ export class HUD {
     } else {
       this.reloadRing.style.opacity = '0';
     }
+
+    this.weaponLabel.textContent = state.weaponName;
   }
 
   flashDamage(): void {
@@ -200,6 +206,19 @@ export class HUD {
         transition: opacity 0.15s ease;
         mask: radial-gradient(circle, transparent 12px, black 13px);
         -webkit-mask: radial-gradient(circle, transparent 12px, black 13px);
+      }
+      .wa-weapon {
+        position: absolute;
+        right: 24px;
+        bottom: 20px;
+        padding: 8px 16px;
+        background: rgba(20, 10, 40, 0.6);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 10px;
+        font-size: 15px;
+        letter-spacing: 0.4px;
+        color: #f4ecff;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.5);
       }
       .wa-damage-flash {
         position: absolute;

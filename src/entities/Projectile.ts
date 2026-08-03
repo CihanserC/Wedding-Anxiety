@@ -21,10 +21,10 @@ export class ProjectileEffects {
     this.scene = scene;
   }
 
-  spawnTracer(from: THREE.Vector3, to: THREE.Vector3): void {
+  spawnTracer(from: THREE.Vector3, to: THREE.Vector3, color = 0xfff4a0): void {
     const geometry = new THREE.BufferGeometry().setFromPoints([from.clone(), to.clone()]);
     const material = new THREE.LineBasicMaterial({
-      color: 0xfff4a0,
+      color,
       transparent: true,
       opacity: 1,
     });
@@ -33,10 +33,10 @@ export class ProjectileEffects {
     this.effects.push({ mesh: line, born: this.now, life: 0.12, material });
   }
 
-  spawnMuzzleFlash(position: THREE.Vector3): void {
-    const geometry = new THREE.SphereGeometry(0.08, 8, 8);
+  spawnMuzzleFlash(position: THREE.Vector3, color = 0xfff2b0, size = 0.08): void {
+    const geometry = new THREE.SphereGeometry(size, 8, 8);
     const material = new THREE.MeshBasicMaterial({
-      color: 0xfff2b0,
+      color,
       transparent: true,
       opacity: 1,
     });
