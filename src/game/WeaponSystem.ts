@@ -15,11 +15,15 @@ export class WeaponSystem {
   private cooldown = 0;
   private currentCooldownMax = 0.22;
   private readonly effects: ProjectileEffects;
-  private readonly world: World;
+  private world: World;
 
   constructor(world: World, effects: ProjectileEffects) {
     this.world = world;
     this.effects = effects;
+  }
+
+  setWorld(world: World): void {
+    this.world = world;
   }
 
   update(dt: number): void {

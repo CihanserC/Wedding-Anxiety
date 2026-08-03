@@ -21,15 +21,16 @@ export class Player {
   private yaw = 0;
   private pitch = 0;
   private onGround = false;
-  private readonly world: World;
+  private world: World;
   private readonly input: InputManager;
 
   constructor(world: World, input: InputManager, aspect: number) {
     this.world = world;
     this.input = input;
-    this.camera = new THREE.PerspectiveCamera(75, aspect, 0.05, 250);
+    this.camera = new THREE.PerspectiveCamera(75, aspect, 0.05, 450);
     const spawn = world.playerSpawn();
     this.position = new THREE.Vector3(spawn.x, spawn.y, spawn.z);
+    this.yaw = world.spawnFacing;
     this.camera.rotation.order = 'YXZ';
     this.rig = new PlayerRig();
     this.rig.attachTo(this.camera);
@@ -41,11 +42,15 @@ export class Player {
     this.camera.updateProjectionMatrix();
   }
 
+  setWorld(world: World): void {
+    this.world = world;
+  }
+
   respawn(): void {
     const spawn = this.world.playerSpawn();
     this.position.set(spawn.x, spawn.y, spawn.z);
     this.velocity.set(0, 0, 0);
-    this.yaw = 0;
+    this.yaw = this.world.spawnFacing;
     this.pitch = 0;
     this.syncCamera();
   }
@@ -124,6 +129,15 @@ export class Player {
     const original = this.position[axis];
     this.position[axis] = original + delta;
     if (this.collides()) {
+      // Auto step-up ~1 block so spiral lighthouse stairs are climbable
+      if (axis !== 'y') {
+        const footY = this.position.y;
+        this.position.y = footY + 1.05;
+        if (!this.collides()) {
+          return;
+        }
+        this.position.y = footY;
+      }
       this.position[axis] = original;
       if (axis === 'y') {
         if (delta < 0) this.onGround = true;

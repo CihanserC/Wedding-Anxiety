@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Enemy } from '../entities/Enemy';
-import type { EnemyType } from '../data/enemies';
+import { ENEMY_STATS, type EnemyType } from '../data/enemies';
 import type { World } from './World';
 
 export interface SpawnRequest {
@@ -18,7 +18,7 @@ const CONTACT_RADIUS = 0.9;
 export class EnemyManager {
   readonly enemies: Enemy[] = [];
   private readonly scene: THREE.Scene;
-  private readonly world: World;
+  private world: World;
   private readonly rand: () => number = Math.random;
   private readonly events: EnemyManagerEvents;
 
@@ -28,8 +28,19 @@ export class EnemyManager {
     this.events = events;
   }
 
+  setWorld(world: World): void {
+    this.world = world;
+  }
+
   spawn(type: EnemyType, playerPos: THREE.Vector3, minDist = 8): Enemy {
-    const pos = this.world.randomSpawnPoint(this.rand, playerPos, minDist);
+    const stats = ENEMY_STATS[type];
+    const pos = this.world.randomSpawnPoint(
+      this.rand,
+      playerPos,
+      minDist,
+      stats.radius,
+      stats.height,
+    );
     const enemy = new Enemy(this.world, type, pos);
     this.enemies.push(enemy);
     this.scene.add(enemy.root);

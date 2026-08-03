@@ -27,6 +27,7 @@ export class InputManager {
   private firePressed = false;
   private weaponSelect: number | null = null;
   private weaponScroll = 0;
+  private interactPressed = false;
   private pointerLocked = false;
   private readonly target: HTMLElement;
   private readonly listeners = new Set<() => void>();
@@ -63,6 +64,7 @@ export class InputManager {
     this.firePressed = false;
     this.weaponSelect = null;
     this.weaponScroll = 0;
+    this.interactPressed = false;
   };
 
   private onKeyDown = (event: KeyboardEvent): void => {
@@ -75,6 +77,10 @@ export class InputManager {
     if (event.code === 'Digit1') this.weaponSelect = 0;
     else if (event.code === 'Digit2') this.weaponSelect = 1;
     else if (event.code === 'Digit3') this.weaponSelect = 2;
+    else if (event.code === 'KeyE') {
+      this.interactPressed = true;
+      event.preventDefault();
+    }
   };
 
   private onKeyUp = (event: KeyboardEvent): void => {
@@ -163,5 +169,11 @@ export class InputManager {
     const s = this.weaponScroll;
     this.weaponScroll = 0;
     return s;
+  }
+
+  consumeInteract(): boolean {
+    const pressed = this.interactPressed;
+    this.interactPressed = false;
+    return pressed;
   }
 }

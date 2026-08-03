@@ -1,20 +1,25 @@
 import * as THREE from 'three';
 import {
   BLOCK_AIR,
-  BLOCK_CARPET,
-  BLOCK_FLOWER,
-  BLOCK_GLASS,
-  BLOCK_GOLD,
-  BLOCK_GRASS,
-  BLOCK_HEDGE,
-  BLOCK_PATH,
   BLOCK_STONE,
-  BLOCK_WOOD,
   BLOCKS,
   isSolidBlock,
   type BlockId,
 } from '../data/blocks';
 import { buildVoxelMeshes, type VoxelInstanceInput } from '../rendering/VoxelMesh';
+import type { MapDefinition } from '../data/maps';
+import { generateConcertHall } from './worldGen/concertHall';
+import { generateLighthouse } from './worldGen/lighthouse';
+import { generateWeddingHall } from './worldGen/weddingHall';
+import type {
+  GeneratorResult,
+  SpawnRegion,
+  WorldWriter,
+  BannerSpec,
+  HallDecorations,
+  PropSpec,
+  InteractableSpec,
+} from './worldGen/types';
 
 export interface WorldBounds {
   minX: number;
@@ -25,55 +30,63 @@ export interface WorldBounds {
   ceilY: number;
 }
 
-export interface HallRegion {
-  x0: number;
-  z0: number;
-  width: number;
-  depth: number;
-  wallHeight: number;
-  altarZ: number;
-  northWallZ: number;
-  entranceZ: number;
-}
-
 /**
- * Voxel arena. Uses a flat 3D array indexed as
- * [x + width * (z + depth * y)]. Positions are 1-block cells; render
- * meshes are centered at (x+0.5, y+0.5, z+0.5).
- *
- * Layout: garden in the south (low Z), open entrance, then the wedding hall
- * to the north (high Z). The hall region is offset inside the larger world.
+ * Voxel arena driven by a MapDefinition. The active generator lays out blocks
+ * for the chosen map (concert hall, lighthouse, wedding hall) and returns
+ * player spawn + enemy spawn region + optional wall banner.
  */
 export class World {
+  readonly mapDef: MapDefinition;
   readonly width: number;
   readonly depth: number;
   readonly height: number;
-  readonly hall: HallRegion;
+  readonly spawn: THREE.Vector3;
+  readonly spawnFacing: number;
+  readonly enemyRegion: SpawnRegion;
+  readonly banner: { text: string; position: BannerSpec } | null;
+  readonly decorations: HallDecorations | null;
+  readonly props: PropSpec[];
+  readonly interactables: InteractableSpec[];
   private readonly cells: Uint8Array;
   private group: THREE.Group | null = null;
+  private meshes: THREE.InstancedMesh[] = [];
 
-  constructor(width = 48, depth = 56, height = 10) {
-    this.width = width;
-    this.depth = depth;
-    this.height = height;
-    this.cells = new Uint8Array(width * depth * height);
+  constructor(mapDef: MapDefinition) {
+    this.mapDef = mapDef;
+    this.width = mapDef.worldSize.width;
+    this.depth = mapDef.worldSize.depth;
+    this.height = mapDef.worldSize.height;
+    this.cells = new Uint8Array(this.width * this.depth * this.height);
 
-    const hallWidth = 32;
-    const hallDepth = 32;
-    const hallX0 = Math.floor((width - hallWidth) / 2);
-    const hallZ0 = depth - hallDepth;
-    this.hall = {
-      x0: hallX0,
-      z0: hallZ0,
-      width: hallWidth,
-      depth: hallDepth,
-      wallHeight: 5,
-      altarZ: hallZ0 + hallDepth - 6,
-      northWallZ: hallZ0 + hallDepth - 3,
-      entranceZ: hallZ0 + 2,
+    const writer: WorldWriter = {
+      width: this.width,
+      depth: this.depth,
+      height: this.height,
+      setBlock: (x, y, z, id) => this.setBlock(x, y, z, id),
+      getBlock: (x, y, z) => this.getBlock(x, y, z),
     };
 
-    this.generateWorld();
+    const result = this.runGenerator(mapDef, writer);
+    this.spawn = result.playerSpawn;
+    this.spawnFacing = result.playerFacing;
+    this.enemyRegion = result.enemySpawnRegion;
+    this.banner = result.bannerText && result.bannerPosition
+      ? { text: result.bannerText, position: result.bannerPosition }
+      : null;
+    this.decorations = result.decorations ?? null;
+    this.props = result.props ?? [];
+    this.interactables = result.interactables ?? [];
+  }
+
+  private runGenerator(mapDef: MapDefinition, writer: WorldWriter): GeneratorResult {
+    switch (mapDef.id) {
+      case 'concert-hall':
+        return generateConcertHall(writer);
+      case 'lighthouse':
+        return generateLighthouse(writer);
+      case 'wedding-hall':
+        return generateWeddingHall(writer);
+    }
   }
 
   private idx(x: number, y: number, z: number): number {
@@ -133,34 +146,46 @@ export class World {
     };
   }
 
-  /** Initial player spawn: middle of the garden path facing the hall. */
   playerSpawn(): THREE.Vector3 {
-    const gardenPathZ = Math.floor(this.hall.z0 * 0.35);
-    return new THREE.Vector3(
-      this.width * 0.5,
-      this.bounds().floorY + 0.01,
-      gardenPathZ + 0.5,
-    );
+    return this.spawn.clone();
   }
 
-  /** Enemies spawn inside the hall interior only. */
-  randomSpawnPoint(rand: () => number, awayFrom?: THREE.Vector3, minDist = 6): THREE.Vector3 {
-    const h = this.hall;
-    const minX = h.x0 + 3;
-    const maxX = h.x0 + h.width - 4;
-    const minZ = h.z0 + 3;
-    const maxZ = h.z0 + h.depth - 4;
-    const y = this.bounds().floorY;
-    for (let tries = 0; tries < 64; tries++) {
-      const x = Math.floor(minX + rand() * (maxX - minX));
-      const z = Math.floor(minZ + rand() * (maxZ - minZ));
-      if (this.isSolidAt(x, y, z)) continue;
-      if (this.isSolidAt(x, y + 1, z)) continue;
-      const p = new THREE.Vector3(x + 0.5, y, z + 0.5);
+  /**
+   * AABB-aware ground spawn: rejects points where the enemy's full box would
+   * overlap solids. This prevents wide bosses from spawning wedged in walls.
+   */
+  randomSpawnPoint(
+    rand: () => number,
+    awayFrom?: THREE.Vector3,
+    minDist = 6,
+    radius = 0.45,
+    height = 1.8,
+  ): THREE.Vector3 {
+    const r = this.enemyRegion;
+    const floorY = this.bounds().floorY;
+    const inset = Math.ceil(radius) + 1;
+    const minX = r.minX + inset;
+    const maxX = r.maxX - inset;
+    const minZ = r.minZ + inset;
+    const maxZ = r.maxZ - inset;
+
+    for (let tries = 0; tries < 96; tries++) {
+      const x = minX + rand() * Math.max(0.01, maxX - minX);
+      const z = minZ + rand() * Math.max(0.01, maxZ - minZ);
+      const y = floorY;
+      const min = new THREE.Vector3(x - radius, y, z - radius);
+      const max = new THREE.Vector3(x + radius, y + height, z + radius);
+      if (this.boxCollides(min, max)) continue;
+
+      const floorMin = new THREE.Vector3(x - radius, y - 0.1, z - radius);
+      const floorMax = new THREE.Vector3(x + radius, y, z + radius);
+      if (!this.boxCollides(floorMin, floorMax)) continue;
+
+      const p = new THREE.Vector3(x, y + 0.01, z);
       if (awayFrom && p.distanceTo(awayFrom) < minDist) continue;
       return p;
     }
-    return new THREE.Vector3(h.x0 + h.width * 0.5, y, h.z0 + h.depth * 0.5);
+    return new THREE.Vector3((r.minX + r.maxX) / 2, floorY + 0.01, (r.minZ + r.maxZ) / 2);
   }
 
   buildMesh(): THREE.Group {
@@ -187,7 +212,25 @@ export class World {
     }
     const built = buildVoxelMeshes(inputs);
     this.group = built.group;
+    this.meshes = built.meshes;
     return this.group;
+  }
+
+  disposeMesh(): void {
+    if (!this.group) return;
+    for (const mesh of this.meshes) {
+      mesh.geometry.dispose();
+      const mat = mesh.material as THREE.Material | THREE.Material[];
+      if (Array.isArray(mat)) {
+        for (const m of mat) m.dispose();
+      } else {
+        mat.dispose();
+      }
+      if (mesh.parent) mesh.parent.remove(mesh);
+    }
+    if (this.group.parent) this.group.parent.remove(this.group);
+    this.meshes = [];
+    this.group = null;
   }
 
   private isExposed(x: number, y: number, z: number): boolean {
@@ -206,193 +249,5 @@ export class World {
       if (BLOCKS[id].opacity < 1) return true;
     }
     return false;
-  }
-
-  private generateWorld(): void {
-    this.generateGround();
-    this.generateGarden();
-    this.generateWeddingHall();
-  }
-
-  private generateGround(): void {
-    for (let z = 0; z < this.depth; z++) {
-      for (let x = 0; x < this.width; x++) {
-        this.setBlock(x, 0, z, BLOCK_GRASS);
-      }
-    }
-  }
-
-  private generateGarden(): void {
-    const gardenZMax = this.hall.z0 - 1;
-    const centerX = Math.floor(this.width / 2);
-
-    for (let z = 0; z <= gardenZMax; z++) {
-      for (let dx = -2; dx <= 2; dx++) {
-        this.setBlock(centerX + dx, 0, z, BLOCK_PATH);
-      }
-    }
-
-    const hedgeInsetX = 3;
-    for (let z = 0; z <= gardenZMax - 1; z++) {
-      this.setBlock(centerX - hedgeInsetX, 1, z, BLOCK_HEDGE);
-      this.setBlock(centerX + hedgeInsetX, 1, z, BLOCK_HEDGE);
-    }
-
-    const outerHedgeX = Math.floor(this.width / 2) - 10;
-    for (let z = 1; z <= gardenZMax - 1; z += 2) {
-      this.setBlock(outerHedgeX, 1, z, BLOCK_HEDGE);
-      this.setBlock(this.width - 1 - outerHedgeX, 1, z, BLOCK_HEDGE);
-    }
-
-    const flowerBeds: Array<[number, number]> = [
-      [centerX - 6, 4],
-      [centerX + 6, 4],
-      [centerX - 6, 10],
-      [centerX + 6, 10],
-      [centerX - 8, 7],
-      [centerX + 8, 7],
-    ];
-    for (const [fx, fz] of flowerBeds) {
-      if (fz > gardenZMax) continue;
-      this.setBlock(fx, 1, fz, BLOCK_FLOWER);
-      this.setBlock(fx - 1, 1, fz, BLOCK_FLOWER);
-      this.setBlock(fx + 1, 1, fz, BLOCK_FLOWER);
-      this.setBlock(fx, 1, fz - 1, BLOCK_FLOWER);
-      this.setBlock(fx, 1, fz + 1, BLOCK_FLOWER);
-    }
-
-    const fountainX = centerX;
-    const fountainZ = Math.floor(gardenZMax * 0.65);
-    for (let dx = -2; dx <= 2; dx++) {
-      for (let dz = -2; dz <= 2; dz++) {
-        if (Math.abs(dx) === 2 || Math.abs(dz) === 2) {
-          this.setBlock(fountainX + dx, 1, fountainZ + dz, BLOCK_STONE);
-        }
-      }
-    }
-    this.setBlock(fountainX, 2, fountainZ, BLOCK_GLASS);
-    this.setBlock(fountainX, 3, fountainZ, BLOCK_GLASS);
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dz = -1; dz <= 1; dz++) {
-        if (dx === 0 && dz === 0) continue;
-        this.setBlock(fountainX + dx, 2, fountainZ + dz, BLOCK_GLASS);
-      }
-    }
-
-    for (let dz = -3; dz <= 3; dz++) {
-      if (dz === 0) continue;
-      const z = fountainZ + dz;
-      if (z < 0 || z > gardenZMax) continue;
-      for (let dx = -2; dx <= 2; dx++) {
-        this.setBlock(centerX + dx, 0, z, BLOCK_PATH);
-      }
-    }
-  }
-
-  private generateWeddingHall(): void {
-    const h = this.hall;
-    const W = h.width;
-    const D = h.depth;
-    const x0 = h.x0;
-    const z0 = h.z0;
-
-    for (let z = 0; z < D; z++) {
-      for (let x = 0; x < W; x++) {
-        const border = x < 2 || x >= W - 2 || z < 2 || z >= D - 2;
-        if (!border) {
-          this.setBlock(x0 + x, 0, z0 + z, BLOCK_STONE);
-        }
-      }
-    }
-
-    const centerZLow = Math.floor(D * 0.2);
-    const centerZHigh = Math.floor(D * 0.9);
-    for (let z = centerZLow; z < centerZHigh; z++) {
-      for (let dx = -2; dx < 2; dx++) {
-        this.setBlock(x0 + Math.floor(W / 2) + dx, 0, z0 + z, BLOCK_CARPET);
-      }
-    }
-
-    const carpetToGardenStart = 0;
-    for (let z = carpetToGardenStart; z < centerZLow; z++) {
-      for (let dx = -2; dx < 2; dx++) {
-        this.setBlock(x0 + Math.floor(W / 2) + dx, 0, z0 + z, BLOCK_CARPET);
-      }
-    }
-
-    const wallHeight = h.wallHeight;
-    for (let y = 1; y <= wallHeight; y++) {
-      for (let x = 2; x < W - 2; x++) {
-        const doorZone = Math.abs(x - Math.floor(W / 2)) <= 2 && y <= 3;
-        if (!doorZone) this.setBlock(x0 + x, y, z0 + 2, BLOCK_STONE);
-        this.setBlock(x0 + x, y, z0 + D - 3, BLOCK_STONE);
-      }
-      for (let z = 2; z < D - 2; z++) {
-        this.setBlock(x0 + 2, y, z0 + z, BLOCK_STONE);
-        this.setBlock(x0 + W - 3, y, z0 + z, BLOCK_STONE);
-      }
-    }
-
-    for (let y = 2; y <= 3; y++) {
-      for (let x = 5; x < W - 5; x += 4) {
-        if (Math.abs(x - Math.floor(W / 2)) <= 2) continue;
-        this.setBlock(x0 + x, y, z0 + 2, BLOCK_GLASS);
-        this.setBlock(x0 + x, y, z0 + D - 3, BLOCK_GLASS);
-      }
-      for (let z = 5; z < D - 5; z += 4) {
-        this.setBlock(x0 + 2, y, z0 + z, BLOCK_GLASS);
-        this.setBlock(x0 + W - 3, y, z0 + z, BLOCK_GLASS);
-      }
-    }
-
-    const altarLocalZ = D - 6;
-    for (let x = W / 2 - 3; x < W / 2 + 3; x++) {
-      this.setBlock(x0 + Math.floor(x), 1, z0 + altarLocalZ, BLOCK_GOLD);
-      this.setBlock(x0 + Math.floor(x), 1, z0 + altarLocalZ + 1, BLOCK_GOLD);
-    }
-    for (let x = W / 2 - 2; x < W / 2 + 2; x++) {
-      this.setBlock(x0 + Math.floor(x), 2, z0 + altarLocalZ, BLOCK_GOLD);
-    }
-    this.setBlock(x0 + Math.floor(W / 2 - 2), 3, z0 + altarLocalZ, BLOCK_GOLD);
-    this.setBlock(x0 + Math.floor(W / 2 + 1), 3, z0 + altarLocalZ, BLOCK_GOLD);
-    this.setBlock(x0 + Math.floor(W / 2 - 1), 4, z0 + altarLocalZ, BLOCK_GOLD);
-    this.setBlock(x0 + Math.floor(W / 2), 4, z0 + altarLocalZ, BLOCK_GOLD);
-
-    const tableSpots: Array<[number, number]> = [
-      [6, 8],
-      [W - 8, 8],
-      [6, 14],
-      [W - 8, 14],
-      [6, 20],
-      [W - 8, 20],
-    ];
-    for (const [tx, tz] of tableSpots) {
-      for (let dx = 0; dx < 3; dx++) {
-        for (let dz = 0; dz < 3; dz++) {
-          this.setBlock(x0 + tx + dx, 1, z0 + tz + dz, BLOCK_WOOD);
-        }
-      }
-      this.setBlock(x0 + tx + 1, 2, z0 + tz + 1, BLOCK_FLOWER);
-    }
-
-    const flowerPositions: Array<[number, number]> = [
-      [3, 3],
-      [W - 4, 3],
-      [3, D - 4],
-      [W - 4, D - 4],
-      [3, D / 2],
-      [W - 4, D / 2],
-      [W / 2 - 4, altarLocalZ - 2],
-      [W / 2 + 3, altarLocalZ - 2],
-    ];
-    for (const [fx, fz] of flowerPositions) {
-      this.setBlock(x0 + Math.floor(fx), 1, z0 + Math.floor(fz), BLOCK_FLOWER);
-      this.setBlock(x0 + Math.floor(fx), 2, z0 + Math.floor(fz), BLOCK_FLOWER);
-    }
-
-    for (let x = 2; x < W - 2; x += 3) {
-      this.setBlock(x0 + x, wallHeight + 1, z0 + 2, BLOCK_FLOWER);
-      this.setBlock(x0 + x, wallHeight + 1, z0 + D - 3, BLOCK_FLOWER);
-    }
   }
 }

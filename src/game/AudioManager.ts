@@ -1,14 +1,21 @@
 /**
- * Procedural Web Audio SFX. No external assets, no libraries.
- * All sounds are short envelope-shaped oscillator/noise bursts.
+ * Procedural Web Audio SFX + optional map background music.
+ * Mozart Allegro uses a simplified Eine kleine Nachtmusik theme loop
+ * (public-domain melody) when no external mp3 is present.
  */
 
 type Sfx = 'shoot' | 'hit' | 'kill' | 'wave-clear' | 'hurt' | 'win' | 'lose';
+export type BgmId = 'mozart-allegro' | null;
 
 export class AudioManager {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
+  private musicGain: GainNode | null = null;
   private muted = false;
+  private bgmId: BgmId = null;
+  private bgmTimer: number | null = null;
+  private bgmHtml: HTMLAudioElement | null = null;
+  private bgmNoteIndex = 0;
 
   ensureStarted(): void {
     if (this.ctx) return;
@@ -20,6 +27,9 @@ export class AudioManager {
       this.masterGain = this.ctx.createGain();
       this.masterGain.gain.value = 0.35;
       this.masterGain.connect(this.ctx.destination);
+      this.musicGain = this.ctx.createGain();
+      this.musicGain.gain.value = 0.12;
+      this.musicGain.connect(this.ctx.destination);
     } catch {
       this.ctx = null;
     }
@@ -28,6 +38,8 @@ export class AudioManager {
   setMuted(muted: boolean): void {
     this.muted = muted;
     if (this.masterGain) this.masterGain.gain.value = muted ? 0 : 0.35;
+    if (this.musicGain) this.musicGain.gain.value = muted ? 0 : 0.12;
+    if (this.bgmHtml) this.bgmHtml.muted = muted;
   }
 
   play(sfx: Sfx): void {
@@ -55,6 +67,127 @@ export class AudioManager {
         this.playLose();
         break;
     }
+  }
+
+  /** Start / swap / stop map background music. */
+  setBgm(id: BgmId): void {
+    this.stopBgm();
+    if (!id || this.muted) return;
+    this.ensureStarted();
+    this.bgmId = id;
+
+    if (id === 'mozart-allegro') {
+      this.tryExternalMozart().catch(() => this.startMozartLoop());
+    }
+  }
+
+  stopBgm(): void {
+    if (this.bgmTimer !== null) {
+      window.clearTimeout(this.bgmTimer);
+      this.bgmTimer = null;
+    }
+    if (this.bgmHtml) {
+      this.bgmHtml.pause();
+      this.bgmHtml.src = '';
+      this.bgmHtml = null;
+    }
+    this.bgmNoteIndex = 0;
+    this.bgmId = null;
+  }
+
+  private async tryExternalMozart(): Promise<void> {
+    const url = `${import.meta.env.BASE_URL}mozart-allegro.mp3`;
+    const audio = new Audio(url);
+    audio.loop = true;
+    audio.volume = 0.28;
+    await new Promise<void>((resolve, reject) => {
+      audio.addEventListener('canplaythrough', () => resolve(), { once: true });
+      audio.addEventListener('error', () => reject(new Error('no file')), { once: true });
+      audio.load();
+    });
+    if (this.bgmId !== 'mozart-allegro') return;
+    this.bgmHtml = audio;
+    await audio.play();
+  }
+
+  /**
+   * Simplified Eine kleine Nachtmusik K.525 Allegro opening theme in G major.
+   * Melody only — recognizable classical vibe without needing an asset file.
+   */
+  private startMozartLoop(): void {
+    if (!this.ctx || !this.musicGain || this.bgmId !== 'mozart-allegro') return;
+
+    // Frequencies for the famous opening + continuation phrase
+    const melody: Array<{ freq: number; beats: number }> = [
+      { freq: 392.0, beats: 1 }, // G4
+      { freq: 587.33, beats: 1 }, // D5
+      { freq: 392.0, beats: 1 },
+      { freq: 587.33, beats: 1 },
+      { freq: 392.0, beats: 1 },
+      { freq: 587.33, beats: 1 },
+      { freq: 783.99, beats: 1.5 }, // G5
+      { freq: 739.99, beats: 0.5 }, // F#5
+      { freq: 659.25, beats: 0.5 }, // E5
+      { freq: 587.33, beats: 0.5 }, // D5
+      { freq: 523.25, beats: 0.5 }, // C5
+      { freq: 493.88, beats: 0.5 }, // B4
+      { freq: 440.0, beats: 0.5 }, // A4
+      { freq: 392.0, beats: 1 }, // G4
+      { freq: 493.88, beats: 1 }, // B4
+      { freq: 523.25, beats: 1 }, // C5
+      { freq: 587.33, beats: 2 }, // D5
+      { freq: 0, beats: 0.5 }, // rest
+      { freq: 587.33, beats: 0.5 },
+      { freq: 659.25, beats: 0.5 },
+      { freq: 698.46, beats: 0.5 }, // F5
+      { freq: 783.99, beats: 1 },
+      { freq: 698.46, beats: 0.5 },
+      { freq: 659.25, beats: 0.5 },
+      { freq: 587.33, beats: 1 },
+      { freq: 523.25, beats: 1 },
+      { freq: 493.88, beats: 1 },
+      { freq: 440.0, beats: 1 },
+      { freq: 392.0, beats: 2 },
+      { freq: 0, beats: 1 },
+    ];
+
+    const beatMs = 220;
+    const step = (): void => {
+      if (this.bgmId !== 'mozart-allegro' || !this.ctx || !this.musicGain || this.muted) return;
+      const note = melody[this.bgmNoteIndex % melody.length];
+      this.bgmNoteIndex++;
+      if (note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000);
+      this.bgmTimer = window.setTimeout(step, note.beats * beatMs);
+    };
+    step();
+  }
+
+  private playMusicNote(freq: number, duration: number): void {
+    if (!this.ctx || !this.musicGain) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, now);
+    // Soft classical-ish harmonic
+    const osc2 = this.ctx.createOscillator();
+    const gain2 = this.ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(freq * 2, now);
+    gain2.gain.value = 0.25;
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.9, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + Math.max(duration * 0.9, 0.08));
+
+    osc.connect(gain);
+    gain.connect(this.musicGain);
+    osc2.connect(gain2);
+    gain2.connect(gain);
+    osc.start(now);
+    osc2.start(now);
+    osc.stop(now + duration + 0.05);
+    osc2.stop(now + duration + 0.05);
   }
 
   private envelope(gain: GainNode, attack: number, decay: number, peak = 1): void {

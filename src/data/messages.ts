@@ -1,8 +1,8 @@
 export const START_MESSAGES = {
   title: 'Düğün Anksiyetesi',
-  subtitle: 'Hilal için özel bir oyun',
+  subtitle: 'Hilal için özel bir oyun — 3 harita, 9 aşama',
   intro:
-    'Merhaba Hilal! Bugün düğün anksiyetesini yenme günü. Bloklu düğün salonunda seni bekleyen stres canavarlarına karşı savaşacaksın. Hazır mısın?',
+    'Merhaba Hilal! Yolculuk klasik müzik salonunda başlıyor, sahilde bir deniz feneri altında devam ediyor ve düğün salonunda son buluyor. Her mekânda üç aşama seni bekliyor.',
   controlsTitle: 'Kontroller',
   controls: [
     'W A S D — Hareket',
@@ -18,33 +18,9 @@ export const START_MESSAGES = {
   tip: 'İpucu: Düşmanları vurdukça anksiyete metren azalır. Onlara değmene izin verme.',
 };
 
-export const WAVE_INTRO_MESSAGES: Record<number, { title: string; body: string }> = {
-  1: {
-    title: 'Dalga 1 — Küçük Stresler',
-    body:
-      'Hazırlan Hilal! İlk dalga küçük meraklarla geliyor. Nefes al, odaklan, ateşle.',
-  },
-  2: {
-    title: 'Dalga 2 — Beklentiler',
-    body:
-      'İyi gidiyorsun. Şimdi biraz daha ısrarcı beklentiler geliyor. Sen çok daha güçlüsün.',
-  },
-  3: {
-    title: 'Dalga 3 — Büyük Anksiyete',
-    body:
-      'Son dalga. Beklenti Gölgesi seni bekliyor. Ama unutma: bu gün, senin günün. Onu bloklara ayır.',
-  },
-};
-
-export const WAVE_CLEAR_MESSAGES: Record<number, string> = {
-  1: 'Harika gidiyorsun Hilal! Her soru sadece bir blok — sen daha güçlüsün. Nefes al, sonraki dalga geliyor.',
-  2: 'Beklentiler ağır gelebilir ama senin hikayen senin. Bir dalga daha kaldı; sen zaten yarısını geçtin.',
-};
-
 export const WIN_MESSAGES = {
-  title: 'Tebrikler Hilal! 💐',
-  body:
-    'Anksiyeteyi yendin. Bu düğün senin günün — keyfini çıkar, gülümse, dans et. Sana bu blok blok mekan gibi güzel bir hayat diliyoruz.',
+  title: 'Kazandın!',
+  body: 'Tebrikler Hilal artık sıkıntıların geride kaldı.',
   button: 'Tekrar Oyna',
 };
 
@@ -57,10 +33,27 @@ export const LOSE_MESSAGES = {
 
 export const HUD_LABELS = {
   anxiety: 'Anksiyete',
-  wave: 'Dalga',
+  map: 'Harita',
+  level: 'Level',
   score: 'Skor',
   enemiesLeft: 'Kalan Düşman',
   reloading: 'Nefes al…',
+};
+
+export const CAT_FEED_MESSAGES = {
+  prompt: 'E — Kediyi besle',
+  title: 'Tebrikler, haritayı geçtin!',
+  body:
+    'Kediyi beslediğin için şefkatin ve sıcacık kalbinin getirdiği kozmik kader puanları seni bir sonraki haritaya ışınladı.',
+  button: 'Sonraki Harita',
+};
+
+export const PIANO_PLAY_MESSAGES = {
+  prompt: 'E — Piyano çal',
+  title: 'Tebrikler, haritayı geçtin!',
+  body:
+    'Piyano çalmayı bilmediğin için bastığın kötü nota bütün canavarları kaçırdı. Tebrikler, bu haritayı geçtin!',
+  button: 'Sonraki Harita',
 };
 
 export const WAVE_TRANSITION_LABELS = {

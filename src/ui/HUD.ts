@@ -2,8 +2,13 @@ import { HUD_LABELS } from '../data/messages';
 
 export interface HUDState {
   anxietyPercent: number;
-  wave: number;
-  totalWaves: number;
+  mapName: string;
+  mapIndex: number;
+  totalMaps: number;
+  level: number;
+  totalLevels: number;
+  overallStage: number;
+  totalStages: number;
   score: number;
   enemiesLeft: number;
   reloadRatio: number;
@@ -15,12 +20,14 @@ export class HUD {
   private readonly crosshair: HTMLDivElement;
   private readonly anxietyFill: HTMLDivElement;
   private readonly anxietyLabel: HTMLDivElement;
-  private readonly waveLabel: HTMLDivElement;
+  private readonly mapLabel: HTMLDivElement;
+  private readonly levelLabel: HTMLDivElement;
   private readonly scoreLabel: HTMLDivElement;
   private readonly enemiesLabel: HTMLDivElement;
   private readonly reloadRing: HTMLDivElement;
   private readonly damageFlash: HTMLDivElement;
   private readonly weaponLabel: HTMLDivElement;
+  private readonly interactPrompt: HTMLDivElement;
 
   constructor(container: HTMLElement) {
     this.root = document.createElement('div');
@@ -32,7 +39,8 @@ export class HUD {
           <div class="wa-anxiety-bar"><div class="wa-anxiety-fill"></div></div>
         </div>
         <div class="wa-stats">
-          <div class="wa-stat wa-wave"></div>
+          <div class="wa-stat wa-map"></div>
+          <div class="wa-stat wa-level"></div>
           <div class="wa-stat wa-score"></div>
           <div class="wa-stat wa-enemies"></div>
         </div>
@@ -43,17 +51,20 @@ export class HUD {
       <div class="wa-reload-ring"></div>
       <div class="wa-damage-flash"></div>
       <div class="wa-weapon"></div>
+      <div class="wa-interact-prompt"></div>
     `;
     container.appendChild(this.root);
     this.crosshair = this.root.querySelector('.wa-crosshair') as HTMLDivElement;
     this.anxietyFill = this.root.querySelector('.wa-anxiety-fill') as HTMLDivElement;
     this.anxietyLabel = this.root.querySelector('.wa-anxiety-label') as HTMLDivElement;
-    this.waveLabel = this.root.querySelector('.wa-wave') as HTMLDivElement;
+    this.mapLabel = this.root.querySelector('.wa-map') as HTMLDivElement;
+    this.levelLabel = this.root.querySelector('.wa-level') as HTMLDivElement;
     this.scoreLabel = this.root.querySelector('.wa-score') as HTMLDivElement;
     this.enemiesLabel = this.root.querySelector('.wa-enemies') as HTMLDivElement;
     this.reloadRing = this.root.querySelector('.wa-reload-ring') as HTMLDivElement;
     this.damageFlash = this.root.querySelector('.wa-damage-flash') as HTMLDivElement;
     this.weaponLabel = this.root.querySelector('.wa-weapon') as HTMLDivElement;
+    this.interactPrompt = this.root.querySelector('.wa-interact-prompt') as HTMLDivElement;
 
     HUD.ensureStyles();
     this.hide();
@@ -73,7 +84,8 @@ export class HUD {
     const hue = 110 - pct * 1.1;
     this.anxietyFill.style.background = `linear-gradient(90deg, hsl(${hue}, 75%, 55%), hsl(${Math.max(0, hue - 20)}, 80%, 45%))`;
     this.anxietyLabel.textContent = `${HUD_LABELS.anxiety}: %${pct.toFixed(0)}`;
-    this.waveLabel.textContent = `${HUD_LABELS.wave} ${state.wave}/${state.totalWaves}`;
+    this.mapLabel.textContent = `${HUD_LABELS.map} ${state.mapIndex}/${state.totalMaps} · ${state.mapName}`;
+    this.levelLabel.textContent = `${HUD_LABELS.level} ${state.level}/${state.totalLevels}  (${state.overallStage}/${state.totalStages})`;
     this.scoreLabel.textContent = `${HUD_LABELS.score}: ${state.score}`;
     this.enemiesLabel.textContent = `${HUD_LABELS.enemiesLeft}: ${state.enemiesLeft}`;
 
@@ -95,6 +107,16 @@ export class HUD {
 
   setCrosshairVisible(visible: boolean): void {
     this.crosshair.style.opacity = visible ? '1' : '0';
+  }
+
+  setInteractPrompt(text: string | null): void {
+    if (!text) {
+      this.interactPrompt.style.display = 'none';
+      this.interactPrompt.textContent = '';
+      return;
+    }
+    this.interactPrompt.textContent = text;
+    this.interactPrompt.style.display = 'block';
   }
 
   private static stylesInjected = false;
@@ -219,6 +241,22 @@ export class HUD {
         letter-spacing: 0.4px;
         color: #f4ecff;
         text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+      }
+      .wa-interact-prompt {
+        display: none;
+        position: absolute;
+        left: 50%;
+        bottom: 72px;
+        transform: translateX(-50%);
+        padding: 10px 20px;
+        background: rgba(20, 10, 40, 0.75);
+        border: 1px solid rgba(255, 220, 140, 0.35);
+        border-radius: 999px;
+        font-size: 15px;
+        font-weight: 600;
+        color: #ffe9b8;
+        letter-spacing: 0.3px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
       }
       .wa-damage-flash {
         position: absolute;

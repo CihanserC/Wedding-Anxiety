@@ -44,15 +44,16 @@ export class MenuScreen {
     this.root.style.display = 'flex';
   }
 
-  showWin(finalScore: number, waveReached: number): void {
+  showWin(finalScore: number, stagesCleared: number, totalStages: number): void {
     this.currentKind = 'win';
+    const winPhoto = `${import.meta.env.BASE_URL}game_won.JPG`;
     this.panel.innerHTML = `
       <div class="wa-badge wa-badge-win">Kazandın!</div>
-      <h1 class="wa-title">${WIN_MESSAGES.title}</h1>
-      <p class="wa-body">${WIN_MESSAGES.body}</p>
+      <p class="wa-body wa-win-message">${WIN_MESSAGES.body}</p>
+      <img class="wa-win-photo" src="${winPhoto}" alt="Hilal & Cihanser" />
       <div class="wa-final">
         <div><span>Skor</span><strong>${finalScore}</strong></div>
-        <div><span>Ulaşılan Dalga</span><strong>${waveReached}</strong></div>
+        <div><span>Aşama</span><strong>${stagesCleared}/${totalStages}</strong></div>
       </div>
       <button class="wa-button" data-action="restart">${WIN_MESSAGES.button}</button>
     `;
@@ -60,7 +61,7 @@ export class MenuScreen {
     this.root.style.display = 'flex';
   }
 
-  showLose(finalScore: number, waveReached: number): void {
+  showLose(finalScore: number, stagesCleared: number, mapName: string): void {
     this.currentKind = 'lose';
     this.panel.innerHTML = `
       <div class="wa-badge wa-badge-lose">Nefes Al</div>
@@ -68,7 +69,8 @@ export class MenuScreen {
       <p class="wa-body">${LOSE_MESSAGES.body}</p>
       <div class="wa-final">
         <div><span>Skor</span><strong>${finalScore}</strong></div>
-        <div><span>Ulaşılan Dalga</span><strong>${waveReached}</strong></div>
+        <div><span>Kalan Yerde</span><strong>${mapName}</strong></div>
+        <div><span>Aşama</span><strong>${stagesCleared}</strong></div>
       </div>
       <button class="wa-button" data-action="restart">${LOSE_MESSAGES.button}</button>
     `;
@@ -154,6 +156,21 @@ export class MenuScreen {
         font-size: 15px;
         margin: 12px 0 18px;
         color: rgba(244, 236, 255, 0.9);
+      }
+      .wa-win-photo {
+        display: block;
+        width: 100%;
+        max-width: 420px;
+        margin: 0 auto 18px;
+        border-radius: 12px;
+        border: 2px solid rgba(245, 197, 66, 0.45);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+        object-fit: cover;
+      }
+      .wa-win-message {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 8px 0 16px;
       }
       .wa-controls {
         text-align: left;

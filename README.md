@@ -2,18 +2,40 @@
 
 > Hilal için tarayıcıda çalışan, Minecraft tarzı voxel dünyada düğün anksiyetesini sembolik düşmanlara karşı yenme temalı 3D FPS oyunu.
 
-**Ana mesaj:** Anksiyete yenilmez bir düşman değil — yönetilebilir ve aşılabilir. Bu oyun terapötik ve eğlenceli bir ton taşır: stresi "vurarak" azaltmak, dalgaları geçmek ve sonunda huzurlu bir düğün sahnesine ulaşmak.
+**Ana mesaj:** Anksiyete yenilmez bir düşman değil — yönetilebilir ve aşılabilir. Bu oyun terapötik ve eğlenceli bir ton taşır: stresi "vurarak" azaltmak, aşamaları geçmek ve sonunda huzurlu bir düğün sahnesine ulaşmak.
 
 ## Konsept
 
-Hilal, bloklu bir düğün mekanında anksiyete kaynaklarını temsil eden düşmanlarla savaşır:
+Hilal, üç farklı mekânda toplam 9 aşamalık bir yolculuğa çıkar. Her mekânda anksiyete kaynaklarını temsil eden düşmanlarla savaşır:
 
-- **Meraklı Teyze** — "Ne zaman evleneceksiniz?" sorularıyla yavaşça yaklaşır
-- **Mükemmeliyetçi Kuzen** — Karşılaştırma baskısı, orta hızda gruplar hâlinde gelir
-- **Zaman Canavarı** — Geri sayım stresi, hızlı ve doğrudan saldırır
-- **Beklenti Gölgesi (boss)** — Herkesin beklentisi, dalga 3'ün büyük patronu
+- **Meraklı Teyze** — "Ne zaman evleneceksiniz?" sorularıyla sinsice yaklaşır (stalker davranışı)
+- **Mükemmeliyetçi Kuzen** — Karşılaştırma baskısı; ani hamlelerle dalar (dasher davranışı)
+- **Zaman Canavarı** — Geri sayım stresi; hızlı ve doğrudan saldırır
+- **Beklenti Gölgesi (boss)** — Herkesin beklentisinden doğan büyük gölge; sadece son aşamada çıkar (floater davranışı)
 
-3 dalga: küçük stresler → beklentiler → büyük anksiyete. Her dalga arası kısa bir nefes molası ve Hilal'e özel bir cesaret mesajı vardır. Anksiyete metresi %100'e ulaşırsa kaybedersin; düşmanları vurdukça metre azalır.
+Anksiyete metresi %100'e ulaşırsa kaybedersin; düşmanları vurdukça metre azalır.
+
+## Haritalar
+
+Yolculuk üç haritadan oluşur, her haritada 3 level vardır:
+
+| # | Harita | Tema | Ağırlıklı düşman |
+|---|--------|------|------------------|
+| 1 | **Klasik Müzik Salonu** | Krem mermer, kırmızı perde, sahne, sütunlar, avize, koltuk sıraları | Mükemmeliyetçi Kuzen ("eleştiri") |
+| 2 | **Deniz Feneri** | Gün batımı, deniz, kayalık ada, beyaz fener kulesi, bekçi evi | Zaman Canavarı ("zaman geçişi") |
+| 3 | **Düğün Salonu** | Bahçe, çeşme, kırmızı halı, altın kemer, "Hilal & Cihanser" pankartı | Hepsi + Boss (Level 3) |
+
+Her harita kendi ışıklandırma ve atmosferine sahiptir (deniz fenerinde turuncu gün batımı gibi). Level'lar arası kısa bir nefes molası ve Hilal'e özel bir cesaret mesajı vardır.
+
+## Silahlar
+
+| Tuş | Silah | Özellik |
+|-----|-------|---------|
+| `1` | Gülümseme Tabancası | Dengeli hasar, orta hız |
+| `2` | Sabır Tüfeği | Saçma etkili (pellet + spread), yakın mesafede güçlü |
+| `3` | Enerji Kalkanı | Hızlı atış, kısa menzil |
+
+Silahlar ekranda elinde görünür; fare tekerleği ile de silahlar arasında geçiş yapılabilir.
 
 ## Kontroller
 
@@ -21,7 +43,9 @@ Hilal, bloklu bir düğün mekanında anksiyete kaynaklarını temsil eden düş
 |-----|---------|
 | `W` `A` `S` `D` | Hareket |
 | `Fare` | Bakış (pointer lock) |
-| `Sol Tık` | Ateş — Gülümseme Tabancası |
+| `Sol Tık` | Ateş |
+| `1` `2` `3` | Silah değiştir |
+| `Fare Tekerleği` | Silahlar arası geçiş |
 | `Space` | Zıpla |
 | `Shift` | Koş |
 | `Esc` | Fareyi serbest bırak / duraklat |
@@ -35,7 +59,7 @@ npm install
 npm run dev
 ```
 
-Tarayıcıda otomatik olarak `http://localhost:5173/Wedding-Anxiety/` açılır (Vite `base` yolu GitHub Pages ile uyumlu ayarlanmıştır).
+Tarayıcıda `http://localhost:5173/Wedding-Anxiety/` açılır.
 
 ### Üretim Derlemesi
 
@@ -49,58 +73,19 @@ Derleme çıktısı `dist/` klasörüne yazılır. Yerelde önizlemek için:
 npm run preview
 ```
 
-## GitHub Pages Deploy
+## Deploy
 
-Vite yapılandırmasında `base: '/Wedding-Anxiety/'` ayarı, GitHub Pages'in bu repo altındaki alt yolunda çalışması için hazırlanmıştır.
+### Netlify (aktif)
 
-**Manuel deploy (en basit yol):**
+Repo Netlify'a bağlıdır; `main` branch'ine her push otomatik deploy tetikler.
 
-1. `npm run build` çalıştır.
-2. `dist/` klasörünün içeriğini repo'nun `gh-pages` branch'ine (veya `main` branch'inin `docs/` klasörüne) kopyala.
-3. GitHub → Settings → Pages üzerinden ilgili branch'i / klasörü Pages kaynağı olarak seç.
+- Build command: `npm run build`
+- Publish directory: `dist`
+- `vite.config.ts` içinde `base` yolu Netlify ortamında `/` olarak ayarlanır (`process.env.NETLIFY` kontrolü ile), GitHub Pages için `/Wedding-Anxiety/` kalır.
 
-**GitHub Actions ile otomatik deploy (opsiyonel):**
+### GitHub Pages (alternatif)
 
-`.github/workflows/deploy.yml` gibi bir dosya oluşturabilirsin:
-
-```yaml
-name: Deploy
-on:
-  push:
-    branches: [main]
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm ci
-      - run: npm run build
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
-```
-
-Deploy sonrası oyun şu adreste erişilebilir olur:
-
-**https://cihanserc.github.io/Wedding-Anxiety/**
-
-Hilal'e tek link göndermek yeterlidir, kurulum gerekmez. 🌸
+`npm run build` sonrası `dist/` içeriğini `gh-pages` branch'ine kopyalayıp GitHub → Settings → Pages üzerinden yayınlayabilirsin.
 
 ## Teknoloji
 
@@ -108,39 +93,49 @@ Hilal'e tek link göndermek yeterlidir, kurulum gerekmez. 🌸
 - [Vite](https://vitejs.dev/) — Dev server + build
 - TypeScript (strict mode)
 - Web Audio API — prosedürel ses efektleri (harici asset yok)
-- Özel voxel InstancedMesh chunking (küçük arena için yeterli)
+- Voxel InstancedMesh rendering (blok tipi başına tek instanced mesh)
 - Özel AABB çarpışma + DDA raycast
 
 ## Proje Yapısı
 
 ```
 src/
-├── main.ts                  # Giriş noktası
+├── main.ts                      # Giriş noktası
 ├── game/
-│   ├── Game.ts              # Ana oyun döngüsü, state machine
-│   ├── World.ts             # Voxel grid + wedding hall generator
-│   ├── Player.ts            # FPS controller + AABB collision
-│   ├── WeaponSystem.ts      # Raycast + cooldown
-│   ├── EnemyManager.ts      # Spawn, güncelleme, temas
-│   ├── AnxietyMeter.ts      # Stres metre
-│   ├── WaveManager.ts       # 3 dalga tanımı
-│   └── AudioManager.ts      # Prosedürel Web Audio SFX
+│   ├── Game.ts                  # Ana oyun döngüsü, map/level progression, state machine
+│   ├── World.ts                 # Voxel grid, MapDefinition'a göre dünya kurulumu, AABB spawn
+│   ├── worldGen/
+│   │   ├── types.ts             # WorldWriter, GeneratorResult, BannerSpec tipleri
+│   │   ├── concertHall.ts       # Map 1: Klasik Müzik Salonu generator
+│   │   ├── lighthouse.ts        # Map 2: Deniz Feneri generator
+│   │   └── weddingHall.ts       # Map 3: Bahçe + Düğün Salonu generator
+│   ├── Player.ts                # FPS controller + AABB collision
+│   ├── WeaponSystem.ts          # Çoklu silah raycast + cooldown + pellet/spread
+│   ├── EnemyManager.ts          # Spawn (radius/height duyarlı), güncelleme, temas
+│   ├── AnxietyMeter.ts          # Stres metre
+│   ├── WaveManager.ts           # LevelState yönetimi
+│   └── AudioManager.ts          # Prosedürel Web Audio SFX
 ├── entities/
-│   ├── Enemy.ts             # Düşman mesh + AI
-│   └── Projectile.ts        # Tracer / muzzle flash efektleri
+│   ├── Enemy.ts                 # Düşman AI (stalker/dasher/floater), ölüm animasyonu
+│   ├── enemyMeshes/index.ts     # Tip bazlı düşman mesh factory
+│   ├── PlayerRig.ts             # Elde görünen silah viewmodel (bob + recoil)
+│   └── Projectile.ts            # Tracer / muzzle flash / hit spark efektleri
 ├── rendering/
-│   ├── VoxelMesh.ts         # InstancedMesh builder
-│   └── Lighting.ts          # Ambient + directional
+│   ├── VoxelMesh.ts             # InstancedMesh builder
+│   ├── Lighting.ts              # Per-map atmosfer (ambient/sun/fog/sky)
+│   └── WallSign.ts              # Canvas dokulu duvar yazısı ("Hilal & Cihanser")
 ├── input/
-│   └── InputManager.ts      # Klavye + pointer lock
+│   └── InputManager.ts          # Klavye + pointer lock + silah seçimi
 ├── ui/
-│   ├── HUD.ts               # Anksiyete barı, dalga, skor, crosshair
-│   ├── MenuScreen.ts        # Başlangıç / kazanç / kayıp
-│   └── DialogueBox.ts       # Dalga arası mesajlar
+│   ├── HUD.ts                   # Anksiyete barı, harita/level, skor, silah, crosshair
+│   ├── MenuScreen.ts            # Başlangıç / kazanç / kayıp ekranları
+│   └── DialogueBox.ts           # Level arası ve harita geçişi mesajları
 └── data/
-    ├── blocks.ts            # Blok tipi tanımları
-    ├── enemies.ts           # Düşman stats
-    └── messages.ts          # Türkçe metinler, Hilal'e özel mesajlar
+    ├── blocks.ts                # 17 blok tipi tanımı
+    ├── maps.ts                  # 3 harita × 3 level tanımı + atmosfer ayarları
+    ├── enemies.ts               # Düşman stats + davranış tipleri
+    ├── weapons.ts               # 3 silah tanımı
+    └── messages.ts              # Türkçe metinler, Hilal'e özel mesajlar
 ```
 
 ## Not

@@ -250,14 +250,14 @@ function buildZamanCanavari(stats: EnemyStats): EnemyMeshResult {
   return { root: group, materials, headGroup, jitterMeshes: [headGroup, armL, armR] };
 }
 
-/** Boss: floating shadow with multiple reaching arms and purple aura. */
+/** Boss: floating golden shadow with multiple reaching arms and warm aura. */
 function buildBeklentiGolgesi(stats: EnemyStats): EnemyMeshResult {
   const group = new THREE.Group();
   const materials: THREE.MeshLambertMaterial[] = [];
 
-  const shadowMat = makeMat(stats.color, { emissive: 0x1a0838, emissiveIntensity: 0.4 });
-  const glowMat = makeMat(stats.accentColor, { emissive: 0x7a4bd6, emissiveIntensity: 0.8 });
-  const eyeMat = makeMat(0xffffff, { emissive: 0xffe0ff, emissiveIntensity: 1.5 });
+  const shadowMat = makeMat(stats.color, { emissive: 0x3a2800, emissiveIntensity: 0.45 });
+  const glowMat = makeMat(stats.accentColor, { emissive: 0xd4a020, emissiveIntensity: 0.85 });
+  const eyeMat = makeMat(0xffffff, { emissive: 0xfff0a0, emissiveIntensity: 1.5 });
   materials.push(shadowMat, glowMat, eyeMat);
 
   const floatBody = new THREE.Group();
@@ -315,7 +315,7 @@ function buildBeklentiGolgesi(stats: EnemyStats): EnemyMeshResult {
 
   group.add(floatBody);
 
-  const auraMat = new THREE.MeshBasicMaterial({ color: 0x7a4bd6, transparent: true, opacity: 0.35 });
+  const auraMat = new THREE.MeshBasicMaterial({ color: stats.accentColor, transparent: true, opacity: 0.35 });
   const aura = new THREE.Mesh(new THREE.BoxGeometry(coreSize * 2.2, 0.1, coreSize * 2.2), auraMat);
   aura.position.y = 0.05;
   group.add(aura);
