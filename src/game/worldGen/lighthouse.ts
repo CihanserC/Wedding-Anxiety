@@ -16,9 +16,8 @@ import {
 import type { GeneratorResult, WorldWriter } from './types';
 
 /**
- * Sunset lighthouse coastline: sea of water, a rocky island with a sand
- * beach on the south, tall white tower with a red band and glowing lamp,
- * and a small keeper's cottage with a red roof.
+ * Sunset lighthouse coastline: sea, rocky island, tall tower with
+ * exterior stairs to an open rooftop gallery, and a keeper's cottage.
  */
 export function generateLighthouse(w: WorldWriter): GeneratorResult {
   const W = w.width;
@@ -66,13 +65,11 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
     }
   }
 
-  // Walkable tower with a clear stairwell hatch through the rooftop deck.
   const towerX = centerX;
   const towerZ = pathTopZ + 5;
   const shaftTopY = 11;
   const galleryY = 12;
   const canopyY = 16;
-  // 2×2 hatch in the gallery floor (player climbs through this)
   const hatch: Array<[number, number]> = [
     [0, 0],
     [1, 0],
@@ -82,27 +79,27 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
   const isHatch = (dx: number, dz: number): boolean =>
     hatch.some(([hx, hz]) => hx === dx && hz === dz);
 
-  // Path continues all the way to the tower door
+  // Path to the door
   for (let z = pathTopZ; z <= towerZ - 3; z++) {
     for (let dx = -1; dx <= 1; dx++) {
       w.setBlock(centerX + dx, 1, z, BLOCK_PATH);
     }
   }
 
-  // Wider tower: walls at ±3 → 5×5 interior so stairs don't stack on themselves
+  // Interior floor
   for (let dx = -2; dx <= 2; dx++) {
     for (let dz = -2; dz <= 2; dz++) {
       w.setBlock(towerX + dx, 1, towerZ + dz, BLOCK_ROCK);
     }
   }
 
+  // Shaft walls at ±3
   for (let y = 1; y <= shaftTopY; y++) {
     for (let dx = -3; dx <= 3; dx++) {
       for (let dz = -3; dz <= 3; dz++) {
         const onEdge = Math.abs(dx) === 3 || Math.abs(dz) === 3;
         if (!onEdge) continue;
-        // Door: 3 wide, 3 high, south face
-        if (dz === -3 && Math.abs(dx) <= 1 && y <= 3) continue;
+        if (dz === -3 && Math.abs(dx) <= 1 && y <= 3) continue; // south door
         const isRedBand = y === 8 || y === 9;
         w.setBlock(towerX + dx, y, towerZ + dz, isRedBand ? BLOCK_CURTAIN : BLOCK_MARBLE);
       }
@@ -115,54 +112,74 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
     w.setBlock(towerX, y, towerZ + 3, BLOCK_GLASS);
   }
 
-  // Spiral on the outer interior ring (±2) — never inside the hatch columns.
-  // 16 cells → one revolution covers the climb without a rock ceiling overhead.
-  const perimeter: Array<[number, number]> = [
-    [-2, -2],
-    [-2, -1],
-    [-2, 0],
-    [-2, 1],
-    [-2, 2],
-    [-1, 2],
-    [0, 2],
-    [1, 2],
-    [2, 2],
-    [2, 1],
-    [2, 0],
-    [2, -1],
-    [2, -2],
-    [1, -2],
-    [0, -2],
-    [-1, -2],
-  ];
-  // Steps from y=2 up to y=galleryY (same height as the deck — walk straight out)
-  const topStepIndex = galleryY - 2; // last step at y == galleryY
-  for (let k = 0; k <= topStepIndex; k++) {
-    const [sdx, sdz] = perimeter[k % perimeter.length];
-    if (isHatch(sdx, sdz)) continue;
-    w.setBlock(towerX + sdx, 2 + k, towerZ + sdz, BLOCK_WOOD);
+  // ── East-side straight stairs → solid rooftop landing (no gap) ─────
+  // Gallery deck is at dz ∈ [-3, 3]. Stairs must end inside that range.
+  const stairCount = galleryY - 2; // treads at y=2 .. y=galleryY
+  const stairTopZ = 1; // land next to gallery center-east
+  const stairStartZ = stairTopZ - stairCount;
+
+  // Ground approach from the south path to the stair foot
+  for (let x = towerX + 1; x <= towerX + 5; x++) {
+    w.setBlock(x, 1, towerZ - 4, BLOCK_PATH);
+  }
+  for (let z = Math.min(towerZ - 4, towerZ + stairStartZ - 1); z <= towerZ + stairStartZ; z++) {
+    w.setBlock(towerX + 4, 1, z, BLOCK_PATH);
+    w.setBlock(towerX + 5, 1, z, BLOCK_PATH);
   }
 
-  // Keep the hatch column empty (open hole through the rooftop floor to the sky)
+  // Straight 2-wide stairs climbing north along the east face
+  for (let k = 0; k <= stairCount; k++) {
+    const stepY = 2 + k;
+    const stepZ = stairStartZ + k;
+    w.setBlock(towerX + 4, stepY, towerZ + stepZ, BLOCK_WOOD);
+    w.setBlock(towerX + 5, stepY, towerZ + stepZ, BLOCK_WOOD);
+  }
+
+  // Hatch open to the sky (center of gallery)
   for (const [hx, hz] of hatch) {
     for (let y = 2; y <= canopyY + 1; y++) {
       w.setBlock(towerX + hx, y, towerZ + hz, BLOCK_AIR);
     }
   }
 
-  // Rooftop gallery — leave the 2×2 hatch completely empty (air)
-  for (let dx = -4; dx <= 4; dx++) {
-    for (let dz = -4; dz <= 4; dz++) {
+  // Full rooftop gallery at ±3
+  for (let dx = -3; dx <= 3; dx++) {
+    for (let dz = -3; dz <= 3; dz++) {
       if (isHatch(dx, dz)) continue;
       w.setBlock(towerX + dx, galleryY, towerZ + dz, BLOCK_MARBLE);
     }
   }
 
-  // Outer safety rail (outside walkway)
+  // Solid landing bridge: stairs (x+4/+5) → gallery (x+3..0), 3 cells deep
+  for (let dz = stairTopZ - 1; dz <= stairTopZ + 1; dz++) {
+    w.setBlock(towerX + 5, galleryY, towerZ + dz, BLOCK_WOOD);
+    w.setBlock(towerX + 4, galleryY, towerZ + dz, BLOCK_WOOD);
+    w.setBlock(towerX + 3, galleryY, towerZ + dz, BLOCK_WOOD);
+    w.setBlock(towerX + 2, galleryY, towerZ + dz, BLOCK_WOOD);
+    w.setBlock(towerX + 1, galleryY, towerZ + dz, BLOCK_WOOD);
+  }
+
+  // Clear ONLY headroom above the landing (never delete the floor itself)
+  for (let dz = stairTopZ - 1; dz <= stairTopZ + 1; dz++) {
+    for (let dx = 1; dx <= 5; dx++) {
+      for (let y = galleryY + 1; y <= galleryY + 3; y++) {
+        w.setBlock(towerX + dx, y, towerZ + dz, BLOCK_AIR);
+      }
+    }
+  }
+
+  // East wall cutout just below gallery so the last climb isn't blocked
+  // (walls only go to shaftTopY, but clear anyway for safety)
+  for (let y = galleryY - 2; y <= galleryY - 1; y++) {
+    for (let dz = stairTopZ - 1; dz <= stairTopZ + 1; dz++) {
+      w.setBlock(towerX + 3, y, towerZ + dz, BLOCK_AIR);
+    }
+  }
+
+  // Outer rail at ±5
   for (let dx = -5; dx <= 5; dx++) {
     for (let dz = -5; dz <= 5; dz++) {
-      const onOuter = Math.abs(dx) === 5 || Math.abs(dz) === 5;
-      if (!onOuter) continue;
+      if (Math.abs(dx) !== 5 && Math.abs(dz) !== 5) continue;
       w.setBlock(towerX + dx, galleryY, towerZ + dz, BLOCK_MARBLE);
       w.setBlock(towerX + dx, galleryY + 1, towerZ + dz, BLOCK_GOLD);
     }
@@ -179,12 +196,13 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
     }
   }
 
-  // Open canopy frame (hatch columns stay open to the sky)
-  for (let dx = -4; dx <= 4; dx++) {
-    for (let dz = -4; dz <= 4; dz++) {
+  // Canopy over the inner gallery only
+  for (let dx = -3; dx <= 3; dx++) {
+    for (let dz = -3; dz <= 3; dz++) {
       if (isHatch(dx, dz)) continue;
-      const frame = Math.abs(dx) === 4 || Math.abs(dz) === 4;
-      if (frame) w.setBlock(towerX + dx, canopyY, towerZ + dz, BLOCK_CURTAIN);
+      if (Math.abs(dx) === 3 || Math.abs(dz) === 3) {
+        w.setBlock(towerX + dx, canopyY, towerZ + dz, BLOCK_CURTAIN);
+      }
     }
   }
   w.setBlock(towerX - 2, canopyY, towerZ - 2, BLOCK_CURTAIN);
@@ -194,6 +212,7 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
   w.setBlock(towerX - 2, canopyY - 1, towerZ - 2, BLOCK_LIGHT);
   w.setBlock(towerX, canopyY + 1, towerZ, BLOCK_LIGHT);
 
+  // ── Keeper's cottage ───────────────────────────────────────────────
   const cottageX = centerX - 8;
   const cottageZ = towerZ - 1;
   const cottageW = 6;
@@ -210,13 +229,11 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
     }
   }
 
-  // Door opening on the south face (2 wide × 3 high) so the player can walk in
   const doorX = cottageX + Math.floor(cottageW / 2) - 1;
   for (let dx = 0; dx < 2; dx++) {
     for (let y = 1; y <= 3; y++) {
       w.setBlock(doorX + dx, y, cottageZ, BLOCK_AIR);
     }
-    // Wooden door-frame sill / lintel accents
     w.setBlock(doorX + dx, 4, cottageZ, BLOCK_WOOD);
   }
   w.setBlock(doorX - 1, 1, cottageZ, BLOCK_WOOD);
@@ -226,16 +243,12 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
   w.setBlock(doorX + 2, 2, cottageZ, BLOCK_WOOD);
   w.setBlock(doorX + 2, 3, cottageZ, BLOCK_WOOD);
 
-  // Windows on the north wall
   w.setBlock(cottageX + 1, 3, cottageZ + cottageD - 1, BLOCK_GLASS);
   w.setBlock(cottageX + cottageW - 2, 3, cottageZ + cottageD - 1, BLOCK_GLASS);
 
   for (let x = -1; x <= cottageW; x++) {
     for (let z = -1; z <= cottageD; z++) {
-      const roofX = cottageX + x;
-      const roofZ = cottageZ + z;
-      const inside = x >= -1 && x <= cottageW && z >= -1 && z <= cottageD;
-      if (inside) w.setBlock(roofX, cottageWallH + 1, roofZ, BLOCK_CURTAIN);
+      w.setBlock(cottageX + x, cottageWallH + 1, cottageZ + z, BLOCK_CURTAIN);
     }
   }
   for (let x = 1; x < cottageW - 1; x++) {

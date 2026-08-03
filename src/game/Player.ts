@@ -129,13 +129,20 @@ export class Player {
     const original = this.position[axis];
     this.position[axis] = original + delta;
     if (this.collides()) {
-      // Auto step-up ~1 block so spiral lighthouse stairs are climbable
+      // Auto step-up up to ~1.2 blocks (voxel stairs / ledges)
       if (axis !== 'y') {
         const footY = this.position.y;
-        this.position.y = footY + 1.05;
-        if (!this.collides()) {
-          return;
+        let stepped = false;
+        for (const lift of [1.01, 1.1, 1.2]) {
+          this.position.y = footY + lift;
+          if (!this.collides()) {
+            stepped = true;
+            this.onGround = true;
+            this.velocity.y = 0;
+            break;
+          }
         }
+        if (stepped) return;
         this.position.y = footY;
       }
       this.position[axis] = original;
