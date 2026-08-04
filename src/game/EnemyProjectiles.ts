@@ -23,11 +23,13 @@ export class EnemyProjectileManager {
     direction: THREE.Vector3,
     speed = 7,
     anxietyHit = 8,
+    color = 0xff3318,
   ): void {
     const dir = direction.clone().normalize();
-    const geometry = new THREE.SphereGeometry(0.22, 8, 8);
+    const radius = color === 0x9b4de0 ? 0.24 : color === 0xff1200 ? 0.26 : 0.22;
+    const geometry = new THREE.SphereGeometry(radius, 8, 8);
     const material = new THREE.MeshBasicMaterial({
-      color: 0xff3318,
+      color,
       transparent: true,
       opacity: 0.92,
     });
@@ -37,7 +39,7 @@ export class EnemyProjectileManager {
     this.fireballs.push({
       mesh,
       velocity: dir.multiplyScalar(speed),
-      radius: 0.28,
+      radius: radius + 0.06,
       anxietyHit,
     });
   }

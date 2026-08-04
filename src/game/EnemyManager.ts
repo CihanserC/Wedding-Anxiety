@@ -19,6 +19,7 @@ export interface EnemyManagerEvents {
     direction: THREE.Vector3,
     speed: number,
     anxietyHit: number,
+    color?: number,
   ) => void;
 }
 
@@ -41,8 +42,8 @@ export class EnemyManager {
       onFlash: (enemy) => this.events.onFlash?.(enemy),
       onBossPhase: (enemy, phase) => this.events.onBossPhase?.(enemy, phase),
       onBossDeathEffect: (position, kind) => this.events.onBossDeathEffect?.(position, kind),
-      onShootFireball: (origin, direction, speed, anxietyHit) =>
-        this.events.onShootFireball?.(origin, direction, speed, anxietyHit),
+      onShootFireball: (origin, direction, speed, anxietyHit, color) =>
+        this.events.onShootFireball?.(origin, direction, speed, anxietyHit, color),
     };
   }
 

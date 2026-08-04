@@ -69,7 +69,9 @@ export type PropKind =
   | 'cat'
   | 'lighthouse'
   | 'car'
-  | 'cake-table';
+  | 'cake-table'
+  | 'wedding-arch'
+  | 'wedding-steps';
 
 export interface PropSpec {
   kind: PropKind;

@@ -153,11 +153,11 @@ export function buildGroomCharacter(): THREE.Group {
 
   // ── Neck ───────────────────────────────────────────────────────────────
   const neckY = torsoY + torsoH + 0.06;
-  vox(model, 0.1, 0.1, 0.1, skinM, 0, neckY + 0.05, 0);
+  vox(model, 0.1, 0.12, 0.1, skinM, 0, neckY + 0.06, 0);
 
   // ── Head ───────────────────────────────────────────────────────────────
   const headGroup = new THREE.Group();
-  headGroup.position.set(0, neckY + 0.2, 0);
+  headGroup.position.set(0, neckY + 0.12, 0);
   model.add(headGroup);
 
   vox(headGroup, 0.22, 0.28, 0.22, skinM, 0, 0.14, 0);

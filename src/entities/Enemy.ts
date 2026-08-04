@@ -14,6 +14,7 @@ export type EnemyUpdateEvents = {
     direction: THREE.Vector3,
     speed: number,
     anxietyHit: number,
+    color?: number,
   ) => void;
 };
 
@@ -101,30 +102,65 @@ export class Enemy {
   }
 
   private applyRageColors(t: number): void {
-    const gold = new THREE.Color(0xf5c542);
-    const hotRed = new THREE.Color(0xff2818);
-    const darkRed = new THREE.Color(0x5a0808);
     const baseBrown = new THREE.Color(0x6b4f0a);
-    const mix = this.rageLevel >= 2 ? Math.min(1, t * 1.15) : t;
+    const gold = new THREE.Color(0xf5c542);
+    const mix = Math.min(1, t);
 
-    for (let i = 0; i < this.materials.length; i++) {
-      const mat = this.materials[i];
-      const base = this.baseMaterialState[i];
-      if (!base) continue;
-      const isGlow = base.emissiveIntensity > 0.5;
-      if (isGlow) {
-        mat.color.copy(gold).lerp(hotRed, mix);
-        mat.emissive.copy(base.emissive).lerp(new THREE.Color(0xff4020), mix);
-        mat.emissiveIntensity = base.emissiveIntensity + mix * (this.rageLevel >= 2 ? 1.1 : 0.7);
-      } else {
-        mat.color.copy(baseBrown).lerp(darkRed, mix * 0.85);
-        mat.emissive.copy(base.emissive).lerp(new THREE.Color(0x440000), mix * 0.6);
-        mat.emissiveIntensity = base.emissiveIntensity + mix * 0.35;
+    if (this.rageLevel === 1) {
+      // Phase 2 — kızdı: purple rage
+      const purple = new THREE.Color(0x9b4de0);
+      const darkPurple = new THREE.Color(0x4a1578);
+      const purpleGlow = new THREE.Color(0xbb66ff);
+
+      for (let i = 0; i < this.materials.length; i++) {
+        const mat = this.materials[i];
+        const base = this.baseMaterialState[i];
+        if (!base) continue;
+        const isGlow = base.emissiveIntensity > 0.5;
+        if (isGlow) {
+          mat.color.copy(gold).lerp(purple, mix);
+          mat.emissive.copy(base.emissive).lerp(purpleGlow, mix);
+          mat.emissiveIntensity = base.emissiveIntensity + mix * 0.95;
+        } else {
+          mat.color.copy(baseBrown).lerp(darkPurple, mix * 0.92);
+          mat.emissive.copy(base.emissive).lerp(new THREE.Color(0x6622aa), mix * 0.55);
+          mat.emissiveIntensity = base.emissiveIntensity + mix * 0.35;
+        }
       }
+
+      const pulse = 1 + Math.sin(this.time * 9) * 0.05 * mix;
+      this.root.scale.setScalar(pulse);
+      return;
     }
 
-    const pulse = 1 + Math.sin(this.time * 14) * 0.06 * mix;
-    this.root.scale.setScalar(pulse);
+    if (this.rageLevel >= 2) {
+      // Phase 3 — öfkelendi: kıpkırmızı, orange↔red every 1s
+      const orange = new THREE.Color(0xff7700);
+      const brightRed = new THREE.Color(0xff0800);
+      const darkRed = new THREE.Color(0x7a0606);
+      const cycleT = 0.5 - 0.5 * Math.cos(this.time * Math.PI * 2);
+      const hotColor = orange.clone().lerp(brightRed, cycleT);
+      const emissiveHot = orange.clone().lerp(new THREE.Color(0xff1a00), cycleT);
+
+      for (let i = 0; i < this.materials.length; i++) {
+        const mat = this.materials[i];
+        const base = this.baseMaterialState[i];
+        if (!base) continue;
+        const isGlow = base.emissiveIntensity > 0.5;
+        if (isGlow) {
+          mat.color.copy(gold).lerp(hotColor, mix);
+          mat.emissive.copy(base.emissive).lerp(emissiveHot, mix);
+          mat.emissiveIntensity = base.emissiveIntensity + mix * (1.0 + cycleT * 0.6);
+        } else {
+          mat.color.copy(baseBrown).lerp(darkRed, mix * 0.9);
+          mat.emissive.copy(base.emissive).lerp(emissiveHot, mix * 0.55);
+          mat.emissiveIntensity = base.emissiveIntensity + mix * 0.45;
+        }
+      }
+
+      const pulse = 1 + Math.sin(this.time * 16) * 0.07;
+      this.root.scale.setScalar(pulse);
+    }
   }
 
   applyHit(damage: number): boolean {
@@ -187,17 +223,44 @@ export class Enemy {
     events: EnemyUpdateEvents | undefined,
     speed: number,
     anxietyHit: number,
+    options?: { color?: number; spreadCount?: number; spreadDegrees?: number },
   ): void {
     if (!events?.onShootFireball) return;
     const origin = this.position.clone();
     origin.y += this.stats.height * 0.55;
-    const dir = new THREE.Vector3(
+    const baseDir = new THREE.Vector3(
       target.x - origin.x,
       target.y + 0.9 - origin.y,
       target.z - origin.z,
     );
-    events.onShootFireball(origin, dir, speed, anxietyHit);
+    if (baseDir.lengthSq() < 0.0001) return;
+    baseDir.normalize();
+
+    const count = options?.spreadCount ?? 1;
+    const spread = options?.spreadDegrees ?? 30;
+    const color = options?.color;
+
+    if (count <= 1) {
+      events.onShootFireball(origin, baseDir.clone(), speed, anxietyHit, color);
+    } else {
+      const half = (count - 1) / 2;
+      for (let i = 0; i < count; i++) {
+        const offsetDeg = (i - half) * spread;
+        const dir = this.rotateDirectionHorizontal(baseDir, offsetDeg);
+        events.onShootFireball(origin, dir, speed, anxietyHit, color);
+      }
+    }
+
     this.throwAnim = 0.45;
+  }
+
+  private rotateDirectionHorizontal(dir: THREE.Vector3, degrees: number): THREE.Vector3 {
+    const angle = (degrees * Math.PI) / 180;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const x = dir.x * cos - dir.z * sin;
+    const z = dir.x * sin + dir.z * cos;
+    return new THREE.Vector3(x, dir.y, z).normalize();
   }
 
   applyHitWithEvents(damage: number, events?: EnemyUpdateEvents): boolean {
@@ -239,9 +302,13 @@ export class Enemy {
     if (this.hitFlashRemaining > 0) {
       this.hitFlashRemaining -= dt;
       if (this.hitFlashRemaining <= 0) {
-        for (const mat of this.materials) {
-          mat.emissive = new THREE.Color(0x000000);
-          mat.emissiveIntensity = 0;
+        if (this.stats.isBoss && this.rageAnim >= 0) {
+          this.applyRageColors(Math.min(1, this.rageAnim));
+        } else {
+          for (const mat of this.materials) {
+            mat.emissive = new THREE.Color(0x000000);
+            mat.emissiveIntensity = 0;
+          }
         }
       }
     }
@@ -359,12 +426,15 @@ export class Enemy {
         this.throwAnim = Math.max(0, this.throwAnim - dt);
         if (this.bossFireCooldown <= 0 && distXZ >= 4 && distXZ <= 28) {
           this.bossFireCooldown = rage >= 3 ? 2.4 : 2.6;
-          this.shootFireball(
-            target,
-            events,
-            rage >= 3 ? 7.2 : 7.5,
-            rage >= 3 ? 11 : 10,
-          );
+          if (rage >= 3) {
+            this.shootFireball(target, events, 7.2, 11, {
+              color: 0xff1200,
+              spreadCount: 3,
+              spreadDegrees: 30,
+            });
+          } else {
+            this.shootFireball(target, events, 7.5, 10, { color: 0x9b4de0 });
+          }
         }
       }
     }

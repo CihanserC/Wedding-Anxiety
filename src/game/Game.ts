@@ -111,8 +111,8 @@ export class Game {
         if (kind === 'fire') this.effects.spawnBossFireBurst(position);
         else this.effects.spawnBossDustBurst(position);
       },
-      onShootFireball: (origin, direction, speed, anxietyHit) =>
-        this.enemyProjectiles.spawnFireball(origin, direction, speed, anxietyHit),
+      onShootFireball: (origin, direction, speed, anxietyHit, color) =>
+        this.enemyProjectiles.spawnFireball(origin, direction, speed, anxietyHit, color),
     });
 
     this.hud = new HUD(container);
@@ -327,14 +327,18 @@ export class Game {
       this.tickAltarInteraction();
       this.tickWeddingNpcInteraction();
 
-      if (active) {
+      if (active && this.levelState.phase !== 'celebration') {
         const requested = this.input.consumeWeaponSelect();
         if (requested !== null) this.setActiveWeapon(WEAPON_ORDER[requested]);
         const wheel = this.input.consumeWeaponScroll();
         if (wheel !== 0) this.cycleWeapon(wheel);
       }
 
-      if (active && this.input.consumeFire()) {
+      if (
+        active &&
+        this.levelState.phase !== 'celebration' &&
+        this.input.consumeFire()
+      ) {
         const origin = this.player.getEyePosition();
         const dir = this.player.getAimDirection();
         const result = this.weapon.fire(
@@ -808,8 +812,9 @@ export class Game {
     this.menu.hide();
     this.state = 'playing';
     this.levelState.phase = 'celebration';
+    this.player.rig.setCelebrationMode(true);
     this.hud.show();
-    this.hud.setCrosshairVisible(true);
+    this.hud.setCrosshairVisible(false);
     this.hud.setInteractPrompt(null);
     this.hud.setSubtitle([]);
     this.anxiety.lockAtZero();
@@ -1004,6 +1009,7 @@ export class Game {
     this.catAnimTime = 0;
     this.pianoPlayed = false;
     this.altarUsedThisLevel = false;
+    this.player.rig.setCelebrationMode(false);
     this.bossCinematicPlayed.clear();
     this.pendingFinalWin = false;
     this.finalWinDelay = 0;

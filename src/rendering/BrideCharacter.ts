@@ -111,16 +111,16 @@ export function buildBrideCharacter(): THREE.Group {
   const blushM = mat(C.blush);
   const sequinMats = [sequinM, sequinBrightM, sequinGoldM];
 
-  // ── Skirt layers (tulle A-line, floor-length) ──────────────────────────
+  // ── Skirt layers (tulle A-line, floor-length — narrow at waist, flares to hem) ──
   const skirtBaseY = 0.02;
   const skirtLayers: Array<{ y: number; w: number; d: number; h: number; mat: THREE.MeshLambertMaterial }> = [
-    { y: skirtBaseY + 0.06, w: 0.42, d: 0.36, h: 0.12, mat: dressDeepM },
-    { y: skirtBaseY + 0.18, w: 0.52, d: 0.44, h: 0.14, mat: dressM },
-    { y: skirtBaseY + 0.32, w: 0.64, d: 0.54, h: 0.16, mat: tulleM },
+    { y: skirtBaseY + 1.08, w: 0.42, d: 0.36, h: 0.24, mat: tulleLightM },
+    { y: skirtBaseY + 0.86, w: 0.52, d: 0.44, h: 0.22, mat: dressLightM },
+    { y: skirtBaseY + 0.66, w: 0.64, d: 0.54, h: 0.2, mat: tulleM },
     { y: skirtBaseY + 0.48, w: 0.78, d: 0.66, h: 0.18, mat: tulleLightM },
-    { y: skirtBaseY + 0.66, w: 0.92, d: 0.78, h: 0.2, mat: tulleM },
-    { y: skirtBaseY + 0.86, w: 1.06, d: 0.9, h: 0.22, mat: dressLightM },
-    { y: skirtBaseY + 1.08, w: 1.18, d: 1.0, h: 0.24, mat: tulleLightM },
+    { y: skirtBaseY + 0.32, w: 0.92, d: 0.78, h: 0.16, mat: tulleM },
+    { y: skirtBaseY + 0.18, w: 1.06, d: 0.9, h: 0.14, mat: dressM },
+    { y: skirtBaseY + 0.06, w: 1.18, d: 1.0, h: 0.12, mat: dressDeepM },
   ];
   for (const layer of skirtLayers) {
     vox(model, layer.w, layer.h, layer.d, layer.mat, 0, layer.y, 0);
@@ -133,7 +133,7 @@ export function buildBrideCharacter(): THREE.Group {
   vox(model, 0.9, 0.05, 0.28, dressShadowM, 0, skirtBaseY + 0.02, -0.42);
 
   // Inner petticoat hint
-  vox(model, 0.38, 0.5, 0.32, dressShadowM, 0, skirtBaseY + 0.3, 0);
+  vox(model, 0.55, 0.5, 0.48, dressShadowM, 0, skirtBaseY + 0.3, 0);
 
   // ── Bodice (strapless sweetheart, beaded) ──────────────────────────────
   const bodiceY = skirtBaseY + 1.22;
@@ -184,7 +184,7 @@ export function buildBrideCharacter(): THREE.Group {
 
   // ── Neck & shoulders ───────────────────────────────────────────────────
   const neckY = bodiceY + 0.42;
-  vox(model, 0.1, 0.1, 0.1, skinM, 0, neckY + 0.05, 0);
+  vox(model, 0.1, 0.12, 0.1, skinM, 0, neckY + 0.06, 0);
   vox(model, 0.12, 0.04, 0.12, skinShadowM, 0, neckY, 0);
 
   // Collarbone hints
@@ -196,7 +196,7 @@ export function buildBrideCharacter(): THREE.Group {
 
   // ── Head ───────────────────────────────────────────────────────────────
   const headGroup = new THREE.Group();
-  headGroup.position.set(0, neckY + 0.18, 0);
+  headGroup.position.set(0, neckY + 0.12, 0);
   model.add(headGroup);
 
   vox(headGroup, 0.22, 0.26, 0.22, skinM, 0, 0.13, 0);

@@ -100,6 +100,21 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
     ],
     props: [
       {
+        kind: 'wedding-steps',
+        x: centerX,
+        y: 1.01,
+        z: stageFrontZ - 0.65,
+        rotationY: 0,
+      },
+      {
+        kind: 'wedding-arch',
+        x: centerX,
+        y: 2.01,
+        z: altarWorldZ - 0.5,
+        rotationY: Math.PI,
+        scale: 1,
+      },
+      {
         kind: 'cake-table',
         x: cakeTableX,
         y: 2.01,
@@ -287,20 +302,17 @@ function generateHall(w: WorldWriter, x0: number, z0: number, HW: number, HD: nu
     w.setBlock(x0 + HW - 5, 1, z0 + z, BLOCK_GOLD);
   }
 
-  // Gold altar / nikâh masası at back of stage
+  addStageFrontSteps(w, x0, z0, centerX, stageFrontLocal);
+
+  // Marble pad where the ceremony arch sits (3D prop handles the arch art)
   const altarLocalZ = HD - 7;
+  for (let x = centerX - 5; x < centerX + 5; x++) {
+    w.setBlock(x0 + x, 2, z0 + altarLocalZ, BLOCK_MARBLE);
+    w.setBlock(x0 + x, 2, z0 + altarLocalZ + 1, BLOCK_MARBLE);
+  }
   for (let x = centerX - 4; x < centerX + 4; x++) {
     w.setBlock(x0 + x, 2, z0 + altarLocalZ, BLOCK_GOLD);
-    w.setBlock(x0 + x, 2, z0 + altarLocalZ + 1, BLOCK_GOLD);
   }
-  for (let x = centerX - 3; x < centerX + 3; x++) {
-    w.setBlock(x0 + x, 3, z0 + altarLocalZ, BLOCK_GOLD);
-  }
-  w.setBlock(x0 + centerX - 3, 4, z0 + altarLocalZ, BLOCK_GOLD);
-  w.setBlock(x0 + centerX + 2, 4, z0 + altarLocalZ, BLOCK_GOLD);
-  w.setBlock(x0 + centerX - 1, 5, z0 + altarLocalZ, BLOCK_GOLD);
-  w.setBlock(x0 + centerX, 5, z0 + altarLocalZ, BLOCK_GOLD);
-  w.setBlock(x0 + centerX - 1, 5, z0 + altarLocalZ, BLOCK_LIGHT);
 
   // Curtain panels flanking the portrait zone on the north wall
   for (let y = 2; y <= wallHeight - 1; y++) {
@@ -325,6 +337,29 @@ function generateHall(w: WorldWriter, x0: number, z0: number, HW: number, HD: nu
   w.setBlock(x0 + centerX + 1, chandY - 1, z0 + chandZ, BLOCK_LIGHT);
 
   addHallDome(w, x0, z0, HW, HD, wallHeight);
+}
+
+/** Small white marble steps descending from the stage to the carpet aisle. */
+function addStageFrontSteps(
+  w: WorldWriter,
+  x0: number,
+  z0: number,
+  centerX: number,
+  stageFrontLocal: number,
+): void {
+  // Three tiers rising south→north; top tier flush with the stage lip at y=1
+  const tiers: Array<{ zOff: number; halfW: number; y: number }> = [
+    { zOff: -3, halfW: 2, y: 0 },
+    { zOff: -2, halfW: 2, y: 0 },
+    { zOff: -1, halfW: 2, y: 1 },
+  ];
+
+  for (const tier of tiers) {
+    const z = stageFrontLocal + tier.zOff;
+    for (let dx = -tier.halfW; dx < tier.halfW; dx++) {
+      w.setBlock(x0 + centerX + dx, tier.y, z0 + z, BLOCK_MARBLE);
+    }
+  }
 }
 
 function placeGuestTables(

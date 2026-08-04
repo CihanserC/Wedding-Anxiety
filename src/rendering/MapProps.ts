@@ -39,8 +39,266 @@ function buildProp(spec: PropSpec): THREE.Group {
       return buildCarModel(spec.scale ?? 1);
     case 'cake-table':
       return buildCakeTable(spec.scale ?? 1);
+    case 'wedding-arch':
+      return buildWeddingArch();
+    case 'wedding-steps':
+      return buildWeddingStageSteps();
   }
   return new THREE.Group();
+}
+
+/** Floral wedding ceremony arch — half-circle with drapes, flowers, and balloons. */
+function buildWeddingArch(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'wedding-arch';
+
+  const marble = lambert(0xf2ece6);
+  const white = lambert(0xffffff);
+  const gold = lambert(0xd4af37);
+  const blush = lambert(0xf4c4d0);
+  const curtain = lambert(0xf8b4c4);
+  const green = lambert(0x5a9e5a);
+
+  const pillarX = 2.05;
+  const pillarH = 2.75;
+  const pillarZ = -0.35;
+  const archBaseY = pillarH + 0.12;
+
+  const platform = box(5.4, 0.14, 2.6, marble);
+  platform.position.set(0, 0.07, 0.15);
+  g.add(platform);
+  const trimFront = box(5.5, 0.06, 0.12, gold);
+  trimFront.position.set(0, 0.04, 1.35);
+  g.add(trimFront);
+  const trimBack = box(5.5, 0.06, 0.12, gold);
+  trimBack.position.set(0, 0.04, -1.15);
+  g.add(trimBack);
+
+  const petalColors = [0xffb7c5, 0xff8fab, 0xffffff, 0xffd6e0];
+  for (let i = 0; i < 28; i++) {
+    const petal = box(0.08, 0.02, 0.08, lambert(petalColors[i % petalColors.length]));
+    const angle = (i / 28) * Math.PI * 2;
+    const r = 0.4 + (i % 5) * 0.35;
+    petal.position.set(Math.cos(angle) * r * 0.55, 0.16, 0.15 + Math.sin(angle) * r * 0.35);
+    petal.rotation.y = angle;
+    g.add(petal);
+  }
+
+  for (const side of [-1, 1]) {
+    const px = side * pillarX;
+    const baseRing = box(0.55, 0.18, 0.55, gold);
+    baseRing.position.set(px, 0.22, pillarZ);
+    g.add(baseRing);
+
+    const pillar = box(0.38, pillarH, 0.38, white);
+    pillar.position.set(px, pillarH * 0.5 + 0.12, pillarZ);
+    g.add(pillar);
+
+    const cap = box(0.48, 0.16, 0.48, gold);
+    cap.position.set(px, pillarH + 0.2, pillarZ);
+    g.add(cap);
+
+    addFlowerCluster(g, px, pillarH + 0.35, pillarZ, iFlowerPalette(side));
+    addFlowerCluster(g, px, pillarH * 0.55 + 0.12, pillarZ + 0.22, iFlowerPalette(side + 2));
+
+    const drape = box(0.06, 2.2, 0.9, curtain);
+    drape.position.set(px + side * 0.28, 1.35, 0.35);
+    drape.rotation.z = side * 0.12;
+    g.add(drape);
+    const drapeFold = box(0.05, 1.6, 0.45, blush);
+    drapeFold.position.set(px + side * 0.22, 1.1, 0.55);
+    drapeFold.rotation.z = side * 0.18;
+    g.add(drapeFold);
+  }
+
+  const archRadius = 2.05;
+  const archSegments = 36;
+  const outerPts: THREE.Vector3[] = [];
+  const innerPts: THREE.Vector3[] = [];
+  for (let i = 0; i <= archSegments; i++) {
+    const angle = Math.PI - (Math.PI * i) / archSegments;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    outerPts.push(new THREE.Vector3(cos * archRadius, archBaseY + sin * archRadius, pillarZ));
+    innerPts.push(
+      new THREE.Vector3(cos * (archRadius - 0.18), archBaseY + sin * (archRadius - 0.18), pillarZ),
+    );
+  }
+
+  const outerCurve = new THREE.CatmullRomCurve3(outerPts);
+  const innerCurve = new THREE.CatmullRomCurve3(innerPts);
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(outerCurve, 48, 0.16, 8, false), white));
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(innerCurve, 48, 0.07, 6, false), gold));
+
+  for (let i = 0; i <= archSegments; i++) {
+    if (i % 2 !== 0) continue;
+    const t = i / archSegments;
+    const pt = outerCurve.getPoint(t);
+    if (i % 4 === 0) {
+      addFlowerCluster(g, pt.x, pt.y + 0.12, pt.z, iFlowerPalette(i));
+    } else {
+      const leaf = box(0.14, 0.06, 0.22, green);
+      leaf.position.copy(pt);
+      leaf.position.y += 0.08;
+      leaf.rotation.z = (pt.x / archRadius) * 0.4;
+      g.add(leaf);
+    }
+  }
+
+  for (const offset of [-0.5, 0, 0.5]) {
+    for (let j = 0; j < 4; j++) {
+      const bud = new THREE.Mesh(
+        new THREE.SphereGeometry(0.06, 6, 6),
+        lambert(iFlowerPalette(j + Math.abs(offset))),
+      );
+      bud.position.set(offset, archBaseY + archRadius - 0.15 - j * 0.22, pillarZ + 0.12);
+      g.add(bud);
+      if (j < 3) {
+        const string = box(0.02, 0.18, 0.02, lambert(0xcccccc));
+        string.position.set(offset, bud.position.y + 0.1, pillarZ + 0.12);
+        g.add(string);
+      }
+    }
+  }
+
+  const balloonColors = [0xff6b9d, 0xffd166, 0x7ec8e3, 0xffffff, 0xc9a0ff, 0xff8fab];
+  for (let i = 0; i < 6; i++) {
+    const side = i < 3 ? -1 : 1;
+    const idx = i % 3;
+    addBalloon(
+      g,
+      side * (pillarX + 0.65 + idx * 0.15),
+      2.2 + idx * 0.55,
+      0.55 + idx * 0.2,
+      balloonColors[i],
+    );
+  }
+
+  const tableLegY = 0.55;
+  for (const [lx, lz] of [
+    [-0.55, -0.25],
+    [0.55, -0.25],
+    [-0.55, 0.35],
+    [0.55, 0.35],
+  ] as Array<[number, number]>) {
+    const leg = box(0.1, tableLegY, 0.1, gold);
+    leg.position.set(lx, tableLegY * 0.5 + 0.14, lz + 0.55);
+    g.add(leg);
+  }
+  const tableTop = box(1.55, 0.08, 0.95, white);
+  tableTop.position.set(0, tableLegY + 0.14, 0.55);
+  g.add(tableTop);
+  const cloth = box(1.62, 0.04, 1.02, lambert(0xfffaf8));
+  cloth.position.set(0, tableLegY + 0.2, 0.55);
+  g.add(cloth);
+  addFlowerCluster(g, 0, tableLegY + 0.38, 0.55, 0);
+  addFlowerCluster(g, -0.35, tableLegY + 0.32, 0.55, 3);
+  addFlowerCluster(g, 0.35, tableLegY + 0.32, 0.55, 5);
+
+  return g;
+}
+
+/** Three white marble steps from the stage lip (y=2) down to the carpet (y=1). */
+function buildWeddingStageSteps(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'wedding-stage-steps';
+
+  const marble = lambert(0xf8f4ee);
+  const white = lambert(0xffffff);
+  const gold = lambert(0xd4af37);
+
+  const stepH = 0.33;
+
+  // Top step — north edge flush with stage lip
+  const s3 = box(1.05, stepH, 0.4, marble);
+  s3.position.set(0, stepH * 2.5, 0.45);
+  g.add(s3);
+  const s3Trim = box(1.1, 0.04, 0.42, gold);
+  s3Trim.position.set(0, stepH * 2, 0.45);
+  g.add(s3Trim);
+
+  // Middle step
+  const s2 = box(1.5, stepH, 0.45, white);
+  s2.position.set(0, stepH * 1.5, 0);
+  g.add(s2);
+  const s2Trim = box(1.56, 0.04, 0.48, gold);
+  s2Trim.position.set(0, stepH, 0);
+  g.add(s2Trim);
+
+  // Bottom step — south, toward audience
+  const s1 = box(2.0, stepH, 0.5, marble);
+  s1.position.set(0, stepH * 0.5, -0.5);
+  g.add(s1);
+  const s1TrimL = box(0.06, stepH, 0.5, gold);
+  s1TrimL.position.set(-0.97, stepH * 0.5, -0.5);
+  g.add(s1TrimL);
+  const s1TrimR = box(0.06, stepH, 0.5, gold);
+  s1TrimR.position.set(0.97, stepH * 0.5, -0.5);
+  g.add(s1TrimR);
+
+  return g;
+}
+
+const FLOWER_PALETTE = [0xff6b9d, 0xffb7c5, 0xffffff, 0xffd166, 0xff8fab, 0xe8a0ff];
+
+function iFlowerPalette(seed: number): number {
+  return FLOWER_PALETTE[Math.abs(seed) % FLOWER_PALETTE.length];
+}
+
+function addFlowerCluster(
+  parent: THREE.Group,
+  x: number,
+  y: number,
+  z: number,
+  seed: number,
+): void {
+  const green = lambert(0x4a8f4a);
+  const offsets: Array<[number, number, number]> = [
+    [0, 0, 0],
+    [0.1, 0.06, 0.05],
+    [-0.09, 0.05, -0.04],
+    [0.06, 0.08, -0.07],
+    [-0.05, 0.04, 0.08],
+  ];
+  for (let i = 0; i < offsets.length; i++) {
+    const [ox, oy, oz] = offsets[i];
+    const bloom = new THREE.Mesh(
+      new THREE.SphereGeometry(0.07 + (i === 0 ? 0.03 : 0), 7, 7),
+      lambert(iFlowerPalette(seed + i)),
+    );
+    bloom.position.set(x + ox, y + oy, z + oz);
+    parent.add(bloom);
+  }
+  const stem = box(0.04, 0.12, 0.04, green);
+  stem.position.set(x, y - 0.06, z);
+  parent.add(stem);
+}
+
+function addBalloon(
+  parent: THREE.Group,
+  x: number,
+  y: number,
+  z: number,
+  color: number,
+): void {
+  const string = box(0.02, 0.55, 0.02, lambert(0xbbbbbb));
+  string.position.set(x, y - 0.35, z);
+  parent.add(string);
+
+  const balloon = new THREE.Mesh(
+    new THREE.SphereGeometry(0.22, 10, 10),
+    lambert(color),
+  );
+  balloon.scale.set(1, 1.15, 1);
+  balloon.position.set(x, y, z);
+  parent.add(balloon);
+
+  const knot = new THREE.Mesh(
+    new THREE.SphereGeometry(0.04, 6, 6),
+    lambert(0xdddddd),
+  );
+  knot.position.set(x, y - 0.28, z);
+  parent.add(knot);
 }
 
 /** Target height for the wedding cake GLB on the table (~0.9 blocks). */

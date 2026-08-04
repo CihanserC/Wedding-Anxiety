@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { WeaponId } from '../data/weapons';
+import { buildCelebrationBouquet } from '../rendering/FlowerBouquet';
 
 /**
  * First-person weapon viewmodel. A THREE.Group is parented to the camera so
@@ -9,7 +10,9 @@ import type { WeaponId } from '../data/weapons';
 export class PlayerRig {
   readonly root: THREE.Group;
   private readonly weapons: Map<WeaponId, THREE.Group> = new Map();
+  private readonly bouquetGroup: THREE.Group;
   private activeId: WeaponId = 'pistol';
+  private celebrationMode = false;
   private time = 0;
   private recoilPhase = 0;
   private swayPhase = 0;
@@ -26,6 +29,10 @@ export class PlayerRig {
       group.visible = id === this.activeId;
       this.root.add(group);
     }
+
+    this.bouquetGroup = buildCelebrationBouquet();
+    this.bouquetGroup.visible = false;
+    this.root.add(this.bouquetGroup);
   }
 
   attachTo(parent: THREE.Object3D): void {
@@ -33,6 +40,7 @@ export class PlayerRig {
   }
 
   setActive(id: WeaponId): void {
+    if (this.celebrationMode) return;
     if (this.activeId === id) return;
     this.activeId = id;
     for (const [wid, group] of this.weapons) {
@@ -40,18 +48,46 @@ export class PlayerRig {
     }
   }
 
+  setCelebrationMode(enabled: boolean): void {
+    this.celebrationMode = enabled;
+    this.bouquetGroup.visible = enabled;
+    for (const [wid, group] of this.weapons) {
+      group.visible = !enabled && wid === this.activeId;
+    }
+    if (enabled) {
+      this.recoilPhase = 0;
+    }
+  }
+
+  isCelebrationMode(): boolean {
+    return this.celebrationMode;
+  }
+
   onFire(recoil: number): void {
+    if (this.celebrationMode) return;
     this.recoilPhase = Math.min(1, this.recoilPhase + recoil * 4);
   }
 
   update(dt: number, moving: boolean): void {
     this.time += dt;
-    this.recoilPhase = Math.max(0, this.recoilPhase - dt * 5);
     if (moving) {
       this.swayPhase += dt * 8;
     } else {
       this.swayPhase += dt * 2;
     }
+
+    if (this.celebrationMode) {
+      const bobX = Math.cos(this.swayPhase) * (moving ? 0.012 : 0.004);
+      const bobY = Math.abs(Math.sin(this.swayPhase)) * (moving ? 0.014 : 0.004);
+      const swayZ = Math.sin(this.swayPhase * 0.7) * 0.006;
+      this.bouquetGroup.position.x = 0.3 + bobX;
+      this.bouquetGroup.position.y = -0.4 + bobY;
+      this.bouquetGroup.position.z = -0.48 + swayZ;
+      this.bouquetGroup.rotation.z = 0.08 + Math.sin(this.swayPhase * 0.5) * 0.03;
+      return;
+    }
+
+    this.recoilPhase = Math.max(0, this.recoilPhase - dt * 5);
 
     const active = this.weapons.get(this.activeId);
     if (!active) return;
