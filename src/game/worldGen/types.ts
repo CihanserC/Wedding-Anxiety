@@ -18,6 +18,7 @@ export interface BannerSpec {
   rotationY: number;
   width: number;
   height: number;
+  style?: 'classic' | 'neon';
 }
 
 export interface SpawnRegion {
@@ -59,7 +60,16 @@ export interface HallDecorations {
   portrait?: PortraitSpec;
 }
 
-export type PropKind = 'grand-piano' | 'cello' | 'violin' | 'music-stand' | 'sun' | 'cat';
+export type PropKind =
+  | 'grand-piano'
+  | 'cello'
+  | 'violin'
+  | 'music-stand'
+  | 'sun'
+  | 'cat'
+  | 'lighthouse'
+  | 'car'
+  | 'cake-table';
 
 export interface PropSpec {
   kind: PropKind;
@@ -78,6 +88,15 @@ export interface InteractableSpec {
   radius?: number;
 }
 
+export interface CollisionBox {
+  minX: number;
+  minY: number;
+  minZ: number;
+  maxX: number;
+  maxY: number;
+  maxZ: number;
+}
+
 export interface GeneratorResult {
   playerSpawn: THREE.Vector3;
   playerFacing: number;
@@ -88,4 +107,5 @@ export interface GeneratorResult {
   props?: PropSpec[];
   npcs?: NpcSpec[];
   interactables?: InteractableSpec[];
+  collisionBoxes?: CollisionBox[];
 }

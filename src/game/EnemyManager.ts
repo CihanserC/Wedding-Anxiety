@@ -13,6 +13,7 @@ export interface EnemyManagerEvents {
   onContact?: (enemy: Enemy, dt: number) => void;
   onFlash?: (enemy: Enemy) => void;
   onBossPhase?: (enemy: Enemy, phase: 2 | 3) => void;
+  onBossDeathEffect?: (position: THREE.Vector3, kind: 'fire' | 'dust') => void;
   onShootFireball?: (
     origin: THREE.Vector3,
     direction: THREE.Vector3,
@@ -39,6 +40,7 @@ export class EnemyManager {
     this.enemyUpdateEvents = {
       onFlash: (enemy) => this.events.onFlash?.(enemy),
       onBossPhase: (enemy, phase) => this.events.onBossPhase?.(enemy, phase),
+      onBossDeathEffect: (position, kind) => this.events.onBossDeathEffect?.(position, kind),
       onShootFireball: (origin, direction, speed, anxietyHit) =>
         this.events.onShootFireball?.(origin, direction, speed, anxietyHit),
     };
@@ -114,5 +116,13 @@ export class EnemyManager {
       e.dispose();
     }
     this.enemies.length = 0;
+  }
+
+  /** Start death animation on every living enemy except `except`. */
+  forceKillAllExcept(except: Enemy): void {
+    for (const enemy of this.enemies) {
+      if (enemy === except || enemy.dying || enemy.dead) continue;
+      enemy.forceKill();
+    }
   }
 }

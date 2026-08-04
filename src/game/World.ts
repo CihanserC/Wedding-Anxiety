@@ -20,6 +20,7 @@ import type {
   PropSpec,
   InteractableSpec,
   NpcSpec,
+  CollisionBox,
 } from './worldGen/types';
 
 export interface WorldBounds {
@@ -49,6 +50,7 @@ export class World {
   readonly props: PropSpec[];
   readonly npcs: NpcSpec[];
   readonly interactables: InteractableSpec[];
+  readonly collisionBoxes: CollisionBox[];
   private readonly cells: Uint8Array;
   private group: THREE.Group | null = null;
   private meshes: THREE.InstancedMesh[] = [];
@@ -79,6 +81,7 @@ export class World {
     this.props = result.props ?? [];
     this.npcs = result.npcs ?? [];
     this.interactables = result.interactables ?? [];
+    this.collisionBoxes = result.collisionBoxes ?? [];
   }
 
   private runGenerator(mapDef: MapDefinition, writer: WorldWriter): GeneratorResult {
@@ -133,6 +136,18 @@ export class World {
         for (let x = x0; x <= x1; x++) {
           if (this.isSolidAt(x, y, z)) return true;
         }
+      }
+    }
+    for (const box of this.collisionBoxes) {
+      if (
+        min.x < box.maxX &&
+        max.x > box.minX &&
+        min.y < box.maxY &&
+        max.y > box.minY &&
+        min.z < box.maxZ &&
+        max.z > box.minZ
+      ) {
+        return true;
       }
     }
     return false;

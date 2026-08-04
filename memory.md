@@ -35,6 +35,14 @@ Stack: **Three.js + TypeScript (strict) + Vite**. Harici asset yok; sesler Web A
 
 - 4. harita (Hazırlık Odası / Davetiye Ofisi)
 
+## TODO — hatırlat
+
+- [ ] **Gelin (Hilal) sohbet ağacı**: Epilogda gelinle konuşurken Hilal'e özel, kişisel diyaloglar yaz (mevcut 3 seçenek + cevaplar genişletilecek / yenilenecek).
+- [ ] **Damat (Cihanser) sohbet ağacı**: Damatla konuşurken Cihanser'e özel, kişisel diyaloglar yaz (gelinden ayrı içerik; aynı şablonu paylaşmasın).
+- [x] Epilog E tuşu metinleri: "E - Gelinle sohbet et" / "E - Damatla sohbet et" (genel "Sohbet et" kaldırıldı).
+
+> **Hatırlatma:** Yukarıdaki gelin/damat sohbet TODO'ları henüz yapılmadı — bir sonraki içerik oturumunda Hilal ve Cihanser için ayrı sohbet metinleri yazılacak.
+
 ## Bilinen notlar
 
 - tsconfig strict + `noUnusedLocals` + `noUnusedParameters`.

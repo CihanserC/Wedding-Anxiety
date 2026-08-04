@@ -46,6 +46,7 @@ export const HUD_LABELS = {
 
 export const CAT_FEED_MESSAGES = {
   prompt: 'E - Kediyi besle',
+  mapSkipHint: 'Kediyi besle — sonraki haritaya geçmek için E ile etkileş.',
   title: 'Tebrikler, haritayı geçtin!',
   body:
     'Kediyi beslediğin için şefkatin ve sıcacık kalbinin getirdiği kozmik kader puanları seni bir sonraki haritaya ışınladı.',
@@ -54,6 +55,7 @@ export const CAT_FEED_MESSAGES = {
 
 export const PIANO_PLAY_MESSAGES = {
   prompt: 'E - Piyano çal',
+  mapSkipHint: 'Sahnedeki piyanoya git — sonraki haritaya geçmek için E ile çal.',
   title: 'Tebrikler, haritayı geçtin!',
   body:
     'Piyano çalmayı bilmediğin için bastığın kötü nota bütün canavarları kaçırdı. Tebrikler, bu haritayı geçtin!',
@@ -74,7 +76,8 @@ export const WAVE_TRANSITION_LABELS = {
 export const WEDDING_NPC_MESSAGES = {
   groomStressed: 'Oh olamaz, çok gerginim. Bu teyzeler, dayılar... alın üzerimden!',
   brideStressed: 'Keşke birisi beni kurtarsa...',
-  chatPrompt: 'E - Sohbet et',
+  groomChatPrompt: 'E - Damatla sohbet et',
+  brideChatPrompt: 'E - Gelinle sohbet et',
   choiceTitle: 'Ne söylemek istersin?',
   choices: {
     a: 'Harika Bir Düğündü!',

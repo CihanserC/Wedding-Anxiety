@@ -138,7 +138,7 @@ export function generateConcertHall(w: WorldWriter): GeneratorResult {
   const pianoZ = stageMidZ;
   return {
     playerSpawn: spawn,
-    playerFacing: 0,
+    playerFacing: Math.PI,
     enemySpawnRegion: {
       minX: 4,
       maxX: W - 5,

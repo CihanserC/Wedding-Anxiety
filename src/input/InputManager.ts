@@ -185,6 +185,11 @@ export class InputManager {
     return pressed;
   }
 
+  /** Drop a queued E press without acting on it (e.g. stale press before prompt was shown). */
+  flushInteract(): void {
+    this.interactPressed = false;
+  }
+
   consumePause(): boolean {
     const pressed = this.pausePressed;
     this.pausePressed = false;

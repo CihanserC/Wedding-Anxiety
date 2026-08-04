@@ -59,6 +59,46 @@ export class ProjectileEffects {
     this.effects.push({ mesh, born: this.now, life: 0.25, material });
   }
 
+  spawnBossFireBurst(position: THREE.Vector3): void {
+    const colors = [0xff3300, 0xff6600, 0xffaa22];
+    for (let i = 0; i < 9; i++) {
+      const size = 0.18 + Math.random() * 0.28;
+      const geometry = new THREE.SphereGeometry(size, 6, 6);
+      const material = new THREE.MeshBasicMaterial({
+        color: colors[i % colors.length],
+        transparent: true,
+        opacity: 0.9,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.copy(position);
+      mesh.position.x += (Math.random() - 0.5) * 1.4;
+      mesh.position.y += Math.random() * 1.6;
+      mesh.position.z += (Math.random() - 0.5) * 1.4;
+      this.scene.add(mesh);
+      this.effects.push({ mesh, born: this.now, life: 0.35 + Math.random() * 0.35, material });
+    }
+  }
+
+  spawnBossDustBurst(position: THREE.Vector3): void {
+    for (let i = 0; i < 12; i++) {
+      const size = 0.1 + Math.random() * 0.22;
+      const geometry = new THREE.BoxGeometry(size, size, size);
+      const gray = 0x777777 + Math.floor(Math.random() * 0x444444);
+      const material = new THREE.MeshBasicMaterial({
+        color: gray,
+        transparent: true,
+        opacity: 0.75,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.copy(position);
+      mesh.position.x += (Math.random() - 0.5) * 1.8;
+      mesh.position.y += 0.2 + Math.random() * 0.8;
+      mesh.position.z += (Math.random() - 0.5) * 1.8;
+      this.scene.add(mesh);
+      this.effects.push({ mesh, born: this.now, life: 0.55 + Math.random() * 0.45, material });
+    }
+  }
+
   update(dt: number): void {
     this.now += dt;
     for (let i = this.effects.length - 1; i >= 0; i--) {

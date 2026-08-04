@@ -3,9 +3,7 @@ import {
   BLOCK_AIR,
   BLOCK_CURTAIN,
   BLOCK_GLASS,
-  BLOCK_GOLD,
   BLOCK_GRASS,
-  BLOCK_LIGHT,
   BLOCK_MARBLE,
   BLOCK_PATH,
   BLOCK_ROCK,
@@ -17,8 +15,8 @@ import type { BlockId } from '../../data/blocks';
 import type { GeneratorResult, WorldWriter } from './types';
 
 /**
- * Sunset lighthouse coastline: sea, rocky island, tall tower with
- * exterior stairs to an open rooftop gallery, and a keeper's cottage.
+ * Sunset lighthouse coastline: sea, rocky island, GLB lighthouse model
+ * on a rock pad, and a keeper's cottage with the feedable cat.
  */
 export function generateLighthouse(w: WorldWriter): GeneratorResult {
   const W = w.width;
@@ -68,26 +66,14 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
 
   const towerX = centerX;
   const towerZ = pathTopZ + 5;
-  const shaftTopY = 11;
-  const galleryY = 12;
-  const canopyY = 16;
-  const hatch: Array<[number, number]> = [
-    [0, 0],
-    [1, 0],
-    [0, 1],
-    [1, 1],
-  ];
-  const isHatch = (dx: number, dz: number): boolean =>
-    hatch.some(([hx, hz]) => hx === dx && hz === dz);
 
-  // Path to the door
+  // Path and plaza leading to the GLB lighthouse
   for (let z = pathTopZ; z <= towerZ - 3; z++) {
     for (let dx = -1; dx <= 1; dx++) {
       w.setBlock(centerX + dx, 1, z, BLOCK_PATH);
     }
   }
 
-  // Wide arrival plaza south of the tower (map intro spawn area)
   const spawnPlazaZ = towerZ - 5;
   for (let z = spawnPlazaZ; z <= towerZ - 3; z++) {
     for (let dx = -4; dx <= 4; dx++) {
@@ -95,108 +81,15 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
     }
   }
 
-  // Interior floor
-  for (let dx = -2; dx <= 2; dx++) {
-    for (let dz = -2; dz <= 2; dz++) {
+  // Solid rock pad under the lighthouse model (collision base)
+  for (let dx = -3; dx <= 3; dx++) {
+    for (let dz = -3; dz <= 3; dz++) {
       w.setBlock(towerX + dx, 1, towerZ + dz, BLOCK_ROCK);
-    }
-  }
-
-  // Shaft walls at ±3
-  for (let y = 1; y <= shaftTopY; y++) {
-    for (let dx = -3; dx <= 3; dx++) {
-      for (let dz = -3; dz <= 3; dz++) {
-        const onEdge = Math.abs(dx) === 3 || Math.abs(dz) === 3;
-        if (!onEdge) continue;
-        if (dz === -3 && Math.abs(dx) <= 1 && y <= 3) continue; // south door
-        const isRedBand = y === 8 || y === 9;
-        w.setBlock(towerX + dx, y, towerZ + dz, isRedBand ? BLOCK_CURTAIN : BLOCK_MARBLE);
+      if (Math.abs(dx) <= 2 && Math.abs(dz) <= 2) {
+        w.setBlock(towerX + dx, 2, towerZ + dz, BLOCK_ROCK);
       }
     }
   }
-
-  for (let y = 4; y <= 7; y += 3) {
-    w.setBlock(towerX - 3, y, towerZ, BLOCK_GLASS);
-    w.setBlock(towerX + 3, y, towerZ, BLOCK_GLASS);
-    w.setBlock(towerX, y, towerZ + 3, BLOCK_GLASS);
-  }
-
-  // Interior spiral stairs on the outer ring (±2); hatch stays open above.
-  const perimeter: Array<[number, number]> = [
-    [-2, -2],
-    [-2, -1],
-    [-2, 0],
-    [-2, 1],
-    [-2, 2],
-    [-1, 2],
-    [0, 2],
-    [1, 2],
-    [2, 2],
-    [2, 1],
-    [2, 0],
-    [2, -1],
-    [2, -2],
-    [1, -2],
-    [0, -2],
-    [-1, -2],
-  ];
-  const topStepIndex = galleryY - 2;
-  for (let k = 0; k <= topStepIndex; k++) {
-    const [sdx, sdz] = perimeter[k % perimeter.length];
-    if (isHatch(sdx, sdz)) continue;
-    w.setBlock(towerX + sdx, 2 + k, towerZ + sdz, BLOCK_WOOD);
-  }
-
-  // Hatch open to the sky (center of gallery)
-  for (const [hx, hz] of hatch) {
-    for (let y = 2; y <= canopyY + 1; y++) {
-      w.setBlock(towerX + hx, y, towerZ + hz, BLOCK_AIR);
-    }
-  }
-
-  // Full rooftop gallery at ±3
-  for (let dx = -3; dx <= 3; dx++) {
-    for (let dz = -3; dz <= 3; dz++) {
-      if (isHatch(dx, dz)) continue;
-      w.setBlock(towerX + dx, galleryY, towerZ + dz, BLOCK_MARBLE);
-    }
-  }
-
-  // Outer rail at ±5
-  for (let dx = -5; dx <= 5; dx++) {
-    for (let dz = -5; dz <= 5; dz++) {
-      if (Math.abs(dx) !== 5 && Math.abs(dz) !== 5) continue;
-      w.setBlock(towerX + dx, galleryY, towerZ + dz, BLOCK_MARBLE);
-      w.setBlock(towerX + dx, galleryY + 1, towerZ + dz, BLOCK_GOLD);
-    }
-  }
-
-  for (const [px, pz] of [
-    [-5, -5],
-    [-5, 5],
-    [5, -5],
-    [5, 5],
-  ] as Array<[number, number]>) {
-    for (let y = galleryY + 1; y <= canopyY - 1; y++) {
-      w.setBlock(towerX + px, y, towerZ + pz, BLOCK_MARBLE);
-    }
-  }
-
-  // Canopy over the inner gallery only
-  for (let dx = -3; dx <= 3; dx++) {
-    for (let dz = -3; dz <= 3; dz++) {
-      if (isHatch(dx, dz)) continue;
-      if (Math.abs(dx) === 3 || Math.abs(dz) === 3) {
-        w.setBlock(towerX + dx, canopyY, towerZ + dz, BLOCK_CURTAIN);
-      }
-    }
-  }
-  w.setBlock(towerX - 2, canopyY, towerZ - 2, BLOCK_CURTAIN);
-  w.setBlock(towerX + 2, canopyY, towerZ - 2, BLOCK_CURTAIN);
-  w.setBlock(towerX - 2, canopyY, towerZ + 2, BLOCK_CURTAIN);
-  w.setBlock(towerX + 2, canopyY, towerZ + 2, BLOCK_CURTAIN);
-  w.setBlock(towerX - 2, canopyY - 1, towerZ - 2, BLOCK_LIGHT);
-  w.setBlock(towerX, canopyY + 1, towerZ, BLOCK_LIGHT);
 
   // ── Keeper's cottage ───────────────────────────────────────────────
   const cottageX = centerX - 8;
@@ -310,6 +203,12 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
   }
 
   const spawn = new THREE.Vector3(towerX + 0.5, 2.01, spawnPlazaZ + 0.5);
+  const lighthouseCx = towerX + 0.5;
+  const lighthouseCz = towerZ + 0.5;
+  const lighthouseHalf = 2.2;
+  const lighthouseHeight = 16;
+  const carX = centerX + 5;
+  const carZ = spawnPlazaZ + 0.5;
   return {
     playerSpawn: spawn,
     playerFacing: Math.PI,
@@ -320,8 +219,22 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
       minZ: towerZ + 5,
       maxZ: arenaMaxZ - 1,
     },
+    collisionBoxes: [
+      {
+        minX: lighthouseCx - lighthouseHalf,
+        minY: 2,
+        minZ: lighthouseCz - lighthouseHalf,
+        maxX: lighthouseCx + lighthouseHalf,
+        maxY: 2 + lighthouseHeight,
+        maxZ: lighthouseCz + lighthouseHalf,
+      },
+    ],
     props: [
       { kind: 'sun', x: centerX - 18, y: 15, z: D + 28 },
+      // public/lighthouse.glb — sits on the rock pad at island floor height
+      { kind: 'lighthouse', x: towerX + 0.5, y: 2, z: towerZ + 0.5, scale: 1 },
+      // public/car.glb — parked on sand beside the approach path
+      { kind: 'car', x: carX, y: 2, z: carZ, rotationY: -Math.PI / 2, scale: 1 },
       { kind: 'cat', x: catX, y: 2, z: catZ, rotationY: Math.PI },
     ],
     interactables: [{ kind: 'cat', x: catX, y: 2, z: catZ, radius: 2.8 }],

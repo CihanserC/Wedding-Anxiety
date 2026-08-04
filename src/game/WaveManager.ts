@@ -1,6 +1,12 @@
 import type { LevelDefinition } from '../data/maps';
 
-export type LevelPhase = 'intro' | 'active' | 'celebration' | 'clearing' | 'done';
+export type LevelPhase =
+  | 'intro'
+  | 'active'
+  | 'celebration'
+  | 'clearing'
+  | 'awaiting-map-skip'
+  | 'done';
 
 export interface LevelState {
   level: LevelDefinition;

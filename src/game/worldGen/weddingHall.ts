@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
   BLOCK_CARPET,
+  BLOCK_CURTAIN,
   BLOCK_FLOWER,
   BLOCK_GLASS,
   BLOCK_GOLD,
@@ -9,11 +10,15 @@ import {
   BLOCK_LIGHT,
   BLOCK_MARBLE,
   BLOCK_PATH,
-  BLOCK_STONE,
+  BLOCK_SEAT,
   BLOCK_WOOD,
 } from '../../data/blocks';
-import type { WorldWriter, GeneratorResult, HallDecorations } from './types';
+import type { WorldWriter, GeneratorResult } from './types';
 
+/**
+ * Grand luxury wedding hall: south garden approach, marble palace with dome,
+ * guest tables, raised ceremony stage, neon banner, couple portrait, cake.
+ */
 export function generateWeddingHall(w: WorldWriter): GeneratorResult {
   const W = w.width;
   const D = w.depth;
@@ -24,33 +29,25 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
     }
   }
 
-  const hallWidth = 32;
-  const hallDepth = 32;
+  const hallWidth = 50;
+  const hallDepth = 50;
   const hallX0 = Math.floor((W - hallWidth) / 2);
   const hallZ0 = D - hallDepth;
 
-  generateGarden(w, hallZ0);
+  generateGarden(w, hallX0, hallZ0, hallWidth);
   generateHall(w, hallX0, hallZ0, hallWidth, hallDepth);
 
   const northWallZ = hallZ0 + hallDepth - 3;
   const centerX = hallX0 + hallWidth / 2;
-  const altarWorldZ = hallZ0 + hallDepth - 6;
-
-  const statueSpecs: HallDecorations['statues'] = [
-    { type: 'merakli-teyze', x: hallX0 + 5.5, y: 3, z: hallZ0 + 10, rotationY: Math.PI / 2 },
-    { type: 'mukemmeliyetci-kuzen', x: hallX0 + 5.5, y: 3, z: hallZ0 + 22, rotationY: Math.PI / 2 },
-    { type: 'zaman-canavari', x: hallX0 + hallWidth - 6.5, y: 3, z: hallZ0 + 10, rotationY: -Math.PI / 2 },
-    { type: 'beklenti-golgesi', x: hallX0 + hallWidth - 6.5, y: 3, z: hallZ0 + 22, rotationY: -Math.PI / 2, scale: 0.65 },
-  ];
-
-  for (const spec of statueSpecs) {
-    placeStatuePedestal(w, Math.floor(spec.x), Math.floor(spec.z));
-  }
+  const stageFrontZ = hallZ0 + hallDepth - 12;
+  const altarWorldZ = hallZ0 + hallDepth - 7;
+  const coupleZ = stageFrontZ + 1.5;
+  const cakeTableX = centerX + 5.5;
 
   const spawn = new THREE.Vector3(
     W * 0.5,
     1.01,
-    Math.floor(hallZ0 * 0.35) + 0.5,
+    Math.floor(hallZ0 * 0.4) + 0.5,
   );
   const spawnFacing = 0;
 
@@ -58,29 +55,30 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
     playerSpawn: spawn,
     playerFacing: spawnFacing,
     enemySpawnRegion: {
-      minX: hallX0 + 3,
-      maxX: hallX0 + hallWidth - 4,
-      minZ: hallZ0 + 3,
-      maxZ: hallZ0 + hallDepth - 4,
+      minX: hallX0 + 4,
+      maxX: hallX0 + hallWidth - 5,
+      minZ: hallZ0 + 4,
+      maxZ: stageFrontZ - 2,
     },
-    bannerText: 'Hilal & Cihanser',
+    bannerText: 'Hilal ❤️ Cihanser',
     bannerPosition: {
       x: centerX,
-      y: 3.4,
+      y: 7.2,
       z: northWallZ - 0.01,
       rotationY: Math.PI,
-      width: 8,
-      height: 1.6,
+      width: 12.5,
+      height: 2.1,
+      style: 'neon',
     },
     decorations: {
-      statues: statueSpecs,
+      statues: [],
       portrait: {
         x: centerX,
-        y: 7.2,
+        y: 4.4,
         z: northWallZ - 0.02,
         rotationY: Math.PI,
-        width: 7,
-        height: 4.5,
+        width: 5,
+        height: 3.5,
         names: 'Hilal & Cihanser',
       },
     },
@@ -88,441 +86,347 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
       {
         type: 'bride',
         x: centerX - 0.55,
-        y: 1.01,
-        z: altarWorldZ - 2.5,
+        y: 2.01,
+        z: coupleZ,
         rotationY: Math.PI,
       },
       {
         type: 'groom',
         x: centerX + 0.55,
-        y: 1.01,
-        z: altarWorldZ - 2.5,
+        y: 2.01,
+        z: coupleZ,
         rotationY: Math.PI,
+      },
+    ],
+    props: [
+      {
+        kind: 'cake-table',
+        x: cakeTableX,
+        y: 2.01,
+        z: coupleZ + 0.5,
+        rotationY: Math.PI,
+        scale: 1,
       },
     ],
     interactables: [
       {
         kind: 'altar',
         x: centerX,
-        y: 1.01,
+        y: 2.01,
         z: altarWorldZ - 1,
-        radius: 3,
+        radius: 3.5,
       },
       {
         kind: 'bride-chat',
         x: centerX - 0.55,
-        y: 1.01,
-        z: altarWorldZ - 2.5,
+        y: 2.01,
+        z: coupleZ,
         radius: 2.4,
       },
       {
         kind: 'groom-chat',
         x: centerX + 0.55,
-        y: 1.01,
-        z: altarWorldZ - 2.5,
+        y: 2.01,
+        z: coupleZ,
         radius: 2.4,
       },
     ],
   };
 }
 
-function generateGarden(w: WorldWriter, hallZ0: number): void {
+function generateGarden(w: WorldWriter, hallX0: number, hallZ0: number, hallWidth: number): void {
   const gardenZMax = hallZ0 - 1;
   const centerX = Math.floor(w.width / 2);
+  const hallCenterLocal = Math.floor(hallWidth / 2);
 
+  // Wide path from south to hall entrance
   for (let z = 0; z <= gardenZMax; z++) {
     for (let dx = -2; dx <= 2; dx++) {
       w.setBlock(centerX + dx, 0, z, BLOCK_PATH);
     }
   }
 
-  const hedgeInsetX = 3;
-  for (let z = 0; z <= gardenZMax - 1; z++) {
-    w.setBlock(centerX - hedgeInsetX, 1, z, BLOCK_HEDGE);
-    w.setBlock(centerX + hedgeInsetX, 1, z, BLOCK_HEDGE);
+  // Marble plaza in front of the doors
+  for (let z = hallZ0 - 4; z < hallZ0; z++) {
+    for (let dx = -6; dx <= 6; dx++) {
+      w.setBlock(hallX0 + hallCenterLocal + dx, 0, z, BLOCK_MARBLE);
+    }
   }
 
-  const outerHedgeX = Math.floor(w.width / 2) - 10;
-  for (let z = 1; z <= gardenZMax - 1; z += 2) {
-    w.setBlock(outerHedgeX, 1, z, BLOCK_HEDGE);
-    w.setBlock(w.width - 1 - outerHedgeX, 1, z, BLOCK_HEDGE);
+  // Hedge borders along garden edges
+  for (let z = 2; z <= gardenZMax - 1; z++) {
+    w.setBlock(2, 1, z, BLOCK_HEDGE);
+    w.setBlock(w.width - 3, 1, z, BLOCK_HEDGE);
+    if (z % 3 === 0) {
+      w.setBlock(2, 2, z, BLOCK_HEDGE);
+      w.setBlock(w.width - 3, 2, z, BLOCK_HEDGE);
+    }
   }
 
-  const flowerBeds: Array<[number, number]> = [
+  // Flower clusters flanking the path
+  const flowerSpots: Array<[number, number]> = [
     [centerX - 6, 4],
     [centerX + 6, 4],
-    [centerX - 6, 10],
-    [centerX + 6, 10],
-    [centerX - 8, 7],
-    [centerX + 8, 7],
+    [centerX - 8, 8],
+    [centerX + 8, 8],
+    [centerX - 7, 12],
+    [centerX + 7, 12],
+    [centerX - 9, 16],
+    [centerX + 9, 16],
+    [centerX - 5, hallZ0 - 6],
+    [centerX + 5, hallZ0 - 6],
   ];
-  for (const [fx, fz] of flowerBeds) {
-    if (fz > gardenZMax) continue;
-    w.setBlock(fx, 1, fz, BLOCK_FLOWER);
-    w.setBlock(fx - 1, 1, fz, BLOCK_FLOWER);
-    w.setBlock(fx + 1, 1, fz, BLOCK_FLOWER);
-    w.setBlock(fx, 1, fz - 1, BLOCK_FLOWER);
-    w.setBlock(fx, 1, fz + 1, BLOCK_FLOWER);
-  }
-
-  const fountainX = centerX;
-  const fountainZ = Math.floor(gardenZMax * 0.65);
-  for (let dx = -2; dx <= 2; dx++) {
-    for (let dz = -2; dz <= 2; dz++) {
-      if (Math.abs(dx) === 2 || Math.abs(dz) === 2) {
-        w.setBlock(fountainX + dx, 1, fountainZ + dz, BLOCK_STONE);
-      }
-    }
-  }
-  w.setBlock(fountainX, 2, fountainZ, BLOCK_GLASS);
-  w.setBlock(fountainX, 3, fountainZ, BLOCK_GLASS);
-  for (let dx = -1; dx <= 1; dx++) {
-    for (let dz = -1; dz <= 1; dz++) {
-      if (dx === 0 && dz === 0) continue;
-      w.setBlock(fountainX + dx, 2, fountainZ + dz, BLOCK_GLASS);
-    }
-  }
-
-  for (let dz = -3; dz <= 3; dz++) {
-    if (dz === 0) continue;
-    const z = fountainZ + dz;
-    if (z < 0 || z > gardenZMax) continue;
-    for (let dx = -2; dx <= 2; dx++) {
-      w.setBlock(centerX + dx, 0, z, BLOCK_PATH);
-    }
-  }
-
-  addGardenTrees(w, gardenZMax);
-  addLanternPosts(w, centerX, gardenZMax);
-  addRoseArch(w, centerX, Math.min(gardenZMax - 3, 18));
-  addBenches(w, centerX, fountainZ);
-  addGazebo(w, 8, Math.min(gardenZMax - 6, 16));
-  addGazebo(w, w.width - 13, Math.min(gardenZMax - 6, 16));
-  addHeartFlowerBed(w, centerX - 10, Math.min(8, gardenZMax - 2));
-  addHeartFlowerBed(w, centerX + 10, Math.min(8, gardenZMax - 2));
-  addCeremonyChairs(w, centerX, Math.min(14, gardenZMax - 4));
-  addStringLights(w, centerX, gardenZMax);
-  addWelcomePillars(w, centerX, 2);
-  addReflectingPool(w, centerX + 9, Math.min(fountainZ, gardenZMax - 2));
-}
-
-/** Small trees scattered on the lawn: wood trunk + hedge canopy. */
-function addGardenTrees(w: WorldWriter, gardenZMax: number): void {
-  const spots: Array<[number, number]> = [
-    [10, 3],
-    [10, 12],
-    [w.width - 11, 3],
-    [w.width - 11, 12],
-    [16, gardenZMax - 3],
-    [w.width - 17, gardenZMax - 3],
-  ];
-  for (const [tx, tz] of spots) {
-    if (tz < 1 || tz > gardenZMax) continue;
-    w.setBlock(tx, 1, tz, BLOCK_WOOD);
-    w.setBlock(tx, 2, tz, BLOCK_WOOD);
+  for (const [fx, fz] of flowerSpots) {
+    if (fz < 0 || fz > gardenZMax) continue;
     for (let dx = -1; dx <= 1; dx++) {
       for (let dz = -1; dz <= 1; dz++) {
-        w.setBlock(tx + dx, 3, tz + dz, BLOCK_HEDGE);
+        if (Math.abs(dx) + Math.abs(dz) > 1) continue;
+        const x = fx + dx;
+        const z = fz + dz;
+        if (x < 1 || x >= w.width - 1) continue;
+        if (w.getBlock(x, 0, z) === BLOCK_PATH) continue;
+        w.setBlock(x, 1, z, BLOCK_FLOWER);
       }
     }
-    w.setBlock(tx, 4, tz, BLOCK_HEDGE);
-    w.setBlock(tx - 1, 4, tz, BLOCK_HEDGE);
-    w.setBlock(tx + 1, 4, tz, BLOCK_HEDGE);
-    w.setBlock(tx, 4, tz - 1, BLOCK_HEDGE);
-    w.setBlock(tx, 4, tz + 1, BLOCK_HEDGE);
-    w.setBlock(tx, 5, tz, BLOCK_FLOWER);
   }
 }
 
-/** Glowing lantern posts lining both sides of the path. */
-function addLanternPosts(w: WorldWriter, centerX: number, gardenZMax: number): void {
-  for (const z of [3, 10, 17]) {
-    if (z > gardenZMax - 1) continue;
-    for (const x of [centerX - 4, centerX + 4]) {
-      w.setBlock(x, 1, z, BLOCK_WOOD);
-      w.setBlock(x, 2, z, BLOCK_WOOD);
-      w.setBlock(x, 3, z, BLOCK_LIGHT);
-    }
-  }
-}
+function generateHall(w: WorldWriter, x0: number, z0: number, HW: number, HD: number): void {
+  const wallHeight = 9;
+  const centerX = Math.floor(HW / 2);
+  const doorHalf = 3;
+  const stageFrontLocal = HD - 12;
+  const northWallLocal = HD - 3;
+  const southWallLocal = 2;
 
-/** Rose arch over the path, near the hall entrance. */
-function addRoseArch(w: WorldWriter, centerX: number, z: number): void {
-  for (let y = 1; y <= 3; y++) {
-    w.setBlock(centerX - 3, y, z, BLOCK_WOOD);
-    w.setBlock(centerX + 3, y, z, BLOCK_WOOD);
-  }
-  for (let dx = -3; dx <= 3; dx++) {
-    w.setBlock(centerX + dx, 4, z, BLOCK_FLOWER);
-  }
-  w.setBlock(centerX - 3, 4, z, BLOCK_FLOWER);
-  w.setBlock(centerX + 3, 4, z, BLOCK_FLOWER);
-  w.setBlock(centerX - 2, 5, z, BLOCK_FLOWER);
-  w.setBlock(centerX, 5, z, BLOCK_FLOWER);
-  w.setBlock(centerX + 2, 5, z, BLOCK_FLOWER);
-}
-
-/** Wooden benches flanking the fountain. */
-function addBenches(w: WorldWriter, centerX: number, fountainZ: number): void {
-  for (const dz of [-1, 1]) {
-    w.setBlock(centerX - 5, 1, fountainZ + dz, BLOCK_WOOD);
-    w.setBlock(centerX + 5, 1, fountainZ + dz, BLOCK_WOOD);
-  }
-}
-
-/** Romantic gazebo: marble posts, gold roof, flowers inside. */
-function addGazebo(w: WorldWriter, x0: number, z0: number): void {
-  const size = 4;
-  for (const [px, pz] of [
-    [x0, z0],
-    [x0 + size, z0],
-    [x0, z0 + size],
-    [x0 + size, z0 + size],
-  ] as Array<[number, number]>) {
-    for (let y = 1; y <= 3; y++) {
-      w.setBlock(px, y, pz, BLOCK_MARBLE);
-    }
-  }
-  for (let dx = 0; dx <= size; dx++) {
-    for (let dz = 0; dz <= size; dz++) {
-      w.setBlock(x0 + dx, 4, z0 + dz, BLOCK_GOLD);
-    }
-  }
-  w.setBlock(x0 + 2, 5, z0 + 2, BLOCK_FLOWER);
-  w.setBlock(x0 + 2, 1, z0 + 2, BLOCK_FLOWER);
-  w.setBlock(x0 + 1, 1, z0 + 3, BLOCK_FLOWER);
-  w.setBlock(x0 + 3, 1, z0 + 1, BLOCK_FLOWER);
-}
-
-/** Heart-shaped flower bed on the lawn. */
-function addHeartFlowerBed(w: WorldWriter, cx: number, cz: number): void {
-  const cells: Array<[number, number]> = [
-    [0, 1],
-    [-1, 0],
-    [1, 0],
-    [-2, 0],
-    [2, 0],
-    [-2, -1],
-    [2, -1],
-    [-1, -1],
-    [1, -1],
-    [0, -1],
-    [0, -2],
-    [-1, -2],
-    [1, -2],
-    [0, -3],
-  ];
-  for (const [dx, dz] of cells) {
-    w.setBlock(cx + dx, 1, cz + dz, BLOCK_FLOWER);
-  }
-  w.setBlock(cx, 2, cz - 1, BLOCK_GOLD);
-}
-
-/** Outdoor ceremony chair rows flanking the aisle. */
-function addCeremonyChairs(w: WorldWriter, centerX: number, startZ: number): void {
-  for (let row = 0; row < 3; row++) {
-    const z = startZ + row * 2;
-    for (let i = 0; i < 3; i++) {
-      w.setBlock(centerX - 6 - i, 1, z, BLOCK_WOOD);
-      w.setBlock(centerX + 6 + i, 1, z, BLOCK_WOOD);
-    }
-  }
-}
-
-/** Soft glowing string lights spanning above the path. */
-function addStringLights(w: WorldWriter, centerX: number, gardenZMax: number): void {
-  for (const z of [5, 12, 19]) {
-    if (z > gardenZMax - 1) continue;
-    w.setBlock(centerX - 5, 4, z, BLOCK_WOOD);
-    w.setBlock(centerX + 5, 4, z, BLOCK_WOOD);
-    for (let dx = -4; dx <= 4; dx++) {
-      if (dx % 2 === 0) w.setBlock(centerX + dx, 5, z, BLOCK_LIGHT);
-      else w.setBlock(centerX + dx, 5, z, BLOCK_GOLD);
-    }
-  }
-}
-
-/** Twin welcome pillars at the garden entrance with floral tops. */
-function addWelcomePillars(w: WorldWriter, centerX: number, z: number): void {
-  for (const side of [-5, 5]) {
-    const x = centerX + side;
-    for (let y = 1; y <= 3; y++) w.setBlock(x, y, z, BLOCK_MARBLE);
-    w.setBlock(x, 4, z, BLOCK_GOLD);
-    w.setBlock(x, 5, z, BLOCK_FLOWER);
-    w.setBlock(x - 1, 4, z, BLOCK_FLOWER);
-    w.setBlock(x + 1, 4, z, BLOCK_FLOWER);
-  }
-}
-
-/** Small reflecting glass pool beside the fountain lawn. */
-function addReflectingPool(w: WorldWriter, x0: number, z0: number): void {
-  for (let dx = 0; dx < 4; dx++) {
-    for (let dz = 0; dz < 3; dz++) {
-      const edge = dx === 0 || dx === 3 || dz === 0 || dz === 2;
-      if (edge) w.setBlock(x0 + dx, 1, z0 + dz, BLOCK_STONE);
-      else w.setBlock(x0 + dx, 1, z0 + dz, BLOCK_GLASS);
-    }
-  }
-  w.setBlock(x0 + 1, 2, z0 + 1, BLOCK_FLOWER);
-  w.setBlock(x0 + 2, 2, z0 + 1, BLOCK_LIGHT);
-}
-
-function generateHall(w: WorldWriter, x0: number, z0: number, W: number, D: number): void {
-  for (let z = 0; z < D; z++) {
-    for (let x = 0; x < W; x++) {
-      const border = x < 2 || x >= W - 2 || z < 2 || z >= D - 2;
+  // Interior floor — marble
+  for (let z = 0; z < HD; z++) {
+    for (let x = 0; x < HW; x++) {
+      const border = x < 2 || x >= HW - 2 || z < 2 || z >= HD - 2;
       if (!border) {
-        w.setBlock(x0 + x, 0, z0 + z, BLOCK_STONE);
+        w.setBlock(x0 + x, 0, z0 + z, BLOCK_MARBLE);
       }
     }
   }
 
-  const carpetLow = 0;
-  const carpetHigh = Math.floor(D * 0.9);
-  for (let z = carpetLow; z < carpetHigh; z++) {
+  // Carpet aisle
+  for (let z = southWallLocal; z < stageFrontLocal; z++) {
     for (let dx = -2; dx < 2; dx++) {
-      w.setBlock(x0 + Math.floor(W / 2) + dx, 0, z0 + z, BLOCK_CARPET);
+      w.setBlock(x0 + centerX + dx, 0, z0 + z, BLOCK_CARPET);
     }
   }
 
-  const wallHeight = 5;
-  const doorHalf = 2;
-  const centerX = Math.floor(W / 2);
+  // Walls with gold trim
   for (let y = 1; y <= wallHeight; y++) {
-    for (let x = 2; x < W - 2; x++) {
+    for (let x = 2; x < HW - 2; x++) {
       const doorZone = Math.abs(x - centerX) <= doorHalf;
-      if (!doorZone) w.setBlock(x0 + x, y, z0 + 2, BLOCK_STONE);
-      w.setBlock(x0 + x, y, z0 + D - 3, BLOCK_STONE);
+      // South wall (entrance)
+      if (!(y <= 4 && doorZone)) {
+        const block = y === 1 || y === wallHeight ? BLOCK_GOLD : BLOCK_MARBLE;
+        w.setBlock(x0 + x, y, z0 + southWallLocal, block);
+      }
+      // North wall
+      {
+        const block = y === 1 || y === wallHeight ? BLOCK_GOLD : BLOCK_MARBLE;
+        w.setBlock(x0 + x, y, z0 + northWallLocal, block);
+      }
     }
-    for (let z = 2; z < D - 2; z++) {
-      w.setBlock(x0 + 2, y, z0 + z, BLOCK_STONE);
-      w.setBlock(x0 + W - 3, y, z0 + z, BLOCK_STONE);
+    for (let z = 2; z < HD - 2; z++) {
+      const block = y === 1 || y === wallHeight ? BLOCK_GOLD : BLOCK_MARBLE;
+      w.setBlock(x0 + 2, y, z0 + z, block);
+      w.setBlock(x0 + HW - 3, y, z0 + z, block);
     }
   }
 
-  for (let y = 2; y <= 3; y++) {
-    for (let x = 5; x < W - 5; x += 4) {
-      if (Math.abs(x - centerX) <= doorHalf) continue;
-      w.setBlock(x0 + x, y, z0 + 2, BLOCK_GLASS);
-      w.setBlock(x0 + x, y, z0 + D - 3, BLOCK_GLASS);
+  // Gold arch above south doorway
+  for (let x = centerX - doorHalf - 1; x <= centerX + doorHalf + 1; x++) {
+    w.setBlock(x0 + x, 5, z0 + southWallLocal, BLOCK_GOLD);
+  }
+  w.setBlock(x0 + centerX - doorHalf - 1, 4, z0 + southWallLocal, BLOCK_GOLD);
+  w.setBlock(x0 + centerX + doorHalf + 1, 4, z0 + southWallLocal, BLOCK_GOLD);
+
+  // Windows
+  for (let y = 3; y <= 5; y++) {
+    for (let x = 6; x < HW - 6; x += 5) {
+      if (Math.abs(x - centerX) <= doorHalf + 1) continue;
+      w.setBlock(x0 + x, y, z0 + southWallLocal, BLOCK_GLASS);
+      w.setBlock(x0 + x, y, z0 + northWallLocal, BLOCK_GLASS);
     }
-    for (let z = 5; z < D - 5; z += 4) {
+    for (let z = 7; z < HD - 7; z += 5) {
       w.setBlock(x0 + 2, y, z0 + z, BLOCK_GLASS);
-      w.setBlock(x0 + W - 3, y, z0 + z, BLOCK_GLASS);
+      w.setBlock(x0 + HW - 3, y, z0 + z, BLOCK_GLASS);
     }
   }
 
-  const altarLocalZ = D - 6;
-  for (let x = W / 2 - 3; x < W / 2 + 3; x++) {
-    w.setBlock(x0 + Math.floor(x), 1, z0 + altarLocalZ, BLOCK_GOLD);
-    w.setBlock(x0 + Math.floor(x), 1, z0 + altarLocalZ + 1, BLOCK_GOLD);
+  // Columns along the sides
+  const columnXs = [5, HW - 6];
+  for (let z = 8; z < stageFrontLocal - 2; z += 7) {
+    for (const cx of columnXs) {
+      for (let y = 1; y <= wallHeight - 1; y++) {
+        w.setBlock(x0 + cx, y, z0 + z, BLOCK_MARBLE);
+      }
+      w.setBlock(x0 + cx, 1, z0 + z, BLOCK_GOLD);
+      w.setBlock(x0 + cx, wallHeight, z0 + z, BLOCK_GOLD);
+    }
   }
-  for (let x = W / 2 - 2; x < W / 2 + 2; x++) {
-    w.setBlock(x0 + Math.floor(x), 2, z0 + altarLocalZ, BLOCK_GOLD);
-  }
-  w.setBlock(x0 + Math.floor(W / 2 - 2), 3, z0 + altarLocalZ, BLOCK_GOLD);
-  w.setBlock(x0 + Math.floor(W / 2 + 1), 3, z0 + altarLocalZ, BLOCK_GOLD);
-  w.setBlock(x0 + Math.floor(W / 2 - 1), 4, z0 + altarLocalZ, BLOCK_GOLD);
-  w.setBlock(x0 + Math.floor(W / 2), 4, z0 + altarLocalZ, BLOCK_GOLD);
 
-  const tableSpots: Array<[number, number]> = [
-    [6, 8],
-    [W - 8, 8],
-    [6, 14],
-    [W - 8, 14],
-    [6, 20],
-    [W - 8, 20],
-  ];
-  for (const [tx, tz] of tableSpots) {
-    for (let dx = 0; dx < 3; dx++) {
-      for (let dz = 0; dz < 3; dz++) {
+  // Guest tables and chairs on both sides of the aisle
+  placeGuestTables(w, x0, z0, HW, centerX, stageFrontLocal);
+
+  // Raised marble stage with gold border
+  for (let z = stageFrontLocal; z < northWallLocal; z++) {
+    for (let x = 4; x < HW - 4; x++) {
+      w.setBlock(x0 + x, 1, z0 + z, BLOCK_MARBLE);
+    }
+  }
+  for (let x = 4; x < HW - 4; x++) {
+    w.setBlock(x0 + x, 1, z0 + stageFrontLocal, BLOCK_GOLD);
+  }
+  for (let z = stageFrontLocal; z < northWallLocal; z++) {
+    w.setBlock(x0 + 4, 1, z0 + z, BLOCK_GOLD);
+    w.setBlock(x0 + HW - 5, 1, z0 + z, BLOCK_GOLD);
+  }
+
+  // Gold altar / nikâh masası at back of stage
+  const altarLocalZ = HD - 7;
+  for (let x = centerX - 4; x < centerX + 4; x++) {
+    w.setBlock(x0 + x, 2, z0 + altarLocalZ, BLOCK_GOLD);
+    w.setBlock(x0 + x, 2, z0 + altarLocalZ + 1, BLOCK_GOLD);
+  }
+  for (let x = centerX - 3; x < centerX + 3; x++) {
+    w.setBlock(x0 + x, 3, z0 + altarLocalZ, BLOCK_GOLD);
+  }
+  w.setBlock(x0 + centerX - 3, 4, z0 + altarLocalZ, BLOCK_GOLD);
+  w.setBlock(x0 + centerX + 2, 4, z0 + altarLocalZ, BLOCK_GOLD);
+  w.setBlock(x0 + centerX - 1, 5, z0 + altarLocalZ, BLOCK_GOLD);
+  w.setBlock(x0 + centerX, 5, z0 + altarLocalZ, BLOCK_GOLD);
+  w.setBlock(x0 + centerX - 1, 5, z0 + altarLocalZ, BLOCK_LIGHT);
+
+  // Curtain panels flanking the portrait zone on the north wall
+  for (let y = 2; y <= wallHeight - 1; y++) {
+    for (let dx = 8; dx <= 14; dx++) {
+      w.setBlock(x0 + centerX - dx, y, z0 + northWallLocal, BLOCK_CURTAIN);
+      w.setBlock(x0 + centerX + dx - 1, y, z0 + northWallLocal, BLOCK_CURTAIN);
+    }
+  }
+
+  // Chandelier under the dome center
+  const chandZ = Math.floor(HD * 0.42);
+  const chandY = wallHeight - 1;
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -2; dz <= 2; dz++) {
+      if (Math.abs(dx) + Math.abs(dz) > 3) continue;
+      w.setBlock(x0 + centerX + dx, chandY, z0 + chandZ + dz, BLOCK_GOLD);
+    }
+  }
+  w.setBlock(x0 + centerX, chandY - 1, z0 + chandZ, BLOCK_LIGHT);
+  w.setBlock(x0 + centerX, chandY + 1, z0 + chandZ, BLOCK_GOLD);
+  w.setBlock(x0 + centerX - 1, chandY - 1, z0 + chandZ, BLOCK_LIGHT);
+  w.setBlock(x0 + centerX + 1, chandY - 1, z0 + chandZ, BLOCK_LIGHT);
+
+  addHallDome(w, x0, z0, HW, HD, wallHeight);
+}
+
+function placeGuestTables(
+  w: WorldWriter,
+  x0: number,
+  z0: number,
+  HW: number,
+  centerX: number,
+  stageFrontLocal: number,
+): void {
+  const aisleClear = 6;
+  const tableCenters: Array<[number, number]> = [];
+
+  // Left and right table clusters — spaced for a spacious luxury feel
+  for (let z = 8; z < stageFrontLocal - 4; z += 6) {
+    tableCenters.push([centerX - 12, z]);
+    tableCenters.push([centerX + 11, z]);
+    if (z + 3 < stageFrontLocal - 4) {
+      tableCenters.push([centerX - 18, z + 3]);
+      tableCenters.push([centerX + 17, z + 3]);
+    }
+  }
+
+  for (const [tx, tz] of tableCenters) {
+    if (tx < 5 || tx >= HW - 6) continue;
+    if (Math.abs(tx - centerX) < aisleClear) continue;
+
+    // 2×2 wood table top
+    for (let dx = 0; dx < 2; dx++) {
+      for (let dz = 0; dz < 2; dz++) {
         w.setBlock(x0 + tx + dx, 1, z0 + tz + dz, BLOCK_WOOD);
       }
     }
-    w.setBlock(x0 + tx + 1, 2, z0 + tz + 1, BLOCK_FLOWER);
-  }
+    // Center gold accent on table
+    w.setBlock(x0 + tx, 1, z0 + tz, BLOCK_MARBLE);
+    w.setBlock(x0 + tx + 1, 1, z0 + tz + 1, BLOCK_MARBLE);
 
-  const flowerPositions: Array<[number, number]> = [
-    [3, 3],
-    [W - 4, 3],
-    [3, D - 4],
-    [W - 4, D - 4],
-    [3, D / 2],
-    [W - 4, D / 2],
-    [W / 2 - 4, altarLocalZ - 2],
-    [W / 2 + 3, altarLocalZ - 2],
-  ];
-  for (const [fx, fz] of flowerPositions) {
-    w.setBlock(x0 + Math.floor(fx), 1, z0 + Math.floor(fz), BLOCK_FLOWER);
-    w.setBlock(x0 + Math.floor(fx), 2, z0 + Math.floor(fz), BLOCK_FLOWER);
+    // Chairs around the table
+    const seats: Array<[number, number]> = [
+      [tx - 1, tz],
+      [tx - 1, tz + 1],
+      [tx + 2, tz],
+      [tx + 2, tz + 1],
+      [tx, tz - 1],
+      [tx + 1, tz + 2],
+    ];
+    for (const [sx, sz] of seats) {
+      if (sx < 4 || sx >= HW - 4) continue;
+      if (Math.abs(sx - centerX) < aisleClear - 1) continue;
+      if (sz < 4 || sz >= stageFrontLocal - 1) continue;
+      w.setBlock(x0 + sx, 1, z0 + sz, BLOCK_SEAT);
+    }
   }
-
-  for (let x = 2; x < W - 2; x += 3) {
-    w.setBlock(x0 + x, wallHeight + 1, z0 + 2, BLOCK_FLOWER);
-    w.setBlock(x0 + x, wallHeight + 1, z0 + D - 3, BLOCK_FLOWER);
-  }
-
-  addHallDome(w, x0, z0, W, D, wallHeight);
 }
 
-/** Hemispherical gold-and-marble dome over the wedding hall interior. */
-function addHallDome(w: WorldWriter, x0: number, z0: number, W: number, D: number, wallHeight: number): void {
-  const cx = x0 + (W - 1) / 2;
-  const cz = z0 + (D - 1) / 2;
-  const innerMinX = x0 + 3;
-  const innerMaxX = x0 + W - 4;
-  const innerMinZ = z0 + 3;
-  const innerMaxZ = z0 + D - 4;
-  const radiusX = (innerMaxX - innerMinX) / 2;
-  const radiusZ = (innerMaxZ - innerMinZ) / 2;
-  const domeLayers = 5;
+/** Hollow stepped spherical ceiling — concave voxel dome visible from inside. */
+function addHallDome(
+  w: WorldWriter,
+  x0: number,
+  z0: number,
+  HW: number,
+  HD: number,
+  wallHeight: number,
+): void {
+  const cx = x0 + (HW - 1) / 2;
+  const cz = z0 + (HD - 1) / 2;
+  const hallMinX = x0 + 2;
+  const hallMaxX = x0 + HW - 3;
+  const hallMinZ = z0 + 2;
+  const hallMaxZ = z0 + HD - 3;
+  const radiusX = (hallMaxX - hallMinX) / 2;
+  const radiusZ = (hallMaxZ - hallMinZ) / 2;
+  const domeLayers = 10;
+  const baseY = wallHeight + 1;
+  const maxY = w.height - 2;
 
-  for (let layer = 0; layer < domeLayers; layer++) {
-    const y = wallHeight + 1 + layer;
-    const shrink = layer * 0.85;
-    const rx = Math.max(2, radiusX - shrink);
-    const rz = Math.max(2, radiusZ - shrink);
-    const shell = 1 - layer / (domeLayers + 0.5);
+  for (let x = hallMinX; x <= hallMaxX; x++) {
+    for (let z = hallMinZ; z <= hallMaxZ; z++) {
+      const dx = (x - cx) / radiusX;
+      const dz = (z - cz) / radiusZ;
+      const horiz = dx * dx + dz * dz;
 
-    for (let x = innerMinX; x <= innerMaxX; x++) {
-      for (let z = innerMinZ; z <= innerMaxZ; z++) {
-        const ndx = (x - cx) / rx;
-        const ndz = (z - cz) / rz;
-        const dist = ndx * ndx + ndz * ndz;
-        if (dist > shell * shell) continue;
-        if (dist < shell * shell * 0.55 && layer < domeLayers - 1) continue;
-
-        const block = layer === domeLayers - 1
-          ? BLOCK_GOLD
-          : layer % 2 === 0
-            ? BLOCK_MARBLE
-            : BLOCK_GOLD;
-        w.setBlock(x, y, z, block);
+      let layerIndex: number;
+      if (horiz <= 1) {
+        layerIndex = Math.max(0, Math.round(domeLayers * Math.sqrt(1 - horiz)) - 1);
+      } else {
+        const cornerDist = Math.max(Math.abs(dx), Math.abs(dz));
+        layerIndex = Math.max(0, Math.round((1 - Math.min(1, cornerDist)) * 1.5));
       }
+
+      const y = Math.min(baseY + layerIndex, maxY);
+      const block =
+        layerIndex >= domeLayers - 2
+          ? BLOCK_MARBLE
+          : layerIndex % 2 === 0
+            ? BLOCK_GOLD
+            : BLOCK_MARBLE;
+      w.setBlock(x, y, z, block);
     }
   }
 
-  const topY = wallHeight + 1 + domeLayers;
-  w.setBlock(Math.floor(cx), topY, Math.floor(cz), BLOCK_GLASS);
-  w.setBlock(Math.floor(cx), topY + 1, Math.floor(cz), BLOCK_LIGHT);
-
-  for (const side of [-1, 1]) {
-    const x = Math.floor(cx + side * (radiusX - 1));
-    const z = Math.floor(cz);
-    w.setBlock(x, wallHeight + 1, z, BLOCK_GOLD);
-    w.setBlock(x, wallHeight + 2, z, BLOCK_FLOWER);
-  }
-}
-
-function placeStatuePedestal(w: WorldWriter, x: number, z: number): void {
-  for (let dx = -1; dx <= 1; dx++) {
-    for (let dz = -1; dz <= 1; dz++) {
-      w.setBlock(x + dx, 1, z + dz, BLOCK_MARBLE);
-    }
-  }
-  w.setBlock(x, 2, z, BLOCK_MARBLE);
-  w.setBlock(x - 1, 2, z, BLOCK_MARBLE);
-  w.setBlock(x + 1, 2, z, BLOCK_MARBLE);
-  w.setBlock(x, 2, z - 1, BLOCK_MARBLE);
-  w.setBlock(x, 2, z + 1, BLOCK_MARBLE);
+  const peakY = Math.min(baseY + domeLayers - 1, maxY);
+  w.setBlock(Math.floor(cx), Math.min(peakY + 1, maxY), Math.floor(cz), BLOCK_GLASS);
+  w.setBlock(Math.floor(cx), peakY, Math.floor(cz), BLOCK_LIGHT);
 }

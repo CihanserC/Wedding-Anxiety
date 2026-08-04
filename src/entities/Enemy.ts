@@ -8,6 +8,7 @@ let __enemyId = 0;
 export type EnemyUpdateEvents = {
   onFlash?: (enemy: Enemy) => void;
   onBossPhase?: (enemy: Enemy, phase: 2 | 3) => void;
+  onBossDeathEffect?: (position: THREE.Vector3, kind: 'fire' | 'dust') => void;
   onShootFireball?: (
     origin: THREE.Vector3,
     direction: THREE.Vector3,
@@ -60,6 +61,10 @@ export class Enemy {
   combatFrozen = false;
   private rageAnim = -1;
   private rageLevel = 0;
+  private deathStartY = 0;
+  private bossDeathFireSpawned = false;
+  private bossDeathDustSpawned = false;
+  private deathEvents?: EnemyUpdateEvents;
   private readonly baseMaterialState: Array<{
     color: THREE.Color;
     emissive: THREE.Color;
@@ -132,7 +137,12 @@ export class Enemy {
     }
     if (this.hp <= 0) {
       this.dying = true;
-      this.deathTimer = 0.35;
+      this.deathTimer = this.stats.isBoss ? 2.8 : 0.35;
+      if (this.stats.isBoss) {
+        this.deathStartY = this.position.y;
+        this.bossDeathFireSpawned = false;
+        this.bossDeathDustSpawned = false;
+      }
       return true;
     }
     if (this.stats.isBoss) {
@@ -140,16 +150,23 @@ export class Enemy {
       if (ratio <= 0.6 && !this.bossPhasesTriggered.has(2)) {
         this.bossPhasesTriggered.add(2);
         this.bossPhasesPending.add(2);
-        this.speedMultiplier = 1.35;
+        this.speedMultiplier = 1.25;
       }
       if (ratio <= 0.3 && !this.bossPhasesTriggered.has(3)) {
         this.bossPhasesTriggered.add(3);
         this.bossPhasesPending.add(3);
-        this.speedMultiplier = 1.8;
-        this.contactAnxietyMultiplier = 1.55;
+        this.speedMultiplier = 1.42;
+        this.contactAnxietyMultiplier = 1.28;
       }
     }
     return false;
+  }
+
+  forceKill(): void {
+    if (this.dying || this.dead) return;
+    this.hp = 0;
+    this.dying = true;
+    this.deathTimer = 0.35;
   }
 
   get bossRagePhase(): 0 | 2 | 3 {
@@ -191,6 +208,7 @@ export class Enemy {
 
   update(dt: number, target: THREE.Vector3, events?: EnemyUpdateEvents): void {
     this.time += dt;
+    this.deathEvents = events;
 
     if (this.combatFrozen) {
       if (this.stats.isBoss && this.rageAnim >= 0 && this.rageAnim < 1) {
@@ -239,6 +257,10 @@ export class Enemy {
 
       let speed = this.stats.speed * this.speedMultiplier;
       let moveDir = toTarget;
+
+      if (this.stats.isBoss && this.bossRagePhase >= 3 && distXZ < 3.8) {
+        speed *= 0.35;
+      }
 
       if (this.stats.behavior === 'stalker') {
         this.pauseTimer -= dt;
@@ -336,12 +358,12 @@ export class Enemy {
         this.bossFireCooldown -= dt;
         this.throwAnim = Math.max(0, this.throwAnim - dt);
         if (this.bossFireCooldown <= 0 && distXZ >= 4 && distXZ <= 28) {
-          this.bossFireCooldown = rage >= 3 ? 1.6 : 2.6;
+          this.bossFireCooldown = rage >= 3 ? 2.4 : 2.6;
           this.shootFireball(
             target,
             events,
-            rage >= 3 ? 9 : 7.5,
-            rage >= 3 ? 14 : 10,
+            rage >= 3 ? 7.2 : 7.5,
+            rage >= 3 ? 11 : 10,
           );
         }
       }
@@ -351,6 +373,11 @@ export class Enemy {
   }
 
   private tickDeath(dt: number): void {
+    if (this.stats.isBoss) {
+      this.tickBossDeath(dt);
+      return;
+    }
+
     this.deathTimer -= dt;
     const t = Math.max(0, this.deathTimer / 0.35);
     this.root.scale.setScalar(t);
@@ -359,6 +386,59 @@ export class Enemy {
       mat.opacity = t;
     }
     if (this.deathTimer <= 0) this.dead = true;
+  }
+
+  private tickBossDeath(dt: number): void {
+    const total = 2.8;
+    this.deathTimer -= dt;
+    const elapsed = total - this.deathTimer;
+    const fallEnd = 0.85;
+    const fireEnd = 1.75;
+
+    if (elapsed < fallEnd) {
+      const t = elapsed / fallEnd;
+      this.root.rotation.x = t * (Math.PI / 2.2);
+      this.position.y = this.deathStartY - t * (this.stats.height * 0.45);
+      this.root.position.copy(this.position);
+    } else if (elapsed < fireEnd) {
+      this.root.rotation.x = Math.PI / 2.2;
+      this.position.y = this.deathStartY - this.stats.height * 0.45;
+      this.root.position.copy(this.position);
+      if (!this.bossDeathFireSpawned) {
+        this.bossDeathFireSpawned = true;
+        this.deathEvents?.onBossDeathEffect?.(this.getDeathEffectPosition(), 'fire');
+      }
+      const fireT = (elapsed - fallEnd) / (fireEnd - fallEnd);
+      for (const mat of this.materials) {
+        mat.transparent = false;
+        mat.opacity = 1;
+        mat.emissive.setRGB(1, 0.25 + fireT * 0.35, 0);
+        mat.emissiveIntensity = 0.55 + Math.sin(elapsed * 14) * 0.35;
+      }
+    } else {
+      if (!this.bossDeathDustSpawned) {
+        this.bossDeathDustSpawned = true;
+        this.deathEvents?.onBossDeathEffect?.(this.getDeathEffectPosition(), 'dust');
+      }
+      const dustT = Math.min(1, (elapsed - fireEnd) / (total - fireEnd));
+      this.root.scale.setScalar(1 - dustT * 0.25);
+      for (const mat of this.materials) {
+        mat.transparent = true;
+        mat.opacity = 1 - dustT;
+        mat.emissive.setRGB(0.35, 0.35, 0.35);
+        mat.emissiveIntensity = 0.1;
+      }
+    }
+
+    if (this.deathTimer <= 0) this.dead = true;
+  }
+
+  private getDeathEffectPosition(): THREE.Vector3 {
+    return new THREE.Vector3(
+      this.position.x,
+      this.position.y + this.stats.height * 0.25,
+      this.position.z,
+    );
   }
 
   private applyTypeAnimation(_dt: number): void {

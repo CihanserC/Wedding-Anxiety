@@ -52,13 +52,16 @@ function vox(
   return mesh;
 }
 
+/** Side-profile thickness multiplier — keeps front width, adds body depth. */
+const BODY_DEPTH_SCALE = 1.45;
+
 function fitHumanScale(model: THREE.Group, targetHeight: number): void {
   model.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(model);
   const size = new THREE.Vector3();
   box.getSize(size);
   const scale = targetHeight / size.y;
-  model.scale.setScalar(scale);
+  model.scale.set(scale, scale, scale * BODY_DEPTH_SCALE);
   model.updateMatrixWorld(true);
   const grounded = new THREE.Box3().setFromObject(model);
   model.position.y -= grounded.min.y;

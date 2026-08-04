@@ -1,25 +1,26 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { PropSpec } from '../game/worldGen/types';
 
 /**
  * Non-voxel decorative props placed by map generators: stage instruments
- * for the concert hall and the giant sunset sun for the lighthouse map.
+ * for the concert hall, sunset sun, cat, GLB lighthouse, and GLB car.
  */
 export function buildProps(specs: PropSpec[]): THREE.Group {
   const group = new THREE.Group();
   group.name = 'map-props';
   for (const spec of specs) {
-    const mesh = buildProp(spec.kind);
+    const mesh = buildProp(spec);
     mesh.position.set(spec.x, spec.y, spec.z);
     if (spec.rotationY) mesh.rotation.y = spec.rotationY;
-    if (spec.scale) mesh.scale.setScalar(spec.scale);
+    if (!['lighthouse', 'car', 'cake-table'].includes(spec.kind) && spec.scale) mesh.scale.setScalar(spec.scale);
     group.add(mesh);
   }
   return group;
 }
 
-function buildProp(kind: PropSpec['kind']): THREE.Group {
-  switch (kind) {
+function buildProp(spec: PropSpec): THREE.Group {
+  switch (spec.kind) {
     case 'grand-piano':
       return buildGrandPiano();
     case 'cello':
@@ -32,7 +33,207 @@ function buildProp(kind: PropSpec['kind']): THREE.Group {
       return buildSun();
     case 'cat':
       return buildCat();
+    case 'lighthouse':
+      return buildLighthouseModel(spec.scale ?? 1);
+    case 'car':
+      return buildCarModel(spec.scale ?? 1);
+    case 'cake-table':
+      return buildCakeTable(spec.scale ?? 1);
   }
+  return new THREE.Group();
+}
+
+/** Target height for the wedding cake GLB on the table (~0.9 blocks). */
+const CAKE_TARGET_HEIGHT = 0.9;
+
+function buildCakeTable(extraScale: number): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'cake-table';
+  const white = lambert(0xffffff);
+
+  for (const [lx, lz] of [
+    [-0.55, -0.38],
+    [0.55, -0.38],
+    [-0.55, 0.38],
+    [0.55, 0.38],
+  ] as Array<[number, number]>) {
+    const leg = box(0.1, 0.95, 0.1, white);
+    leg.position.set(lx, 0.475, lz);
+    g.add(leg);
+  }
+
+  const top = box(1.35, 0.06, 0.95, white);
+  top.position.set(0, 1.0, 0);
+  g.add(top);
+
+  const cakeAnchor = new THREE.Group();
+  cakeAnchor.position.y = 1.06;
+  g.add(cakeAnchor);
+
+  const loader = new GLTFLoader();
+  const url = `${import.meta.env.BASE_URL}wedding_cake.glb`;
+  loader.load(
+    url,
+    (gltf) => {
+      const model = gltf.scene;
+      model.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const height = Math.max(size.y, 0.001);
+      const scale = (CAKE_TARGET_HEIGHT / height) * extraScale;
+      model.scale.setScalar(scale);
+
+      model.updateMatrixWorld(true);
+      const fitted = new THREE.Box3().setFromObject(model);
+      const center = new THREE.Vector3();
+      fitted.getCenter(center);
+      model.position.set(-center.x, -fitted.min.y, -center.z);
+
+      prepareGlbMeshes(model);
+      cakeAnchor.add(model);
+    },
+    undefined,
+    () => {
+      const stub = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.35, 0.4, CAKE_TARGET_HEIGHT, 10),
+        new THREE.MeshLambertMaterial({ color: 0xfff0f5 }),
+      );
+      stub.position.y = CAKE_TARGET_HEIGHT * 0.5;
+      cakeAnchor.add(stub);
+    },
+  );
+
+  return g;
+}
+
+/** Target world length for the car GLB (voxel-style model, ~4.5 blocks long). */
+const CAR_TARGET_LENGTH = 4.5;
+
+function buildCarModel(extraScale: number): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'car-model';
+
+  const loader = new GLTFLoader();
+  const url = `${import.meta.env.BASE_URL}car.glb`;
+  loader.load(
+    url,
+    (gltf) => {
+      const model = gltf.scene;
+      model.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const length = Math.max(size.x, size.z, 0.001);
+      const scale = (CAR_TARGET_LENGTH / length) * extraScale;
+      model.scale.setScalar(scale);
+
+      model.updateMatrixWorld(true);
+      const fitted = new THREE.Box3().setFromObject(model);
+      const center = new THREE.Vector3();
+      fitted.getCenter(center);
+      model.position.set(-center.x, -fitted.min.y, -center.z);
+
+      prepareGlbMeshes(model);
+      g.add(model);
+    },
+    undefined,
+    () => {
+      const stub = new THREE.Mesh(
+        new THREE.BoxGeometry(2.2, 1.2, 4.2),
+        new THREE.MeshLambertMaterial({ color: 0xcc3333 }),
+      );
+      stub.position.y = 0.6;
+      g.add(stub);
+    },
+  );
+
+  return g;
+}
+
+/** Target world height for the lighthouse GLB (matches old voxel tower feel). */
+const LIGHTHOUSE_TARGET_HEIGHT = 16;
+
+/** Preserve GLB textures — do not replace with flat colours. */
+function prepareGlbMeshes(object: THREE.Object3D): void {
+  object.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+    child.castShadow = false;
+    child.receiveShadow = false;
+
+    const srcMats = Array.isArray(child.material) ? child.material : [child.material];
+    const prepared = srcMats.map((src) => {
+      if (src instanceof THREE.MeshStandardMaterial) {
+        // Keep the stripe texture; soften PBR so sunset lighting reads clearly
+        src.metalness = 0;
+        src.roughness = 0.9;
+        if (src.map) src.map.colorSpace = THREE.SRGBColorSpace;
+        return src;
+      }
+
+      if ('map' in src && src.map) {
+        const map = src.map as THREE.Texture;
+        map.colorSpace = THREE.SRGBColorSpace;
+        return new THREE.MeshLambertMaterial({
+          map,
+          color: 'color' in src && src.color instanceof THREE.Color ? src.color.clone() : new THREE.Color(1, 1, 1),
+        });
+      }
+
+      return src;
+    });
+
+    child.material = prepared.length === 1 ? prepared[0] : prepared;
+  });
+}
+
+function buildLighthouseModel(extraScale: number): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'lighthouse-model';
+
+  const loader = new GLTFLoader();
+  const url = `${import.meta.env.BASE_URL}lighthouse.glb`;
+  loader.load(
+    url,
+    (gltf) => {
+      const model = gltf.scene;
+      model.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const height = Math.max(size.y, 0.001);
+      const scale = (LIGHTHOUSE_TARGET_HEIGHT / height) * extraScale;
+      model.scale.setScalar(scale);
+
+      // Sit on the rock pad: bottom at y=0, centered on XZ
+      model.updateMatrixWorld(true);
+      const fitted = new THREE.Box3().setFromObject(model);
+      const center = new THREE.Vector3();
+      fitted.getCenter(center);
+      model.position.set(-center.x, -fitted.min.y, -center.z);
+
+      prepareGlbMeshes(model);
+
+      // Soft white fill so white stripes read bright without washing out black bands
+      const towerLight = new THREE.PointLight(0xffffff, 1.6, 40, 1.4);
+      towerLight.position.set(0, LIGHTHOUSE_TARGET_HEIGHT * 0.55, 5);
+      g.add(towerLight);
+
+      g.add(model);
+    },
+    undefined,
+    () => {
+      // Fallback stub if the GLB fails to load
+      const stub = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.2, 1.6, LIGHTHOUSE_TARGET_HEIGHT, 12),
+        new THREE.MeshLambertMaterial({ color: 0xf1e6d0 }),
+      );
+      stub.position.y = LIGHTHOUSE_TARGET_HEIGHT * 0.5;
+      g.add(stub);
+    },
+  );
+
+  return g;
 }
 
 function lambert(color: number): THREE.MeshLambertMaterial {

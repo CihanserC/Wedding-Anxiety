@@ -16,11 +16,12 @@ import { World } from './World';
 import { ProjectileEffects } from '../entities/Projectile';
 import type { Enemy } from '../entities/Enemy';
 import { WEAPONS, WEAPON_ORDER, type WeaponId } from '../data/weapons';
-import { createWallSign } from '../rendering/WallSign';
+import { createNeonWallSign, createWallSign } from '../rendering/WallSign';
 import { buildHallDecorations } from '../rendering/WeddingDecorations';
 import { buildProps, updateEatingCat } from '../rendering/MapProps';
 import { PauseScreen } from '../ui/PauseScreen';
 import { BossCinematic } from '../ui/BossCinematic';
+import { ConfettiOverlay } from '../ui/ConfettiOverlay';
 import { EnemyProjectileManager } from './EnemyProjectiles';
 import { loadSettings, saveSettings, type GameSettings } from './GameSettings';
 
@@ -45,6 +46,7 @@ export class Game {
   private readonly menu: MenuScreen;
   private readonly pause: PauseScreen;
   private readonly bossCinematic: BossCinematic;
+  private readonly confetti: ConfettiOverlay;
   private readonly dialogue: DialogueBox;
   private readonly effects: ProjectileEffects;
   private readonly enemyProjectiles: EnemyProjectileManager;
@@ -63,6 +65,8 @@ export class Game {
   private catAnimTime = 0;
   private catMesh: THREE.Object3D | null = null;
   private pianoPlayed = false;
+  private pianoInteractArmed = false;
+  private catInteractArmed = false;
   private altarUsedThisLevel = false;
   private settings: GameSettings = loadSettings();
   private intentionalUnlock = false;
@@ -71,6 +75,8 @@ export class Game {
   private pendingBossPhase: 2 | 3 | null = null;
   private readonly bossCinematicPlayed = new Set<2 | 3>();
   private weddingChatNpc: 'bride' | 'groom' | null = null;
+  private pendingFinalWin = false;
+  private finalWinDelay = 0;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -101,6 +107,10 @@ export class Game {
       onContact: (enemy, dt) => this.handleEnemyContact(enemy, dt),
       onFlash: (enemy) => this.handleEnemyFlash(enemy),
       onBossPhase: (enemy, phase) => this.handleBossPhase(enemy, phase),
+      onBossDeathEffect: (position, kind) => {
+        if (kind === 'fire') this.effects.spawnBossFireBurst(position);
+        else this.effects.spawnBossDustBurst(position);
+      },
       onShootFireball: (origin, direction, speed, anxietyHit) =>
         this.enemyProjectiles.spawnFireball(origin, direction, speed, anxietyHit),
     });
@@ -117,6 +127,7 @@ export class Game {
       onSettingsChange: (settings) => this.applySettings(settings),
     });
     this.bossCinematic = new BossCinematic(container);
+    this.confetti = new ConfettiOverlay(container);
 
     this.levelState = makeLevelState(MAPS[0].levels[0]);
     this.applySettings(this.settings);
@@ -148,6 +159,10 @@ export class Game {
     this.addProps();
     this.npcs.spawnAll(this.world.npcs);
     this.audio?.setBgm(mapDef.bgm ?? null);
+    this.catFed = false;
+    this.pianoPlayed = false;
+    this.pianoInteractArmed = false;
+    this.catInteractArmed = false;
 
     this.weapon?.setWorld(this.world);
     this.enemies?.setWorld(this.world);
@@ -157,7 +172,10 @@ export class Game {
   private addBanner(): void {
     if (!this.world.banner) return;
     const b = this.world.banner.position;
-    const sign = createWallSign(this.world.banner.text, b.width, b.height);
+    const sign =
+      b.style === 'neon'
+        ? createNeonWallSign(this.world.banner.text, b.width, b.height)
+        : createWallSign(this.world.banner.text, b.width, b.height);
     sign.position.set(b.x, b.y, b.z);
     sign.rotation.y = b.rotationY;
     this.worldGroup.add(sign);
@@ -278,6 +296,16 @@ export class Game {
     this.effects.update(dt);
 
     if (this.state === 'playing') {
+      if (this.pendingFinalWin) {
+        this.finalWinDelay -= dt;
+        this.confetti.update(dt);
+        if (this.finalWinDelay <= 0) {
+          this.pendingFinalWin = false;
+          this.confetti.hide();
+          this.showFinalWinScreen();
+        }
+      }
+
       if (this.input.consumePause()) {
         this.enterPause();
       }
@@ -293,6 +321,7 @@ export class Game {
       });
       this.anxiety.update(dt, true);
       this.tickLevel(dt);
+      this.tickMapSkipHint();
       this.tickCatInteraction(dt);
       this.tickPianoInteraction();
       this.tickAltarInteraction();
@@ -321,6 +350,7 @@ export class Game {
           this.audio.play('shoot');
           this.player.rig.onFire(result.recoil);
           if (result.hitEnemy) this.audio.play('hit');
+          if (result.killedEnemy) this.handleBossKillCascade(result.killedEnemy);
         }
       }
 
@@ -353,7 +383,36 @@ export class Game {
       ),
       reloadRatio: this.weapon.cooldownRatio(),
       weaponName: WEAPONS[this.activeWeapon].displayName,
+      bossHpRatio: this.getBossHpRatio(),
     });
+  }
+
+  private tickMapSkipHint(): void {
+    if (this.levelState.phase !== 'awaiting-map-skip') return;
+
+    const mapId = MAPS[this.mapIndex].id;
+    const piano = this.world.interactables.find((item) => item.kind === 'piano');
+    const cat = this.world.interactables.find((item) => item.kind === 'cat');
+
+    if (mapId === 'concert-hall' && piano && this.isNearInteractable(piano)) {
+      this.hud.setSubtitle([]);
+      return;
+    }
+    if (mapId === 'lighthouse' && cat && this.isNearInteractable(cat)) {
+      this.hud.setSubtitle([]);
+      return;
+    }
+
+    if (mapId === 'concert-hall') {
+      this.hud.setSubtitle([PIANO_PLAY_MESSAGES.mapSkipHint]);
+    } else if (mapId === 'lighthouse') {
+      this.hud.setSubtitle([CAT_FEED_MESSAGES.mapSkipHint]);
+    }
+  }
+
+  private canUseMapSkipInteractable(): boolean {
+    const phase = this.levelState.phase;
+    return phase === 'active' || phase === 'awaiting-map-skip';
   }
 
   private tickCatInteraction(dt: number): void {
@@ -362,28 +421,32 @@ export class Game {
       updateEatingCat(this.catMesh, this.catAnimTime);
     }
 
-    if (this.catFed || !this.input.isLocked()) {
+    if (this.catFed || !this.input.isLocked() || !this.canUseMapSkipInteractable()) {
+      if (!this.catFed) return;
       this.hud.setInteractPrompt(null);
       return;
     }
 
     const cat = this.world.interactables.find((item) => item.kind === 'cat');
-    if (!cat) {
-      this.hud.setInteractPrompt(null);
-      return;
-    }
+    if (!cat) return;
 
-    const dx = this.player.position.x - cat.x;
-    const dz = this.player.position.z - cat.z;
-    const dist = Math.sqrt(dx * dx + dz * dz);
-    const near = dist <= (cat.radius ?? 2.5);
+    const near = this.isNearInteractable(cat);
 
     if (!near) {
+      this.catInteractArmed = false;
+      this.input.flushInteract();
       this.hud.setInteractPrompt(null);
       return;
     }
 
     this.hud.setInteractPrompt(CAT_FEED_MESSAGES.prompt);
+    this.hud.setSubtitle([]);
+
+    if (!this.catInteractArmed) {
+      this.catInteractArmed = true;
+      this.input.flushInteract();
+      return;
+    }
 
     if (this.input.consumeInteract()) {
       this.feedCatAndAdvance();
@@ -399,6 +462,7 @@ export class Game {
     this.input.releasePointerLock();
     this.hud.setCrosshairVisible(false);
     this.hud.setInteractPrompt(null);
+    this.hud.setSubtitle([]);
     this.anxiety.reduce(20);
 
     this.dialogue.show({
@@ -493,16 +557,36 @@ export class Game {
     const nearGroom = groom ? this.isNearInteractable(groom) : false;
     const nearBride = bride ? this.isNearInteractable(bride) : false;
 
-    if (nearGroom || nearBride) {
-      this.hud.setInteractPrompt(WEDDING_NPC_MESSAGES.chatPrompt);
-      if (this.input.consumeInteract()) {
-        this.weddingChatNpc = nearGroom ? 'groom' : 'bride';
-        this.openWeddingChatChoices();
-      }
+    if (!nearGroom && !nearBride) {
+      this.hud.setInteractPrompt(null);
       return;
     }
 
-    this.hud.setInteractPrompt(null);
+    let target: 'bride' | 'groom' | null = null;
+    if (nearGroom && nearBride) {
+      const groomDist = groom
+        ? Math.hypot(this.player.position.x - groom.x, this.player.position.z - groom.z)
+        : Infinity;
+      const brideDist = bride
+        ? Math.hypot(this.player.position.x - bride.x, this.player.position.z - bride.z)
+        : Infinity;
+      target = groomDist <= brideDist ? 'groom' : 'bride';
+    } else if (nearGroom) {
+      target = 'groom';
+    } else if (nearBride) {
+      target = 'bride';
+    }
+
+    if (target === 'groom') {
+      this.hud.setInteractPrompt(WEDDING_NPC_MESSAGES.groomChatPrompt);
+    } else if (target === 'bride') {
+      this.hud.setInteractPrompt(WEDDING_NPC_MESSAGES.brideChatPrompt);
+    }
+
+    if (this.input.consumeInteract() && target) {
+      this.weddingChatNpc = target;
+      this.openWeddingChatChoices();
+    }
   }
 
   private openWeddingChatChoices(): void {
@@ -549,19 +633,16 @@ export class Game {
   }
 
   private tickPianoInteraction(): void {
-    if (this.pianoPlayed || !this.input.isLocked()) return;
+    if (this.pianoPlayed || !this.input.isLocked() || !this.canUseMapSkipInteractable()) return;
 
     const piano = this.world.interactables.find((item) => item.kind === 'piano');
     if (!piano) return;
 
-    // If cat prompt already showing, don't override (different maps anyway)
-    const dx = this.player.position.x - piano.x;
-    const dz = this.player.position.z - piano.z;
-    const dist = Math.sqrt(dx * dx + dz * dz);
-    const near = dist <= (piano.radius ?? 3);
+    const near = this.isNearInteractable(piano);
 
     if (!near) {
-      // Only clear if we're not also showing cat prompt; cat handler manages its own
+      this.pianoInteractArmed = false;
+      this.input.flushInteract();
       if (!this.world.interactables.some((i) => i.kind === 'cat')) {
         this.hud.setInteractPrompt(null);
       }
@@ -569,6 +650,13 @@ export class Game {
     }
 
     this.hud.setInteractPrompt(PIANO_PLAY_MESSAGES.prompt);
+    this.hud.setSubtitle([]);
+
+    if (!this.pianoInteractArmed) {
+      this.pianoInteractArmed = true;
+      this.input.flushInteract();
+      return;
+    }
 
     if (this.input.consumeInteract()) {
       this.playPianoAndAdvance();
@@ -584,6 +672,7 @@ export class Game {
     this.input.releasePointerLock();
     this.hud.setCrosshairVisible(false);
     this.hud.setInteractPrompt(null);
+    this.hud.setSubtitle([]);
     this.anxiety.reduce(25);
     this.audio.play('wave-clear');
 
@@ -603,6 +692,9 @@ export class Game {
     const levelsLeftInMap = currentMap.levels.length - this.levelIndex;
     this.stagesCleared += levelsLeftInMap;
     this.pianoPlayed = false;
+    this.catFed = false;
+    this.pianoInteractArmed = false;
+    this.catInteractArmed = false;
 
     if (isLastMap) {
       this.transitionToWin();
@@ -639,7 +731,7 @@ export class Game {
 
   private tickLevel(dt: number): void {
     const s = this.levelState;
-    if (s.phase === 'celebration') return;
+    if (s.phase === 'celebration' || s.phase === 'awaiting-map-skip') return;
     if (s.phase !== 'active') return;
 
     s.timer -= dt;
@@ -663,7 +755,20 @@ export class Game {
         s.phase = 'clearing';
         this.audio.play('wave-clear');
         this.stagesCleared++;
-        this.showFinalWinScreen();
+        this.anxiety.lockAtZero();
+        this.pendingFinalWin = true;
+        this.finalWinDelay = 5;
+        this.confetti.show();
+        return;
+      }
+
+      const isMapSkipMap =
+        currentMap.id === 'concert-hall' || currentMap.id === 'lighthouse';
+      const isLastLevelInMap = this.levelIndex >= currentMap.levels.length - 1;
+
+      if (isMapSkipMap && isLastLevelInMap) {
+        s.phase = 'awaiting-map-skip';
+        this.audio.play('wave-clear');
         return;
       }
 
@@ -672,11 +777,22 @@ export class Game {
     }
   }
 
+  private getBossHpRatio(): number | null {
+    for (const enemy of this.enemies.enemies) {
+      if (enemy.stats.isBoss && !enemy.dead) {
+        return Math.max(0, Math.min(1, enemy.hp / enemy.stats.hp));
+      }
+    }
+    return null;
+  }
+
   private showFinalWinScreen(): void {
+    this.anxiety.lockAtZero();
     this.state = 'win';
     this.intentionalUnlock = true;
     this.pause.hide();
     this.bossCinematic.hide();
+    this.confetti.hide();
     this.dialogue.hide();
     this.hud.hide();
     this.input.releasePointerLock();
@@ -696,7 +812,7 @@ export class Game {
     this.hud.setCrosshairVisible(true);
     this.hud.setInteractPrompt(null);
     this.hud.setSubtitle([]);
-    this.anxiety.reduce(30);
+    this.anxiety.lockAtZero();
     this.audio.setBgm(MAPS[this.mapIndex].bgm ?? null);
     this.input.requestPointerLock();
   }
@@ -774,6 +890,8 @@ export class Game {
     this.extraEnemiesRequired = 0;
     this.bossCinematicPlayed.clear();
     this.enemyProjectiles.clear();
+    this.pianoInteractArmed = false;
+    this.catInteractArmed = false;
     this.hud.setCrosshairVisible(false);
     if (levelIndex === 0) this.player.respawn();
     if (levelIndex > 0) this.anxiety.reduce(10);
@@ -800,6 +918,16 @@ export class Game {
     this.score += enemy.stats.scoreValue;
     this.anxiety.reduce(enemy.stats.anxietyReward);
     this.audio.play('kill');
+  }
+
+  /** Wedding hall: when the gold boss dies, wipe the rest of the wave. */
+  private handleBossKillCascade(killed: Enemy): void {
+    if (MAPS[this.mapIndex].id !== 'wedding-hall' || !killed.stats.isBoss) return;
+
+    const isFinalBoss = this.levelIndex >= MAPS[this.mapIndex].levels.length - 1;
+    if (isFinalBoss) this.anxiety.lockAtZero();
+
+    this.enemies.forceKillAllExcept(killed);
   }
 
   private handleEnemyContact(enemy: Enemy, dt: number): void {
@@ -877,7 +1005,11 @@ export class Game {
     this.pianoPlayed = false;
     this.altarUsedThisLevel = false;
     this.bossCinematicPlayed.clear();
+    this.pendingFinalWin = false;
+    this.finalWinDelay = 0;
+    this.confetti.hide();
     this.loadMap(0);
+    this.anxiety.unlock();
     this.anxiety.reset();
     this.setActiveWeapon('pistol');
     this.player.respawn();

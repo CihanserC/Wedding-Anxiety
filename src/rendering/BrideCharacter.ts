@@ -326,6 +326,9 @@ export function buildBrideCharacter(): THREE.Group {
   return root;
 }
 
+/** Side-profile thickness multiplier — keeps front width, adds body depth. */
+const BODY_DEPTH_SCALE = 1.45;
+
 /** Scale model to human height with feet resting on y = 0. */
 function fitHumanScale(model: THREE.Group, targetHeight: number): void {
   model.updateMatrixWorld(true);
@@ -333,7 +336,7 @@ function fitHumanScale(model: THREE.Group, targetHeight: number): void {
   const size = new THREE.Vector3();
   box.getSize(size);
   const scale = targetHeight / size.y;
-  model.scale.setScalar(scale);
+  model.scale.set(scale, scale, scale * BODY_DEPTH_SCALE);
   model.updateMatrixWorld(true);
   const grounded = new THREE.Box3().setFromObject(model);
   model.position.y -= grounded.min.y;

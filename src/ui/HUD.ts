@@ -13,6 +13,7 @@ export interface HUDState {
   enemiesLeft: number;
   reloadRatio: number;
   weaponName: string;
+  bossHpRatio?: number | null;
 }
 
 export class HUD {
@@ -29,12 +30,18 @@ export class HUD {
   private readonly weaponLabel: HTMLDivElement;
   private readonly interactPrompt: HTMLDivElement;
   private readonly subtitle: HTMLDivElement;
+  private readonly bossHealth: HTMLDivElement;
+  private readonly bossHealthFill: HTMLDivElement;
 
   constructor(container: HTMLElement) {
     this.root = document.createElement('div');
     this.root.className = 'wa-hud';
     this.root.innerHTML = `
       <div class="wa-hud-topbar">
+        <div class="wa-boss-health">
+          <div class="wa-boss-health-label">Altın Canavar</div>
+          <div class="wa-boss-health-bar"><div class="wa-boss-health-fill"></div></div>
+        </div>
         <div class="wa-anxiety">
           <div class="wa-anxiety-label"></div>
           <div class="wa-anxiety-bar"><div class="wa-anxiety-fill"></div></div>
@@ -68,6 +75,8 @@ export class HUD {
     this.weaponLabel = this.root.querySelector('.wa-weapon') as HTMLDivElement;
     this.interactPrompt = this.root.querySelector('.wa-interact-prompt') as HTMLDivElement;
     this.subtitle = this.root.querySelector('.wa-subtitle') as HTMLDivElement;
+    this.bossHealth = this.root.querySelector('.wa-boss-health') as HTMLDivElement;
+    this.bossHealthFill = this.root.querySelector('.wa-boss-health-fill') as HTMLDivElement;
 
     HUD.ensureStyles();
     this.hide();
@@ -100,6 +109,15 @@ export class HUD {
     }
 
     this.weaponLabel.textContent = state.weaponName;
+
+    if (state.bossHpRatio != null && state.bossHpRatio >= 0) {
+      const bossPct = Math.max(0, Math.min(100, state.bossHpRatio * 100));
+      this.bossHealth.style.display = 'block';
+      this.bossHealthFill.style.width = `${bossPct.toFixed(1)}%`;
+    } else {
+      this.bossHealth.style.display = 'none';
+      this.bossHealthFill.style.width = '0%';
+    }
   }
 
   flashDamage(): void {
@@ -154,6 +172,39 @@ export class HUD {
         justify-content: space-between;
         align-items: flex-start;
         gap: 20px;
+      }
+      .wa-boss-health {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(360px, 42vw);
+        display: none;
+        background: rgba(20, 10, 40, 0.65);
+        padding: 10px 14px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 80, 80, 0.35);
+        backdrop-filter: blur(6px);
+        text-align: center;
+      }
+      .wa-boss-health-label {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.6px;
+        color: #ff8a8a;
+        margin-bottom: 6px;
+      }
+      .wa-boss-health-bar {
+        height: 14px;
+        background: rgba(255, 255, 255, 0.12);
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .wa-boss-health-fill {
+        height: 100%;
+        width: 100%;
+        background: linear-gradient(90deg, #ff5555, #cc0000);
+        transition: width 0.12s ease;
       }
       .wa-anxiety {
         min-width: 260px;
