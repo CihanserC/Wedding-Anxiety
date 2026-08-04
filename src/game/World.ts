@@ -19,6 +19,7 @@ import type {
   HallDecorations,
   PropSpec,
   InteractableSpec,
+  NpcSpec,
 } from './worldGen/types';
 
 export interface WorldBounds {
@@ -46,6 +47,7 @@ export class World {
   readonly banner: { text: string; position: BannerSpec } | null;
   readonly decorations: HallDecorations | null;
   readonly props: PropSpec[];
+  readonly npcs: NpcSpec[];
   readonly interactables: InteractableSpec[];
   private readonly cells: Uint8Array;
   private group: THREE.Group | null = null;
@@ -75,6 +77,7 @@ export class World {
       : null;
     this.decorations = result.decorations ?? null;
     this.props = result.props ?? [];
+    this.npcs = result.npcs ?? [];
     this.interactables = result.interactables ?? [];
   }
 
@@ -152,40 +155,72 @@ export class World {
 
   /**
    * AABB-aware ground spawn: rejects points where the enemy's full box would
-   * overlap solids. This prevents wide bosses from spawning wedged in walls.
+   * overlap solids. `avoid` can be one or many anchors; spawn must stay
+   * at least `minDist` from each. Falls back to the farthest valid land tile.
    */
   randomSpawnPoint(
     rand: () => number,
-    awayFrom?: THREE.Vector3,
-    minDist = 6,
+    avoid?: THREE.Vector3 | THREE.Vector3[],
+    minDist = 8,
     radius = 0.45,
     height = 1.8,
   ): THREE.Vector3 {
+    const anchors = avoid
+      ? Array.isArray(avoid)
+        ? avoid
+        : [avoid]
+      : [];
     const r = this.enemyRegion;
     const floorY = this.bounds().floorY;
+    const standY = floorY + 1.01;
     const inset = Math.ceil(radius) + 1;
     const minX = r.minX + inset;
     const maxX = r.maxX - inset;
     const minZ = r.minZ + inset;
     const maxZ = r.maxZ - inset;
 
-    for (let tries = 0; tries < 96; tries++) {
+    const isValid = (x: number, z: number): boolean => {
+      const min = new THREE.Vector3(x - radius, standY, z - radius);
+      const max = new THREE.Vector3(x + radius, standY + height, z + radius);
+      if (this.boxCollides(min, max)) return false;
+      const fx = Math.floor(x);
+      const fz = Math.floor(z);
+      if (!this.isSolidAt(fx, floorY, fz)) return false;
+      const floorMin = new THREE.Vector3(x - radius, floorY, z - radius);
+      const floorMax = new THREE.Vector3(x + radius, standY, z + radius);
+      if (!this.boxCollides(floorMin, floorMax)) return false;
+      const p = new THREE.Vector3(x, standY, z);
+      for (const a of anchors) {
+        if (p.distanceTo(a) < minDist) return false;
+      }
+      return true;
+    };
+
+    for (let tries = 0; tries < 128; tries++) {
       const x = minX + rand() * Math.max(0.01, maxX - minX);
       const z = minZ + rand() * Math.max(0.01, maxZ - minZ);
-      const y = floorY;
-      const min = new THREE.Vector3(x - radius, y, z - radius);
-      const max = new THREE.Vector3(x + radius, y + height, z + radius);
-      if (this.boxCollides(min, max)) continue;
-
-      const floorMin = new THREE.Vector3(x - radius, y - 0.1, z - radius);
-      const floorMax = new THREE.Vector3(x + radius, y, z + radius);
-      if (!this.boxCollides(floorMin, floorMax)) continue;
-
-      const p = new THREE.Vector3(x, y + 0.01, z);
-      if (awayFrom && p.distanceTo(awayFrom) < minDist) continue;
-      return p;
+      if (isValid(x, z)) return new THREE.Vector3(x, standY, z);
     }
-    return new THREE.Vector3((r.minX + r.maxX) / 2, floorY + 0.01, (r.minZ + r.maxZ) / 2);
+
+    let best: THREE.Vector3 | null = null;
+    let bestDist = -1;
+    for (let gz = Math.floor(minZ); gz <= Math.ceil(maxZ); gz++) {
+      for (let gx = Math.floor(minX); gx <= Math.ceil(maxX); gx++) {
+        const x = gx + 0.5;
+        const z = gz + 0.5;
+        if (!isValid(x, z)) continue;
+        const p = new THREE.Vector3(x, standY, z);
+        let nearest = Infinity;
+        for (const a of anchors) nearest = Math.min(nearest, p.distanceTo(a));
+        if (nearest > bestDist) {
+          bestDist = nearest;
+          best = p;
+        }
+      }
+    }
+    if (best) return best;
+
+    return new THREE.Vector3((r.minX + r.maxX) / 2, standY, (r.minZ + r.maxZ) / 2);
   }
 
   buildMesh(): THREE.Group {

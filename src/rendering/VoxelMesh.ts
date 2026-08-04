@@ -4,7 +4,7 @@ import { BLOCKS, type BlockId } from '../data/blocks';
 /**
  * Builds one InstancedMesh per block type from a list of positions.
  * The arena is small enough that a flat instanced pool per block type
- * is sufficient — no chunking required.
+ * is sufficient; no chunking required.
  */
 export interface VoxelInstanceInput {
   blockId: BlockId;

@@ -34,7 +34,7 @@ export interface MapDefinition {
   worldSize: { width: number; depth: number; height: number };
   atmosphere: AtmosphereConfig;
   /** Optional looping background music for this map. */
-  bgm?: 'mozart-allegro';
+  bgm?: 'mozart-allegro' | 'lighthouse-ambient' | 'wedding-hope';
   levels: LevelDefinition[];
 }
 
@@ -63,7 +63,7 @@ export const MAPS: MapDefinition[] = [
       {
         index: 1,
         title: 'Perde Açılıyor',
-        intro: 'Salon dolmaya başlıyor. İlk eleştiriler yaklaşıyor — sen sen ol, gülümse.',
+        intro: 'Salon dolmaya başlıyor. İlk eleştiriler yaklaşıyor; sen sen ol, gülümse.',
         clearMessage: 'İlk sıralar sessizleşti. Alkış senin, Hilal.',
         totalEnemies: 6,
         batchInterval: 4,
@@ -108,6 +108,7 @@ export const MAPS: MapDefinition[] = [
     description:
       'Gün batımında bir sahil. Fenerin ışığı zamanın geçtiğini fısıldıyor. Ama zaman düşman değil, sadece bir rüzgâr.',
     worldSize: { width: 56, depth: 56, height: 20 },
+    bgm: 'lighthouse-ambient',
     atmosphere: {
       ambientColor: 0xffb070,
       ambientIntensity: 0.6,
@@ -130,8 +131,8 @@ export const MAPS: MapDefinition[] = [
         totalEnemies: 7,
         batchInterval: 3.5,
         batches: [
-          { type: 'zaman-canavari', count: 3 },
-          { type: 'zaman-canavari', count: 4 },
+          { type: 'zaman-canavari', count: 2 },
+          { type: 'zaman-canavari', count: 5 },
         ],
       },
       {
@@ -151,7 +152,7 @@ export const MAPS: MapDefinition[] = [
       {
         index: 3,
         title: 'Son Dalga',
-        intro: 'Gün batıyor. Zaman canavarları ve eleştirmenler beraber saldırıyor. Nefes — nefes — nefes.',
+        intro: 'Gün batıyor. Zaman canavarları ve eleştirmenler beraber saldırıyor. Nefes, nefes, nefes.',
         clearMessage: 'Deniz feneri senin. Şimdi düğüne...',
         totalEnemies: 13,
         batchInterval: 2.8,
@@ -170,6 +171,7 @@ export const MAPS: MapDefinition[] = [
     description:
       'Bahçeden geçip salona giriyorsun. Kuzey duvarda "Hilal & Cihanser" yazıyor. Bu gün, senin günün.',
     worldSize: { width: 48, depth: 56, height: 12 },
+    bgm: 'wedding-hope',
     atmosphere: {
       ambientColor: 0xf0e6ff,
       ambientIntensity: 0.55,
@@ -202,11 +204,12 @@ export const MAPS: MapDefinition[] = [
         title: 'Beklentiler',
         intro: 'Salonda ısrarcı beklentiler. Sen çok daha güçlüsün.',
         clearMessage: 'Beklentileri dağıttın. Ama son perde geliyor.',
-        totalEnemies: 12,
+        totalEnemies: 14,
         batchInterval: 3.5,
         batches: [
           { type: 'merakli-teyze', count: 2 },
           { type: 'mukemmeliyetci-kuzen', count: 3 },
+          { type: 'fotograf-flasoru', count: 2 },
           { type: 'mukemmeliyetci-kuzen', count: 2 },
           { type: 'zaman-canavari', count: 2 },
           { type: 'mukemmeliyetci-kuzen', count: 3 },
@@ -218,13 +221,14 @@ export const MAPS: MapDefinition[] = [
         intro:
           'Son dalga. Herkesin beklentisinden doğan büyük gölge geliyor. Ama bu gün, senin günün.',
         clearMessage: 'Onu bloklara ayırdın, Hilal. Şimdi dans zamanı.',
-        totalEnemies: 14,
+        totalEnemies: 15,
         batchInterval: 3,
         batches: [
           { type: 'zaman-canavari', count: 3 },
+          { type: 'fotograf-flasoru', count: 2 },
           { type: 'mukemmeliyetci-kuzen', count: 3 },
           { type: 'zaman-canavari', count: 3 },
-          { type: 'merakli-teyze', count: 4 },
+          { type: 'merakli-teyze', count: 3 },
           { type: 'beklenti-golgesi', count: 1 },
         ],
         bossLevel: true,

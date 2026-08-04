@@ -28,6 +28,7 @@ export class HUD {
   private readonly damageFlash: HTMLDivElement;
   private readonly weaponLabel: HTMLDivElement;
   private readonly interactPrompt: HTMLDivElement;
+  private readonly subtitle: HTMLDivElement;
 
   constructor(container: HTMLElement) {
     this.root = document.createElement('div');
@@ -52,6 +53,7 @@ export class HUD {
       <div class="wa-damage-flash"></div>
       <div class="wa-weapon"></div>
       <div class="wa-interact-prompt"></div>
+      <div class="wa-subtitle"></div>
     `;
     container.appendChild(this.root);
     this.crosshair = this.root.querySelector('.wa-crosshair') as HTMLDivElement;
@@ -65,6 +67,7 @@ export class HUD {
     this.damageFlash = this.root.querySelector('.wa-damage-flash') as HTMLDivElement;
     this.weaponLabel = this.root.querySelector('.wa-weapon') as HTMLDivElement;
     this.interactPrompt = this.root.querySelector('.wa-interact-prompt') as HTMLDivElement;
+    this.subtitle = this.root.querySelector('.wa-subtitle') as HTMLDivElement;
 
     HUD.ensureStyles();
     this.hide();
@@ -117,6 +120,16 @@ export class HUD {
     }
     this.interactPrompt.textContent = text;
     this.interactPrompt.style.display = 'block';
+  }
+
+  setSubtitle(lines: string[]): void {
+    if (lines.length === 0) {
+      this.subtitle.style.display = 'none';
+      this.subtitle.innerHTML = '';
+      return;
+    }
+    this.subtitle.innerHTML = lines.map((line) => `<p>${line}</p>`).join('');
+    this.subtitle.style.display = 'block';
   }
 
   private static stylesInjected = false;
@@ -257,6 +270,30 @@ export class HUD {
         color: #ffe9b8;
         letter-spacing: 0.3px;
         box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+      }
+      .wa-subtitle {
+        display: none;
+        position: absolute;
+        left: 50%;
+        bottom: 120px;
+        transform: translateX(-50%);
+        max-width: min(680px, 90vw);
+        text-align: center;
+        pointer-events: none;
+      }
+      .wa-subtitle p {
+        margin: 0 0 8px;
+        padding: 8px 16px;
+        background: rgba(0, 0, 0, 0.55);
+        border-radius: 10px;
+        color: #ffe566;
+        font-size: 16px;
+        font-weight: 600;
+        line-height: 1.45;
+        text-shadow: 0 2px 6px rgba(0, 0, 0, 0.65);
+      }
+      .wa-subtitle p:last-child {
+        margin-bottom: 0;
       }
       .wa-damage-flash {
         position: absolute;

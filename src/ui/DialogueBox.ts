@@ -8,6 +8,13 @@ export interface DialogueOptions {
   autoCloseMs?: number;
 }
 
+export interface DialogueChoiceOptions {
+  title: string;
+  speaker: string;
+  choices: Array<{ id: 'a' | 'b' | 'c'; label: string }>;
+  onChoose: (id: 'a' | 'b' | 'c') => void;
+}
+
 export class DialogueBox {
   private readonly root: HTMLDivElement;
   private readonly panel: HTMLDivElement;
@@ -44,6 +51,29 @@ export class DialogueBox {
         options.onContinue();
       }, options.autoCloseMs);
     }
+  }
+
+  showChoices(options: DialogueChoiceOptions): void {
+    const buttons = options.choices
+      .map(
+        (choice) =>
+          `<button class="wa-dialogue-choice" data-choice="${choice.id}">${choice.label}</button>`,
+      )
+      .join('');
+    this.panel.innerHTML = `
+      <div class="wa-dialogue-badge">${options.speaker}</div>
+      <h2 class="wa-dialogue-title">${options.title}</h2>
+      <div class="wa-dialogue-choices">${buttons}</div>
+    `;
+    for (const btn of Array.from(this.panel.querySelectorAll<HTMLButtonElement>('.wa-dialogue-choice'))) {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const id = btn.dataset.choice as 'a' | 'b' | 'c';
+        this.hide();
+        options.onChoose(id);
+      });
+    }
+    this.root.style.display = 'flex';
   }
 
   hide(): void {
@@ -122,6 +152,28 @@ export class DialogueBox {
         transition: transform 0.15s ease;
       }
       .wa-dialogue-button:hover { transform: translateY(-2px); }
+      .wa-dialogue-choices {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .wa-dialogue-choice {
+        pointer-events: auto;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        padding: 12px 16px;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.14);
+        background: rgba(255,255,255,0.08);
+        color: #f4ecff;
+        text-align: left;
+        transition: transform 0.15s ease, background 0.15s ease;
+      }
+      .wa-dialogue-choice:hover {
+        transform: translateY(-2px);
+        background: rgba(255,255,255,0.14);
+      }
     `;
     const style = document.createElement('style');
     style.textContent = css;

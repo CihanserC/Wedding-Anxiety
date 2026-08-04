@@ -5,13 +5,15 @@
  */
 
 type Sfx = 'shoot' | 'hit' | 'kill' | 'wave-clear' | 'hurt' | 'win' | 'lose';
-export type BgmId = 'mozart-allegro' | null;
+export type BgmId = 'mozart-allegro' | 'lighthouse-ambient' | 'wedding-hope' | null;
 
 export class AudioManager {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private musicGain: GainNode | null = null;
   private muted = false;
+  private sfxVolume = 0.35;
+  private musicVolume = 0.12;
   private bgmId: BgmId = null;
   private bgmTimer: number | null = null;
   private bgmHtml: HTMLAudioElement | null = null;
@@ -37,9 +39,36 @@ export class AudioManager {
 
   setMuted(muted: boolean): void {
     this.muted = muted;
-    if (this.masterGain) this.masterGain.gain.value = muted ? 0 : 0.35;
-    if (this.musicGain) this.musicGain.gain.value = muted ? 0 : 0.12;
-    if (this.bgmHtml) this.bgmHtml.muted = muted;
+    this.applyVolumes();
+  }
+
+  setSfxVolume(volume: number): void {
+    this.sfxVolume = volume;
+    this.applyVolumes();
+  }
+
+  setMusicVolume(volume: number): void {
+    this.musicVolume = volume;
+    this.applyVolumes();
+  }
+
+  isMuted(): boolean {
+    return this.muted;
+  }
+
+  toggleMuted(): boolean {
+    this.setMuted(!this.muted);
+    return this.muted;
+  }
+
+  private applyVolumes(): void {
+    if (this.masterGain) {
+      this.masterGain.gain.value = this.muted ? 0 : this.sfxVolume;
+    }
+    if (this.musicGain) {
+      this.musicGain.gain.value = this.muted ? 0 : this.musicVolume;
+    }
+    if (this.bgmHtml) this.bgmHtml.muted = this.muted;
   }
 
   play(sfx: Sfx): void {
@@ -78,6 +107,10 @@ export class AudioManager {
 
     if (id === 'mozart-allegro') {
       this.tryExternalMozart().catch(() => this.startMozartLoop());
+    } else if (id === 'lighthouse-ambient') {
+      this.startLighthouseAmbient();
+    } else if (id === 'wedding-hope') {
+      this.startWeddingHope();
     }
   }
 
@@ -112,7 +145,7 @@ export class AudioManager {
 
   /**
    * Simplified Eine kleine Nachtmusik K.525 Allegro opening theme in G major.
-   * Melody only — recognizable classical vibe without needing an asset file.
+   * Melody only; recognizable classical vibe without needing an asset file.
    */
   private startMozartLoop(): void {
     if (!this.ctx || !this.musicGain || this.bgmId !== 'mozart-allegro') return;
@@ -162,7 +195,71 @@ export class AudioManager {
     step();
   }
 
-  private playMusicNote(freq: number, duration: number): void {
+  /** Soft ocean-like ambient loop for the lighthouse map. */
+  private startLighthouseAmbient(): void {
+    if (!this.ctx || !this.musicGain || this.bgmId !== 'lighthouse-ambient') return;
+
+    const melody: Array<{ freq: number; beats: number }> = [
+      { freq: 196.0, beats: 2 },
+      { freq: 220.0, beats: 2 },
+      { freq: 246.94, beats: 2 },
+      { freq: 220.0, beats: 2 },
+      { freq: 196.0, beats: 2 },
+      { freq: 174.61, beats: 2 },
+      { freq: 0, beats: 1 },
+      { freq: 164.81, beats: 2 },
+      { freq: 196.0, beats: 2 },
+      { freq: 220.0, beats: 4 },
+      { freq: 0, beats: 2 },
+    ];
+
+    const beatMs = 480;
+    const step = (): void => {
+      if (this.bgmId !== 'lighthouse-ambient' || !this.ctx || !this.musicGain || this.muted) return;
+      const note = melody[this.bgmNoteIndex % melody.length];
+      this.bgmNoteIndex++;
+      if (note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000, 0.55);
+      this.bgmTimer = window.setTimeout(step, note.beats * beatMs);
+    };
+    step();
+  }
+
+  /** Warm ascending arpeggios for the wedding hall. */
+  private startWeddingHope(): void {
+    if (!this.ctx || !this.musicGain || this.bgmId !== 'wedding-hope') return;
+
+    const melody: Array<{ freq: number; beats: number }> = [
+      { freq: 261.63, beats: 1 },
+      { freq: 329.63, beats: 1 },
+      { freq: 392.0, beats: 1 },
+      { freq: 523.25, beats: 2 },
+      { freq: 392.0, beats: 1 },
+      { freq: 329.63, beats: 1 },
+      { freq: 293.66, beats: 1 },
+      { freq: 261.63, beats: 2 },
+      { freq: 0, beats: 0.5 },
+      { freq: 349.23, beats: 1 },
+      { freq: 440.0, beats: 1 },
+      { freq: 523.25, beats: 1 },
+      { freq: 659.25, beats: 2 },
+      { freq: 523.25, beats: 1 },
+      { freq: 440.0, beats: 1 },
+      { freq: 392.0, beats: 3 },
+      { freq: 0, beats: 1 },
+    ];
+
+    const beatMs = 300;
+    const step = (): void => {
+      if (this.bgmId !== 'wedding-hope' || !this.ctx || !this.musicGain || this.muted) return;
+      const note = melody[this.bgmNoteIndex % melody.length];
+      this.bgmNoteIndex++;
+      if (note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000, 0.7);
+      this.bgmTimer = window.setTimeout(step, note.beats * beatMs);
+    };
+    step();
+  }
+
+  private playMusicNote(freq: number, duration: number, peak = 0.9): void {
     if (!this.ctx || !this.musicGain) return;
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -177,7 +274,7 @@ export class AudioManager {
     gain2.gain.value = 0.25;
 
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.9, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(peak, now + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + Math.max(duration * 0.9, 0.08));
 
     osc.connect(gain);

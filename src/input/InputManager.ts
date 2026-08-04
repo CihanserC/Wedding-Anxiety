@@ -28,6 +28,8 @@ export class InputManager {
   private weaponSelect: number | null = null;
   private weaponScroll = 0;
   private interactPressed = false;
+  private pausePressed = false;
+  private mutePressed = false;
   private pointerLocked = false;
   private readonly target: HTMLElement;
   private readonly listeners = new Set<() => void>();
@@ -65,6 +67,8 @@ export class InputManager {
     this.weaponSelect = null;
     this.weaponScroll = 0;
     this.interactPressed = false;
+    this.pausePressed = false;
+    this.mutePressed = false;
   };
 
   private onKeyDown = (event: KeyboardEvent): void => {
@@ -80,6 +84,10 @@ export class InputManager {
     else if (event.code === 'KeyE') {
       this.interactPressed = true;
       event.preventDefault();
+    } else if (event.code === 'Escape') {
+      this.pausePressed = true;
+    } else if (event.code === 'KeyM') {
+      this.mutePressed = true;
     }
   };
 
@@ -174,6 +182,18 @@ export class InputManager {
   consumeInteract(): boolean {
     const pressed = this.interactPressed;
     this.interactPressed = false;
+    return pressed;
+  }
+
+  consumePause(): boolean {
+    const pressed = this.pausePressed;
+    this.pausePressed = false;
+    return pressed;
+  }
+
+  consumeMute(): boolean {
+    const pressed = this.mutePressed;
+    this.mutePressed = false;
     return pressed;
   }
 }

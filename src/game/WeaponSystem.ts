@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Enemy } from '../entities/Enemy';
+import type { Enemy, EnemyUpdateEvents } from '../entities/Enemy';
 import type { ProjectileEffects } from '../entities/Projectile';
 import type { World } from './World';
 import { WEAPONS, type WeaponDefinition, type WeaponId } from '../data/weapons';
@@ -44,6 +44,7 @@ export class WeaponSystem {
     origin: THREE.Vector3,
     direction: THREE.Vector3,
     enemies: Enemy[],
+    enemyEvents?: EnemyUpdateEvents,
   ): FireResult | null {
     if (!this.canFire()) return null;
     const weapon = WEAPONS[weaponId];
@@ -65,7 +66,7 @@ export class WeaponSystem {
         pelletDir.addScaledVector(right, angleX).addScaledVector(up, angleY).normalize();
       }
 
-      const end = this.fireOneRay(weapon, origin, pelletDir, enemies);
+      const end = this.fireOneRay(weapon, origin, pelletDir, enemies, enemyEvents);
       if (end.hitEnemy && !bestHitEnemy) bestHitEnemy = end.hitEnemy;
       if (end.killedEnemy && !killed) killed = end.killedEnemy;
       if (p === 0) hitPoint = end.point;
@@ -88,6 +89,7 @@ export class WeaponSystem {
     origin: THREE.Vector3,
     direction: THREE.Vector3,
     enemies: Enemy[],
+    enemyEvents?: EnemyUpdateEvents,
   ): { point: THREE.Vector3; hitEnemy: Enemy | null; killedEnemy: Enemy | null } {
     const worldHit = this.raycastWorld(origin, direction, weapon.range);
     const enemyHit = this.raycastEnemies(
@@ -104,7 +106,7 @@ export class WeaponSystem {
     if (enemyHit) {
       end = enemyHit.point;
       hitEnemy = enemyHit.enemy;
-      const killedNow = enemyHit.enemy.applyHit(weapon.damage);
+      const killedNow = enemyHit.enemy.applyHitWithEvents(weapon.damage, enemyEvents);
       if (killedNow) killedEnemy = enemyHit.enemy;
       this.effects.spawnHitSpark(end, enemyHit.enemy.stats.accentColor);
     } else if (worldHit) {

@@ -34,6 +34,7 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
 
   const northWallZ = hallZ0 + hallDepth - 3;
   const centerX = hallX0 + hallWidth / 2;
+  const altarWorldZ = hallZ0 + hallDepth - 6;
 
   const statueSpecs: HallDecorations['statues'] = [
     { type: 'merakli-teyze', x: hallX0 + 5.5, y: 3, z: hallZ0 + 10, rotationY: Math.PI / 2 },
@@ -83,6 +84,45 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
         names: 'Hilal & Cihanser',
       },
     },
+    npcs: [
+      {
+        type: 'bride',
+        x: centerX - 0.55,
+        y: 1.01,
+        z: altarWorldZ - 2.5,
+        rotationY: Math.PI,
+      },
+      {
+        type: 'groom',
+        x: centerX + 0.55,
+        y: 1.01,
+        z: altarWorldZ - 2.5,
+        rotationY: Math.PI,
+      },
+    ],
+    interactables: [
+      {
+        kind: 'altar',
+        x: centerX,
+        y: 1.01,
+        z: altarWorldZ - 1,
+        radius: 3,
+      },
+      {
+        kind: 'bride-chat',
+        x: centerX - 0.55,
+        y: 1.01,
+        z: altarWorldZ - 2.5,
+        radius: 2.4,
+      },
+      {
+        kind: 'groom-chat',
+        x: centerX + 0.55,
+        y: 1.01,
+        z: altarWorldZ - 2.5,
+        radius: 2.4,
+      },
+    ],
   };
 }
 
@@ -420,6 +460,57 @@ function generateHall(w: WorldWriter, x0: number, z0: number, W: number, D: numb
   for (let x = 2; x < W - 2; x += 3) {
     w.setBlock(x0 + x, wallHeight + 1, z0 + 2, BLOCK_FLOWER);
     w.setBlock(x0 + x, wallHeight + 1, z0 + D - 3, BLOCK_FLOWER);
+  }
+
+  addHallDome(w, x0, z0, W, D, wallHeight);
+}
+
+/** Hemispherical gold-and-marble dome over the wedding hall interior. */
+function addHallDome(w: WorldWriter, x0: number, z0: number, W: number, D: number, wallHeight: number): void {
+  const cx = x0 + (W - 1) / 2;
+  const cz = z0 + (D - 1) / 2;
+  const innerMinX = x0 + 3;
+  const innerMaxX = x0 + W - 4;
+  const innerMinZ = z0 + 3;
+  const innerMaxZ = z0 + D - 4;
+  const radiusX = (innerMaxX - innerMinX) / 2;
+  const radiusZ = (innerMaxZ - innerMinZ) / 2;
+  const domeLayers = 5;
+
+  for (let layer = 0; layer < domeLayers; layer++) {
+    const y = wallHeight + 1 + layer;
+    const shrink = layer * 0.85;
+    const rx = Math.max(2, radiusX - shrink);
+    const rz = Math.max(2, radiusZ - shrink);
+    const shell = 1 - layer / (domeLayers + 0.5);
+
+    for (let x = innerMinX; x <= innerMaxX; x++) {
+      for (let z = innerMinZ; z <= innerMaxZ; z++) {
+        const ndx = (x - cx) / rx;
+        const ndz = (z - cz) / rz;
+        const dist = ndx * ndx + ndz * ndz;
+        if (dist > shell * shell) continue;
+        if (dist < shell * shell * 0.55 && layer < domeLayers - 1) continue;
+
+        const block = layer === domeLayers - 1
+          ? BLOCK_GOLD
+          : layer % 2 === 0
+            ? BLOCK_MARBLE
+            : BLOCK_GOLD;
+        w.setBlock(x, y, z, block);
+      }
+    }
+  }
+
+  const topY = wallHeight + 1 + domeLayers;
+  w.setBlock(Math.floor(cx), topY, Math.floor(cz), BLOCK_GLASS);
+  w.setBlock(Math.floor(cx), topY + 1, Math.floor(cz), BLOCK_LIGHT);
+
+  for (const side of [-1, 1]) {
+    const x = Math.floor(cx + side * (radiusX - 1));
+    const z = Math.floor(cz);
+    w.setBlock(x, wallHeight + 1, z, BLOCK_GOLD);
+    w.setBlock(x, wallHeight + 2, z, BLOCK_FLOWER);
   }
 }
 

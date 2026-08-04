@@ -2,9 +2,10 @@ export type EnemyType =
   | 'merakli-teyze'
   | 'mukemmeliyetci-kuzen'
   | 'zaman-canavari'
+  | 'fotograf-flasoru'
   | 'beklenti-golgesi';
 
-export type EnemyBehavior = 'chase' | 'stalker' | 'dasher' | 'floater';
+export type EnemyBehavior = 'chase' | 'stalker' | 'dasher' | 'floater' | 'flasher';
 
 export interface EnemyStats {
   type: EnemyType;
@@ -58,7 +59,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     type: 'zaman-canavari',
     displayName: 'Zaman Canavarı',
     hp: 2,
-    speed: 3.6,
+    speed: 2.4,
     contactDamage: 10,
     radius: 0.4,
     height: 1.7,
@@ -68,6 +69,21 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     anxietyReward: 10,
     contactAnxietyPerSecond: 22,
     behavior: 'dasher',
+  },
+  'fotograf-flasoru': {
+    type: 'fotograf-flasoru',
+    displayName: 'Fotoğraf Flaşörü',
+    hp: 2,
+    speed: 2.0,
+    contactDamage: 4,
+    radius: 0.42,
+    height: 1.85,
+    color: 0x2a2a35,
+    accentColor: 0xfff8e0,
+    scoreValue: 90,
+    anxietyReward: 9,
+    contactAnxietyPerSecond: 10,
+    behavior: 'flasher',
   },
   'beklenti-golgesi': {
     type: 'beklenti-golgesi',

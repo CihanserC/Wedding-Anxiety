@@ -13,6 +13,7 @@ import {
   BLOCK_WATER,
   BLOCK_WOOD,
 } from '../../data/blocks';
+import type { BlockId } from '../../data/blocks';
 import type { GeneratorResult, WorldWriter } from './types';
 
 /**
@@ -86,6 +87,14 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
     }
   }
 
+  // Wide arrival plaza south of the tower (map intro spawn area)
+  const spawnPlazaZ = towerZ - 5;
+  for (let z = spawnPlazaZ; z <= towerZ - 3; z++) {
+    for (let dx = -4; dx <= 4; dx++) {
+      w.setBlock(towerX + dx, 1, z, BLOCK_PATH);
+    }
+  }
+
   // Interior floor
   for (let dx = -2; dx <= 2; dx++) {
     for (let dz = -2; dz <= 2; dz++) {
@@ -112,27 +121,30 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
     w.setBlock(towerX, y, towerZ + 3, BLOCK_GLASS);
   }
 
-  // ── East-side straight stairs → solid rooftop landing (no gap) ─────
-  // Gallery deck is at dz ∈ [-3, 3]. Stairs must end inside that range.
-  const stairCount = galleryY - 2; // treads at y=2 .. y=galleryY
-  const stairTopZ = 1; // land next to gallery center-east
-  const stairStartZ = stairTopZ - stairCount;
-
-  // Ground approach from the south path to the stair foot
-  for (let x = towerX + 1; x <= towerX + 5; x++) {
-    w.setBlock(x, 1, towerZ - 4, BLOCK_PATH);
-  }
-  for (let z = Math.min(towerZ - 4, towerZ + stairStartZ - 1); z <= towerZ + stairStartZ; z++) {
-    w.setBlock(towerX + 4, 1, z, BLOCK_PATH);
-    w.setBlock(towerX + 5, 1, z, BLOCK_PATH);
-  }
-
-  // Straight 2-wide stairs climbing north along the east face
-  for (let k = 0; k <= stairCount; k++) {
-    const stepY = 2 + k;
-    const stepZ = stairStartZ + k;
-    w.setBlock(towerX + 4, stepY, towerZ + stepZ, BLOCK_WOOD);
-    w.setBlock(towerX + 5, stepY, towerZ + stepZ, BLOCK_WOOD);
+  // Interior spiral stairs on the outer ring (±2); hatch stays open above.
+  const perimeter: Array<[number, number]> = [
+    [-2, -2],
+    [-2, -1],
+    [-2, 0],
+    [-2, 1],
+    [-2, 2],
+    [-1, 2],
+    [0, 2],
+    [1, 2],
+    [2, 2],
+    [2, 1],
+    [2, 0],
+    [2, -1],
+    [2, -2],
+    [1, -2],
+    [0, -2],
+    [-1, -2],
+  ];
+  const topStepIndex = galleryY - 2;
+  for (let k = 0; k <= topStepIndex; k++) {
+    const [sdx, sdz] = perimeter[k % perimeter.length];
+    if (isHatch(sdx, sdz)) continue;
+    w.setBlock(towerX + sdx, 2 + k, towerZ + sdz, BLOCK_WOOD);
   }
 
   // Hatch open to the sky (center of gallery)
@@ -147,32 +159,6 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
     for (let dz = -3; dz <= 3; dz++) {
       if (isHatch(dx, dz)) continue;
       w.setBlock(towerX + dx, galleryY, towerZ + dz, BLOCK_MARBLE);
-    }
-  }
-
-  // Solid landing bridge: stairs (x+4/+5) → gallery (x+3..0), 3 cells deep
-  for (let dz = stairTopZ - 1; dz <= stairTopZ + 1; dz++) {
-    w.setBlock(towerX + 5, galleryY, towerZ + dz, BLOCK_WOOD);
-    w.setBlock(towerX + 4, galleryY, towerZ + dz, BLOCK_WOOD);
-    w.setBlock(towerX + 3, galleryY, towerZ + dz, BLOCK_WOOD);
-    w.setBlock(towerX + 2, galleryY, towerZ + dz, BLOCK_WOOD);
-    w.setBlock(towerX + 1, galleryY, towerZ + dz, BLOCK_WOOD);
-  }
-
-  // Clear ONLY headroom above the landing (never delete the floor itself)
-  for (let dz = stairTopZ - 1; dz <= stairTopZ + 1; dz++) {
-    for (let dx = 1; dx <= 5; dx++) {
-      for (let y = galleryY + 1; y <= galleryY + 3; y++) {
-        w.setBlock(towerX + dx, y, towerZ + dz, BLOCK_AIR);
-      }
-    }
-  }
-
-  // East wall cutout just below gallery so the last climb isn't blocked
-  // (walls only go to shaftTopY, but clear anyway for safety)
-  for (let y = galleryY - 2; y <= galleryY - 1; y++) {
-    for (let dz = stairTopZ - 1; dz <= stairTopZ + 1; dz++) {
-      w.setBlock(towerX + 3, y, towerZ + dz, BLOCK_AIR);
     }
   }
 
@@ -231,7 +217,9 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
 
   const doorX = cottageX + Math.floor(cottageW / 2) - 1;
   for (let dx = 0; dx < 2; dx++) {
-    for (let y = 1; y <= 3; y++) {
+    // Keep y=1 solid; clearing it left a pit at the threshold
+    w.setBlock(doorX + dx, 1, cottageZ, BLOCK_WOOD);
+    for (let y = 2; y <= 3; y++) {
       w.setBlock(doorX + dx, y, cottageZ, BLOCK_AIR);
     }
     w.setBlock(doorX + dx, 4, cottageZ, BLOCK_WOOD);
@@ -258,6 +246,43 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
     }
   }
 
+  // Solid ground at cottage door; always land, not only over water
+  const setGround = (gx: number, gz: number, block: BlockId): void => {
+    if (gx < 0 || gx >= W || gz < 0 || gz >= D) return;
+    const cell = w.getBlock(gx, 1, gz);
+    if (cell === BLOCK_WATER || cell === BLOCK_AIR) {
+      w.setBlock(gx, 1, gz, block);
+    }
+  };
+  // Cottage footprint
+  for (let dz = 0; dz < cottageD; dz++) {
+    for (let dx = 0; dx < cottageW; dx++) {
+      setGround(cottageX + dx, cottageZ + dz, BLOCK_ROCK);
+    }
+  }
+  // Door threshold + approach (south of cottageZ)
+  for (let dz = -5; dz <= -1; dz++) {
+    for (let dx = -1; dx <= cottageW; dx++) {
+      const block = dz >= -2 ? BLOCK_PATH : BLOCK_SAND;
+      setGround(cottageX + dx, cottageZ + dz, block);
+    }
+  }
+  for (let dz = -3; dz <= 0; dz++) {
+    setGround(cottageX - 1, cottageZ + dz, BLOCK_SAND);
+    setGround(cottageX + cottageW, cottageZ + dz, BLOCK_SAND);
+  }
+
+  // Path branch: main island path → cottage door
+  for (let x = cottageX + cottageW - 1; x <= centerX + 1; x++) {
+    w.setBlock(x, 1, cottageZ, BLOCK_PATH);
+    w.setBlock(x, 1, cottageZ - 1, BLOCK_PATH);
+  }
+  for (let z = cottageZ + 1; z <= towerZ - 4; z++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      w.setBlock(centerX + dx, 1, z, BLOCK_PATH);
+    }
+  }
+
   const catX = cottageX + cottageW / 2;
   const catZ = cottageZ + cottageD / 2 + 0.5;
 
@@ -271,15 +296,29 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
     }
   }
 
-  const spawn = new THREE.Vector3(centerX + 0.5, 2.01, islandMinZ - 3 + 0.5);
+  // Wider combat arena; solid sand around the tower approach
+  const arenaMinX = centerX - 12;
+  const arenaMaxX = centerX + 14;
+  const arenaMinZ = pathTopZ;
+  const arenaMaxZ = towerZ + 8;
+  for (let z = arenaMinZ; z <= arenaMaxZ; z++) {
+    for (let x = arenaMinX; x <= arenaMaxX; x++) {
+      if (w.getBlock(x, 1, z) === BLOCK_WATER) {
+        w.setBlock(x, 1, z, BLOCK_SAND);
+      }
+    }
+  }
+
+  const spawn = new THREE.Vector3(towerX + 0.5, 2.01, spawnPlazaZ + 0.5);
   return {
     playerSpawn: spawn,
-    playerFacing: 0,
+    playerFacing: Math.PI,
+    /** Enemies spawn north/east/west of the player; never on top of them. */
     enemySpawnRegion: {
-      minX: islandMinX + 2,
-      maxX: islandMaxX - 2,
-      minZ: islandMinZ + 2,
-      maxZ: pathTopZ + 2,
+      minX: arenaMinX + 2,
+      maxX: arenaMaxX - 2,
+      minZ: towerZ + 5,
+      maxZ: arenaMaxZ - 1,
     },
     props: [
       { kind: 'sun', x: centerX - 18, y: 15, z: D + 28 },

@@ -10,7 +10,7 @@ const WALK_SPEED = 4.5;
 const SPRINT_SPEED = 7.5;
 const JUMP_SPEED = 7.5;
 const GRAVITY = 22;
-const MOUSE_SENSITIVITY = 0.0022;
+const MOUSE_SENSITIVITY_DEFAULT = 0.0022;
 const MAX_PITCH = Math.PI / 2 - 0.05;
 
 export class Player {
@@ -23,6 +23,9 @@ export class Player {
   private onGround = false;
   private world: World;
   private readonly input: InputManager;
+  private mouseSensitivity = MOUSE_SENSITIVITY_DEFAULT;
+  private fallRespawnY = 0.5;
+  onFall?: () => void;
 
   constructor(world: World, input: InputManager, aspect: number) {
     this.world = world;
@@ -44,6 +47,11 @@ export class Player {
 
   setWorld(world: World): void {
     this.world = world;
+    this.fallRespawnY = world.mapDef.id === 'lighthouse' ? 1.2 : 0.5;
+  }
+
+  setMouseSensitivity(value: number): void {
+    this.mouseSensitivity = value;
   }
 
   respawn(): void {
@@ -76,8 +84,8 @@ export class Player {
   update(dt: number, active: boolean): void {
     if (active) {
       const { dx, dy } = this.input.consumeMouseDelta();
-      this.yaw -= dx * MOUSE_SENSITIVITY;
-      this.pitch -= dy * MOUSE_SENSITIVITY;
+      this.yaw -= dx * this.mouseSensitivity;
+      this.pitch -= dy * this.mouseSensitivity;
       if (this.pitch > MAX_PITCH) this.pitch = MAX_PITCH;
       if (this.pitch < -MAX_PITCH) this.pitch = -MAX_PITCH;
     }
@@ -106,6 +114,10 @@ export class Player {
     if (this.velocity.y < -35) this.velocity.y = -35;
 
     this.moveWithCollisions(dt);
+    if (this.position.y < this.fallRespawnY) {
+      this.respawn();
+      this.onFall?.();
+    }
     this.syncCamera();
 
     const moving = wish.lengthSq() > 0.001 && this.onGround;

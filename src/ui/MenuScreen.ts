@@ -12,6 +12,7 @@ export class MenuScreen {
   private readonly panel: HTMLDivElement;
   private readonly callbacks: MenuCallbacks;
   private currentKind: MenuKind | null = null;
+  private continuePlayingHandler: (() => void) | null = null;
 
   constructor(container: HTMLElement, callbacks: MenuCallbacks) {
     this.callbacks = callbacks;
@@ -44,19 +45,32 @@ export class MenuScreen {
     this.root.style.display = 'flex';
   }
 
-  showWin(finalScore: number, stagesCleared: number, totalStages: number): void {
+  showWin(
+    finalScore: number,
+    stagesCleared: number,
+    totalStages: number,
+    options?: { onContinuePlaying?: () => void; message?: string },
+  ): void {
     this.currentKind = 'win';
     const winPhoto = `${import.meta.env.BASE_URL}game_won.JPG`;
+    const message = options?.message ?? WIN_MESSAGES.body;
+    const continueButton = options?.onContinuePlaying
+      ? `<button class="wa-button wa-button-secondary" data-action="continue-playing">${WIN_MESSAGES.continuePlayingButton}</button>`
+      : '';
     this.panel.innerHTML = `
       <div class="wa-badge wa-badge-win">Kazandın!</div>
-      <p class="wa-body wa-win-message">${WIN_MESSAGES.body}</p>
+      <p class="wa-body wa-win-message">${message}</p>
       <img class="wa-win-photo" src="${winPhoto}" alt="Hilal & Cihanser" />
       <div class="wa-final">
         <div><span>Skor</span><strong>${finalScore}</strong></div>
         <div><span>Aşama</span><strong>${stagesCleared}/${totalStages}</strong></div>
       </div>
-      <button class="wa-button" data-action="restart">${WIN_MESSAGES.button}</button>
+      <div class="wa-button-row">
+        <button class="wa-button" data-action="restart">${WIN_MESSAGES.button}</button>
+        ${continueButton}
+      </div>
     `;
+    this.continuePlayingHandler = options?.onContinuePlaying ?? null;
     this.bindButtons();
     this.root.style.display = 'flex';
   }
@@ -81,6 +95,7 @@ export class MenuScreen {
   hide(): void {
     this.root.style.display = 'none';
     this.currentKind = null;
+    this.continuePlayingHandler = null;
   }
 
   isVisible(): boolean {
@@ -95,6 +110,7 @@ export class MenuScreen {
         const action = btn.dataset.action;
         if (action === 'start') this.callbacks.onStart();
         if (action === 'restart') this.callbacks.onRestart();
+        if (action === 'continue-playing') this.continuePlayingHandler?.();
       });
     }
   }
@@ -246,6 +262,19 @@ export class MenuScreen {
       }
       .wa-button:active {
         transform: translateY(0);
+      }
+      .wa-button-row {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .wa-button-secondary {
+        background: linear-gradient(135deg, #7dd3ff, #5cc4a8);
+        box-shadow: 0 10px 20px rgba(120, 200, 180, 0.35);
+      }
+      .wa-button-secondary:hover {
+        box-shadow: 0 14px 26px rgba(120, 200, 180, 0.45);
       }
     `;
     const style = document.createElement('style');

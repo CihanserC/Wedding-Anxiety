@@ -2,16 +2,17 @@
 
 > Hilal için tarayıcıda çalışan, Minecraft tarzı voxel dünyada düğün anksiyetesini sembolik düşmanlara karşı yenme temalı 3D FPS oyunu.
 
-**Ana mesaj:** Anksiyete yenilmez bir düşman değil — yönetilebilir ve aşılabilir. Bu oyun terapötik ve eğlenceli bir ton taşır: stresi "vurarak" azaltmak, aşamaları geçmek ve sonunda huzurlu bir düğün sahnesine ulaşmak.
+**Ana mesaj:** Anksiyete yenilmez bir düşman değil; yönetilebilir ve aşılabilir. Bu oyun terapötik ve eğlenceli bir ton taşır: stresi "vurarak" azaltmak, aşamaları geçmek ve sonunda huzurlu bir düğün sahnesine ulaşmak.
 
 ## Konsept
 
 Hilal, üç farklı mekânda toplam 9 aşamalık bir yolculuğa çıkar. Her mekânda anksiyete kaynaklarını temsil eden düşmanlarla savaşır:
 
-- **Meraklı Teyze** — "Ne zaman evleneceksiniz?" sorularıyla sinsice yaklaşır (stalker davranışı)
-- **Mükemmeliyetçi Kuzen** — Karşılaştırma baskısı; ani hamlelerle dalar (dasher davranışı)
-- **Zaman Canavarı** — Geri sayım stresi; hızlı ve doğrudan saldırır
-- **Beklenti Gölgesi (boss)** — Herkesin beklentisinden doğan büyük gölge; sadece son aşamada çıkar (floater davranışı)
+- **Meraklı Teyze** - "Ne zaman evleneceksiniz?" sorularıyla doğrudan yaklaşır (chase)
+- **Mükemmeliyetçi Kuzen** - Karşılaştırma baskısı; dur-kalk yaparak sinsice yaklaşır (stalker)
+- **Zaman Canavarı** - Geri sayım stresi; ani hız patlamalarıyla saldırır (dasher)
+- **Fotoğraf Flaşörü** - Ani flaşlarla anksiyete sıçratır; mesafede durup parlar (flasher)
+- **Beklenti Gölgesi (boss)** - Herkesin beklentisinden doğan büyük gölge; fazlarla güçlenir (floater)
 
 Anksiyete metresi %100'e ulaşırsa kaybedersin; düşmanları vurdukça metre azalır.
 
@@ -46,9 +47,11 @@ Silahlar ekranda elinde görünür; fare tekerleği ile de silahlar arasında ge
 | `Sol Tık` | Ateş |
 | `1` `2` `3` | Silah değiştir |
 | `Fare Tekerleği` | Silahlar arası geçiş |
+| `E` | Etkileşim |
 | `Space` | Zıpla |
 | `Shift` | Koş |
-| `Esc` | Fareyi serbest bırak / duraklat |
+| `Esc` | Duraklat |
+| `M` | Sessiz / ses aç |
 
 ## Kurulum ve Çalıştırma
 
@@ -89,10 +92,10 @@ Repo Netlify'a bağlıdır; `main` branch'ine her push otomatik deploy tetikler.
 
 ## Teknoloji
 
-- [Three.js](https://threejs.org/) r160+ — WebGL render
-- [Vite](https://vitejs.dev/) — Dev server + build
+- [Three.js](https://threejs.org/) r160+ - WebGL render
+- [Vite](https://vitejs.dev/) - Dev server + build
 - TypeScript (strict mode)
-- Web Audio API — prosedürel ses efektleri (harici asset yok)
+- Web Audio API - prosedürel ses efektleri (harici asset yok)
 - Voxel InstancedMesh rendering (blok tipi başına tek instanced mesh)
 - Özel AABB çarpışma + DDA raycast
 

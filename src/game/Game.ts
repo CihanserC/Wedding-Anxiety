@@ -4,10 +4,11 @@ import { createLighting, type SceneLighting } from '../rendering/Lighting';
 import { HUD } from '../ui/HUD';
 import { MenuScreen } from '../ui/MenuScreen';
 import { DialogueBox } from '../ui/DialogueBox';
-import { START_MESSAGES, CAT_FEED_MESSAGES, PIANO_PLAY_MESSAGES } from '../data/messages';
+import { CAT_FEED_MESSAGES, PIANO_PLAY_MESSAGES, ALTAR_MESSAGES, WEDDING_NPC_MESSAGES, WIN_MESSAGES } from '../data/messages';
 import { AnxietyMeter } from './AnxietyMeter';
 import { AudioManager } from './AudioManager';
 import { EnemyManager } from './EnemyManager';
+import { NpcManager } from './NpcManager';
 import { Player } from './Player';
 import { WeaponSystem } from './WeaponSystem';
 import { makeLevelState, type LevelState } from './WaveManager';
@@ -18,9 +19,14 @@ import { WEAPONS, WEAPON_ORDER, type WeaponId } from '../data/weapons';
 import { createWallSign } from '../rendering/WallSign';
 import { buildHallDecorations } from '../rendering/WeddingDecorations';
 import { buildProps, updateEatingCat } from '../rendering/MapProps';
+import { PauseScreen } from '../ui/PauseScreen';
+import { BossCinematic } from '../ui/BossCinematic';
+import { EnemyProjectileManager } from './EnemyProjectiles';
+import { loadSettings, saveSettings, type GameSettings } from './GameSettings';
+
 import { MAPS, totalLevelCount } from '../data/maps';
 
-type GameState = 'menu' | 'intro' | 'playing' | 'transition' | 'map-intro' | 'win' | 'lose';
+type GameState = 'menu' | 'intro' | 'playing' | 'paused' | 'boss-cinematic' | 'transition' | 'map-intro' | 'win' | 'lose';
 
 export class Game {
   private readonly container: HTMLElement;
@@ -33,11 +39,15 @@ export class Game {
   private readonly input: InputManager;
   private readonly weapon: WeaponSystem;
   private readonly enemies: EnemyManager;
+  private readonly npcs: NpcManager;
   private readonly anxiety: AnxietyMeter;
   private readonly hud: HUD;
   private readonly menu: MenuScreen;
+  private readonly pause: PauseScreen;
+  private readonly bossCinematic: BossCinematic;
   private readonly dialogue: DialogueBox;
   private readonly effects: ProjectileEffects;
+  private readonly enemyProjectiles: EnemyProjectileManager;
   private readonly audio: AudioManager;
 
   private state: GameState = 'menu';
@@ -53,6 +63,14 @@ export class Game {
   private catAnimTime = 0;
   private catMesh: THREE.Object3D | null = null;
   private pianoPlayed = false;
+  private altarUsedThisLevel = false;
+  private settings: GameSettings = loadSettings();
+  private intentionalUnlock = false;
+  private extraEnemiesRequired = 0;
+  private bossCinematicEnemy: Enemy | null = null;
+  private pendingBossPhase: 2 | 3 | null = null;
+  private readonly bossCinematicPlayed = new Set<2 | 3>();
+  private weddingChatNpc: 'bride' | 'groom' | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -63,6 +81,7 @@ export class Game {
     container.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
+    this.npcs = new NpcManager(this.scene);
     this.lighting = createLighting(this.scene, MAPS[0].atmosphere);
 
     this.loadMap(0);
@@ -72,6 +91,7 @@ export class Game {
     this.scene.add(this.player.camera);
 
     this.effects = new ProjectileEffects(this.scene);
+    this.enemyProjectiles = new EnemyProjectileManager(this.scene);
     this.weapon = new WeaponSystem(this.world, this.effects);
     this.audio = new AudioManager();
 
@@ -79,6 +99,10 @@ export class Game {
     this.enemies = new EnemyManager(this.scene, this.world, {
       onKilled: (enemy) => this.handleEnemyKilled(enemy),
       onContact: (enemy, dt) => this.handleEnemyContact(enemy, dt),
+      onFlash: (enemy) => this.handleEnemyFlash(enemy),
+      onBossPhase: (enemy, phase) => this.handleBossPhase(enemy, phase),
+      onShootFireball: (origin, direction, speed, anxietyHit) =>
+        this.enemyProjectiles.spawnFireball(origin, direction, speed, anxietyHit),
     });
 
     this.hud = new HUD(container);
@@ -87,8 +111,16 @@ export class Game {
       onStart: () => this.startRun(),
       onRestart: () => this.startRun(),
     });
+    this.pause = new PauseScreen(container, this.settings, {
+      onResume: () => this.resumeFromPause(),
+      onMainMenu: () => this.returnToMainMenu(),
+      onSettingsChange: (settings) => this.applySettings(settings),
+    });
+    this.bossCinematic = new BossCinematic(container);
 
     this.levelState = makeLevelState(MAPS[0].levels[0]);
+    this.applySettings(this.settings);
+    this.player.onFall = () => this.handlePlayerFall();
 
     window.addEventListener('resize', this.onResize);
     this.input.onLockChange(() => this.handlePointerLockChange());
@@ -102,7 +134,9 @@ export class Game {
 
     if (this.world) {
       this.enemies?.clear();
+      this.npcs?.clear();
       this.effects?.dispose();
+      this.enemyProjectiles?.clear();
       this.world.disposeMesh();
     }
 
@@ -112,6 +146,7 @@ export class Game {
     this.addBanner();
     this.addDecorations();
     this.addProps();
+    this.npcs.spawnAll(this.world.npcs);
     this.audio?.setBgm(mapDef.bgm ?? null);
 
     this.weapon?.setWorld(this.world);
@@ -152,18 +187,71 @@ export class Game {
   };
 
   private handlePointerLockChange(): void {
-    if (this.state !== 'playing') return;
+    if (this.state !== 'playing' && this.state !== 'paused') return;
     if (!this.input.isLocked()) {
-      this.dialogue.show({
-        title: 'Duraklatıldı',
-        body: START_MESSAGES.tip,
-        continueLabel: 'Geri Dön',
-        onContinue: () => {
-          if (this.state === 'playing') this.input.requestPointerLock();
-        },
-      });
-    } else {
-      this.dialogue.hide();
+      if (this.intentionalUnlock) {
+        this.intentionalUnlock = false;
+        return;
+      }
+      if (this.state === 'playing') this.enterPause();
+    }
+  }
+
+  private applySettings(settings: GameSettings): void {
+    this.settings = { ...settings };
+    saveSettings(this.settings);
+    this.player.setMouseSensitivity(this.settings.mouseSensitivity);
+    this.audio.setMuted(this.settings.muted);
+    this.audio.setSfxVolume(this.settings.sfxVolume);
+    this.audio.setMusicVolume(this.settings.musicVolume);
+    if (!this.settings.muted && (this.state === 'playing' || this.state === 'paused')) {
+      const bgm = MAPS[this.mapIndex]?.bgm ?? null;
+      if (bgm) this.audio.setBgm(bgm);
+    }
+    if (this.pause.isVisible()) this.pause.show(this.settings);
+  }
+
+  private enterPause(): void {
+    if (this.state !== 'playing') return;
+    this.state = 'paused';
+    this.intentionalUnlock = true;
+    this.input.releasePointerLock();
+    this.pause.show(this.settings);
+  }
+
+  private resumeFromPause(): void {
+    if (this.state !== 'paused') return;
+    this.state = 'playing';
+    this.pause.hide();
+    this.input.requestPointerLock();
+  }
+
+  private returnToMainMenu(): void {
+    this.state = 'menu';
+    this.pause.hide();
+    this.dialogue.hide();
+    this.hud.hide();
+    this.input.releasePointerLock();
+    this.audio.stopBgm();
+    this.enemies.clear();
+    this.npcs.clear();
+    this.menu.showStart(this.score > 0 ? this.score : undefined);
+  }
+
+  private handlePlayerFall(): void {
+    if (this.state !== 'playing') return;
+    this.anxiety.add(8);
+    this.hud.flashDamage();
+    this.audio.play('hurt');
+  }
+
+  private toggleMute(): void {
+    this.settings.muted = this.audio.toggleMuted();
+    saveSettings(this.settings);
+    if (this.pause.isVisible()) this.pause.show(this.settings);
+    const currentBgm = MAPS[this.mapIndex]?.bgm ?? null;
+    if (!this.settings.muted && currentBgm && this.state === 'playing') {
+      this.audio.setBgm(currentBgm);
     }
   }
 
@@ -190,11 +278,25 @@ export class Game {
     this.effects.update(dt);
 
     if (this.state === 'playing') {
+      if (this.input.consumePause()) {
+        this.enterPause();
+      }
+      if (this.input.consumeMute()) {
+        this.toggleMute();
+      }
+
       this.enemies.update(dt, this.player.position);
+      this.enemyProjectiles.update(dt, this.player.position, this.world, (amount) => {
+        this.anxiety.add(amount);
+        this.hud.flashDamage();
+        this.audio.play('hurt');
+      });
       this.anxiety.update(dt, true);
       this.tickLevel(dt);
       this.tickCatInteraction(dt);
       this.tickPianoInteraction();
+      this.tickAltarInteraction();
+      this.tickWeddingNpcInteraction();
 
       if (active) {
         const requested = this.input.consumeWeaponSelect();
@@ -206,7 +308,15 @@ export class Game {
       if (active && this.input.consumeFire()) {
         const origin = this.player.getEyePosition();
         const dir = this.player.getAimDirection();
-        const result = this.weapon.fire(this.activeWeapon, origin, dir, this.enemies.enemies);
+        const result = this.weapon.fire(
+          this.activeWeapon,
+          origin,
+          dir,
+          this.enemies.enemies,
+          {
+            onBossPhase: (enemy, phase) => this.handleBossPhase(enemy, phase),
+          },
+        );
         if (result) {
           this.audio.play('shoot');
           this.player.rig.onFire(result.recoil);
@@ -217,6 +327,14 @@ export class Game {
       if (this.anxiety.isOverwhelmed()) {
         this.transitionToLose();
       }
+    } else if (this.state === 'boss-cinematic') {
+      this.bossCinematic.update(dt);
+      this.enemies.update(dt, this.player.position);
+      this.enemyProjectiles.update(dt, this.player.position, this.world, (amount) => {
+        this.anxiety.add(amount);
+        this.hud.flashDamage();
+        this.audio.play('hurt');
+      });
     }
 
     this.hud.update({
@@ -229,7 +347,10 @@ export class Game {
       overallStage: this.stagesCleared + 1,
       totalStages: totalLevelCount(),
       score: this.score,
-      enemiesLeft: Math.max(0, this.levelState.level.totalEnemies - this.levelState.killedTotal),
+      enemiesLeft: Math.max(
+        0,
+        this.levelState.level.totalEnemies + this.extraEnemiesRequired - this.levelState.killedTotal,
+      ),
       reloadRatio: this.weapon.cooldownRatio(),
       weaponName: WEAPONS[this.activeWeapon].displayName,
     });
@@ -274,6 +395,7 @@ export class Game {
     this.catFed = true;
     this.enemies.clear();
     this.state = 'transition';
+    this.intentionalUnlock = true;
     this.input.releasePointerLock();
     this.hud.setCrosshairVisible(false);
     this.hud.setInteractPrompt(null);
@@ -285,6 +407,145 @@ export class Game {
       continueLabel: CAT_FEED_MESSAGES.button,
       onContinue: () => this.advanceStageAfterSkip(),
     });
+  }
+
+  private tickAltarInteraction(): void {
+    if (this.altarUsedThisLevel || !this.input.isLocked()) return;
+    if (this.levelState.phase === 'celebration') return;
+
+    const altar = this.world.interactables.find((item) => item.kind === 'altar');
+    if (!altar) return;
+
+    const dx = this.player.position.x - altar.x;
+    const dz = this.player.position.z - altar.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    const near = dist <= (altar.radius ?? 3);
+
+    if (!near) return;
+
+    this.hud.setInteractPrompt(ALTAR_MESSAGES.prompt);
+
+    if (this.input.consumeInteract()) {
+      this.useAltarBreather();
+    }
+  }
+
+  private useAltarBreather(): void {
+    if (this.altarUsedThisLevel) return;
+    this.altarUsedThisLevel = true;
+    this.anxiety.reduce(15);
+    this.hud.setInteractPrompt(null);
+    this.intentionalUnlock = true;
+    this.input.releasePointerLock();
+    this.dialogue.show({
+      title: ALTAR_MESSAGES.title,
+      body: ALTAR_MESSAGES.body,
+      continueLabel: 'Devam Et',
+      onContinue: () => {
+        if (this.state === 'playing') this.input.requestPointerLock();
+      },
+    });
+  }
+
+  private tickWeddingNpcInteraction(): void {
+    if (MAPS[this.mapIndex].id !== 'wedding-hall' || !this.input.isLocked()) {
+      this.hud.setSubtitle([]);
+      return;
+    }
+
+    const phase = this.levelState.phase;
+    if (phase === 'celebration') {
+      this.tickWeddingCelebrationInteraction();
+      return;
+    }
+
+    if (phase !== 'active') {
+      this.hud.setSubtitle([]);
+      return;
+    }
+
+    const allSpawned = this.levelState.batchIndex >= this.levelState.level.batches.length;
+    const enemiesRemain = !allSpawned || this.enemies.aliveCount() > 0;
+    if (!enemiesRemain) {
+      this.hud.setSubtitle([]);
+      return;
+    }
+
+    const groom = this.world.interactables.find((item) => item.kind === 'groom-chat');
+    const bride = this.world.interactables.find((item) => item.kind === 'bride-chat');
+    const lines: string[] = [];
+
+    if (groom && this.isNearInteractable(groom)) {
+      lines.push(`Damat: ${WEDDING_NPC_MESSAGES.groomStressed}`);
+    }
+    if (bride && this.isNearInteractable(bride)) {
+      lines.push(`Gelin: ${WEDDING_NPC_MESSAGES.brideStressed}`);
+    }
+
+    this.hud.setSubtitle(lines);
+  }
+
+  private tickWeddingCelebrationInteraction(): void {
+    this.hud.setSubtitle([]);
+
+    const groom = this.world.interactables.find((item) => item.kind === 'groom-chat');
+    const bride = this.world.interactables.find((item) => item.kind === 'bride-chat');
+    const nearGroom = groom ? this.isNearInteractable(groom) : false;
+    const nearBride = bride ? this.isNearInteractable(bride) : false;
+
+    if (nearGroom || nearBride) {
+      this.hud.setInteractPrompt(WEDDING_NPC_MESSAGES.chatPrompt);
+      if (this.input.consumeInteract()) {
+        this.weddingChatNpc = nearGroom ? 'groom' : 'bride';
+        this.openWeddingChatChoices();
+      }
+      return;
+    }
+
+    this.hud.setInteractPrompt(null);
+  }
+
+  private openWeddingChatChoices(): void {
+    const npc = this.weddingChatNpc;
+    if (!npc) return;
+
+    this.intentionalUnlock = true;
+    this.input.releasePointerLock();
+    this.hud.setInteractPrompt(null);
+    this.hud.setCrosshairVisible(false);
+
+    this.dialogue.showChoices({
+      title: WEDDING_NPC_MESSAGES.choiceTitle,
+      speaker: npc === 'groom' ? 'Damat' : 'Gelin',
+      choices: [
+        { id: 'a', label: WEDDING_NPC_MESSAGES.choices.a },
+        { id: 'b', label: WEDDING_NPC_MESSAGES.choices.b },
+        { id: 'c', label: WEDDING_NPC_MESSAGES.choices.c },
+      ],
+      onChoose: (id) => this.showWeddingChatResponse(npc, id),
+    });
+  }
+
+  private showWeddingChatResponse(npc: 'bride' | 'groom', choice: 'a' | 'b' | 'c'): void {
+    const body = WEDDING_NPC_MESSAGES.responses[npc][choice];
+    this.dialogue.show({
+      title: npc === 'groom' ? 'Damat' : 'Gelin',
+      body,
+      continueLabel: 'Devam Et',
+      onContinue: () => {
+        this.weddingChatNpc = null;
+        if (this.state === 'playing' && this.levelState.phase === 'celebration') {
+          this.hud.setCrosshairVisible(true);
+          this.input.requestPointerLock();
+        }
+      },
+    });
+  }
+
+  private isNearInteractable(item: { x: number; z: number; radius?: number }): boolean {
+    const dx = this.player.position.x - item.x;
+    const dz = this.player.position.z - item.z;
+    return Math.sqrt(dx * dx + dz * dz) <= (item.radius ?? 2.5);
   }
 
   private tickPianoInteraction(): void {
@@ -300,7 +561,7 @@ export class Game {
     const near = dist <= (piano.radius ?? 3);
 
     if (!near) {
-      // Only clear if we're not also showing cat prompt — cat handler manages its own
+      // Only clear if we're not also showing cat prompt; cat handler manages its own
       if (!this.world.interactables.some((i) => i.kind === 'cat')) {
         this.hud.setInteractPrompt(null);
       }
@@ -319,6 +580,7 @@ export class Game {
     this.pianoPlayed = true;
     this.enemies.clear();
     this.state = 'transition';
+    this.intentionalUnlock = true;
     this.input.releasePointerLock();
     this.hud.setCrosshairVisible(false);
     this.hud.setInteractPrompt(null);
@@ -377,6 +639,7 @@ export class Game {
 
   private tickLevel(dt: number): void {
     const s = this.levelState;
+    if (s.phase === 'celebration') return;
     if (s.phase !== 'active') return;
 
     s.timer -= dt;
@@ -391,9 +654,51 @@ export class Game {
 
     const allSpawned = s.batchIndex >= s.level.batches.length;
     if (allSpawned && this.enemies.aliveCount() === 0) {
+      const currentMap = MAPS[this.mapIndex];
+      const isFinalBoss =
+        currentMap.id === 'wedding-hall' &&
+        this.levelIndex >= currentMap.levels.length - 1;
+
+      if (isFinalBoss) {
+        s.phase = 'clearing';
+        this.audio.play('wave-clear');
+        this.stagesCleared++;
+        this.showFinalWinScreen();
+        return;
+      }
+
       s.phase = 'clearing';
       this.finishLevel();
     }
+  }
+
+  private showFinalWinScreen(): void {
+    this.state = 'win';
+    this.intentionalUnlock = true;
+    this.pause.hide();
+    this.bossCinematic.hide();
+    this.dialogue.hide();
+    this.hud.hide();
+    this.input.releasePointerLock();
+    this.audio.stopBgm();
+    this.audio.play('win');
+    this.menu.showWin(this.score, this.stagesCleared, totalLevelCount(), {
+      message: WIN_MESSAGES.finaleBody,
+      onContinuePlaying: () => this.enterWeddingEpilogue(),
+    });
+  }
+
+  private enterWeddingEpilogue(): void {
+    this.menu.hide();
+    this.state = 'playing';
+    this.levelState.phase = 'celebration';
+    this.hud.show();
+    this.hud.setCrosshairVisible(true);
+    this.hud.setInteractPrompt(null);
+    this.hud.setSubtitle([]);
+    this.anxiety.reduce(30);
+    this.audio.setBgm(MAPS[this.mapIndex].bgm ?? null);
+    this.input.requestPointerLock();
   }
 
   private finishLevel(): void {
@@ -409,13 +714,14 @@ export class Game {
     }
 
     this.state = 'transition';
+    this.intentionalUnlock = true;
     this.input.releasePointerLock();
     this.hud.setCrosshairVisible(false);
 
     const level = this.levelState.level;
     if (isLastLevelInMap) {
       this.dialogue.show({
-        title: `${currentMap.displayName} — Tamamlandı`,
+        title: `${currentMap.displayName} - Tamamlandı`,
         body: level.clearMessage,
         continueLabel: 'Yeni Yolculuk',
         onContinue: () => this.transitionToNextMap(),
@@ -464,7 +770,12 @@ export class Game {
     this.levelIndex = levelIndex;
     this.levelState = makeLevelState(level);
     this.state = 'intro';
+    this.altarUsedThisLevel = false;
+    this.extraEnemiesRequired = 0;
+    this.bossCinematicPlayed.clear();
+    this.enemyProjectiles.clear();
     this.hud.setCrosshairVisible(false);
+    if (levelIndex === 0) this.player.respawn();
     if (levelIndex > 0) this.anxiety.reduce(10);
 
     this.dialogue.show({
@@ -478,7 +789,7 @@ export class Game {
   private activateLevel(): void {
     this.state = 'playing';
     this.levelState.phase = 'active';
-    this.levelState.timer = 0.5;
+    this.levelState.timer = 2.5;
     this.hud.setCrosshairVisible(true);
     this.hud.show();
     this.input.requestPointerLock();
@@ -492,7 +803,7 @@ export class Game {
   }
 
   private handleEnemyContact(enemy: Enemy, dt: number): void {
-    this.anxiety.add(enemy.stats.contactAnxietyPerSecond * dt);
+    this.anxiety.add(enemy.stats.contactAnxietyPerSecond * enemy.contactAnxietyMultiplier * dt);
     enemy.contactAccumulator += dt;
     if (enemy.contactAccumulator >= 0.6) {
       enemy.contactAccumulator = 0;
@@ -501,8 +812,62 @@ export class Game {
     }
   }
 
+  private handleEnemyFlash(_enemy: Enemy): void {
+    this.anxiety.add(12);
+    this.hud.flashDamage();
+    this.audio.play('hurt');
+  }
+
+  private handleBossPhase(enemy: Enemy, phase: 2 | 3): void {
+    if (this.state === 'boss-cinematic' || this.bossCinematicPlayed.has(phase)) return;
+
+    this.bossCinematicPlayed.add(phase);
+    this.state = 'boss-cinematic';
+    this.bossCinematicEnemy = enemy;
+    this.pendingBossPhase = phase;
+    this.intentionalUnlock = true;
+    this.input.releasePointerLock();
+    this.hud.setCrosshairVisible(false);
+    this.dialogue.hide();
+
+    for (const e of this.enemies.enemies) {
+      e.combatFrozen = true;
+    }
+    enemy.startRageTransition(phase === 3 ? 2 : 1);
+
+    const text = phase === 2 ? 'Altın Canavarı kızdı!' : 'Altın Canavarı ÖFKELENDİ!';
+    const durationMs = phase === 2 ? 2800 : 2000;
+    this.bossCinematic.show(text, durationMs, () => this.finishBossCinematic());
+    this.audio.play('hurt');
+    this.hud.flashDamage();
+  }
+
+  private finishBossCinematic(): void {
+    const phase = this.pendingBossPhase;
+    const enemy = this.bossCinematicEnemy;
+    this.pendingBossPhase = null;
+    this.bossCinematicEnemy = null;
+
+    if (phase === 2 && enemy) {
+      this.extraEnemiesRequired += 2;
+      for (let i = 0; i < 2; i++) {
+        this.enemies.spawn('merakli-teyze', [this.player.position, enemy.position], 6);
+      }
+    }
+
+    for (const e of this.enemies.enemies) {
+      e.combatFrozen = false;
+    }
+
+    if (this.state !== 'boss-cinematic') return;
+    this.state = 'playing';
+    this.hud.setCrosshairVisible(true);
+    this.input.requestPointerLock();
+  }
+
   private startRun(): void {
     this.audio.ensureStarted();
+    this.pause.hide();
     this.stagesCleared = 0;
     this.score = 0;
     this.mapIndex = 0;
@@ -510,6 +875,8 @@ export class Game {
     this.catFed = false;
     this.catAnimTime = 0;
     this.pianoPlayed = false;
+    this.altarUsedThisLevel = false;
+    this.bossCinematicPlayed.clear();
     this.loadMap(0);
     this.anxiety.reset();
     this.setActiveWeapon('pistol');
@@ -529,6 +896,8 @@ export class Game {
 
   private transitionToWin(): void {
     this.state = 'win';
+    this.pause.hide();
+    this.bossCinematic.hide();
     this.hud.hide();
     this.dialogue.hide();
     this.input.releasePointerLock();
@@ -540,6 +909,8 @@ export class Game {
   private transitionToLose(): void {
     if (this.state === 'lose') return;
     this.state = 'lose';
+    this.pause.hide();
+    this.bossCinematic.hide();
     this.hud.hide();
     this.dialogue.hide();
     this.input.releasePointerLock();

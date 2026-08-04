@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { BlockId } from '../../data/blocks';
 import type { EnemyType } from '../../data/enemies';
+import type { NpcType } from '../../data/npcs';
 
 export interface WorldWriter {
   readonly width: number;
@@ -45,6 +46,14 @@ export interface PortraitSpec {
   names: string;
 }
 
+export interface NpcSpec {
+  type: NpcType;
+  x: number;
+  y: number;
+  z: number;
+  rotationY: number;
+}
+
 export interface HallDecorations {
   statues: StatueSpec[];
   portrait?: PortraitSpec;
@@ -62,7 +71,7 @@ export interface PropSpec {
 }
 
 export interface InteractableSpec {
-  kind: 'cat' | 'piano';
+  kind: 'cat' | 'piano' | 'altar' | 'bride-chat' | 'groom-chat';
   x: number;
   y: number;
   z: number;
@@ -77,5 +86,6 @@ export interface GeneratorResult {
   bannerPosition?: BannerSpec;
   decorations?: HallDecorations;
   props?: PropSpec[];
+  npcs?: NpcSpec[];
   interactables?: InteractableSpec[];
 }

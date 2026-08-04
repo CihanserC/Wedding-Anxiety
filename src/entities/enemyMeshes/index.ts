@@ -22,6 +22,8 @@ export function buildEnemyMesh(type: EnemyType, stats: EnemyStats): EnemyMeshRes
       return buildMukemmeliyetciKuzen(stats);
     case 'zaman-canavari':
       return buildZamanCanavari(stats);
+    case 'fotograf-flasoru':
+      return buildFotografFlasoru(stats);
     case 'beklenti-golgesi':
       return buildBeklentiGolgesi(stats);
   }
@@ -207,13 +209,19 @@ function buildZamanCanavari(stats: EnemyStats): EnemyMeshResult {
   group.add(legL, legR);
 
   const armGeo = new THREE.BoxGeometry(0.08, 0.7, 0.08);
+  const armLGroup = new THREE.Group();
+  const armRGroup = new THREE.Group();
+  armLGroup.position.set(-0.35, spineH * 0.55, 0);
+  armRGroup.position.set(0.35, spineH * 0.55, 0);
   const armL = new THREE.Mesh(armGeo, boneMat);
   const armR = new THREE.Mesh(armGeo, boneMat);
-  armL.position.set(-0.35, spineH * 0.55, 0);
-  armR.position.set(0.35, spineH * 0.55, 0);
+  armL.position.y = -0.35;
+  armR.position.y = -0.35;
   armL.rotation.z = 0.25;
   armR.rotation.z = -0.25;
-  group.add(armL, armR);
+  armLGroup.add(armL);
+  armRGroup.add(armR);
+  group.add(armLGroup, armRGroup);
 
   const headGroup = new THREE.Group();
   headGroup.position.set(0, spineH + 0.25, 0);
@@ -247,7 +255,7 @@ function buildZamanCanavari(stats: EnemyStats): EnemyMeshResult {
 
   group.add(headGroup);
 
-  return { root: group, materials, headGroup, jitterMeshes: [headGroup, armL, armR] };
+  return { root: group, materials, headGroup, armGroups: [armLGroup, armRGroup], jitterMeshes: [headGroup] };
 }
 
 /** Boss: floating golden shadow with multiple reaching arms and warm aura. */
@@ -325,4 +333,56 @@ function buildBeklentiGolgesi(stats: EnemyStats): EnemyMeshResult {
   group.add(aura2);
 
   return { root: group, materials, armGroups, floatBody };
+}
+
+/** Paparazzi figure with a bulky camera and blinding flash lens. */
+function buildFotografFlasoru(stats: EnemyStats): EnemyMeshResult {
+  const group = new THREE.Group();
+  const materials: THREE.MeshLambertMaterial[] = [];
+
+  const suitMat = makeMat(stats.color);
+  const flashMat = makeMat(stats.accentColor, { emissive: 0xffffcc, emissiveIntensity: 0.8 });
+  const lensMat = makeMat(0x111118);
+  materials.push(suitMat, flashMat, lensMat);
+
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.75, 0.35), suitMat);
+  torso.position.y = 0.95;
+  group.add(torso);
+
+  const headGroup = new THREE.Group();
+  headGroup.position.set(0, 1.45, 0);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.42, 0.38), makeMat(0xd8b090));
+  headGroup.add(head);
+  materials.push(head.material as THREE.MeshLambertMaterial);
+
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.1, 0.42), suitMat);
+  cap.position.y = 0.24;
+  headGroup.add(cap);
+
+  const cameraBody = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.28, 0.45), lensMat);
+  cameraBody.position.set(0.32, 1.05, 0.25);
+  group.add(cameraBody);
+
+  const flashLens = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.12), flashMat);
+  flashLens.position.set(0.32, 1.05, 0.52);
+  flashLens.name = 'flash-lens';
+  group.add(flashLens);
+
+  const armLGroup = new THREE.Group();
+  armLGroup.position.set(-0.35, 1.15, 0);
+  const armL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.45, 0.12), suitMat);
+  armL.position.y = -0.2;
+  armLGroup.add(armL);
+  group.add(armLGroup);
+
+  const armRGroup = new THREE.Group();
+  armRGroup.position.set(0.35, 1.15, 0.1);
+  const armR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.4, 0.12), suitMat);
+  armR.position.y = -0.18;
+  armRGroup.add(armR);
+  group.add(armRGroup);
+
+  group.add(headGroup);
+
+  return { root: group, materials, headGroup, armGroups: [armLGroup, armRGroup], jitterMeshes: [flashLens] };
 }
