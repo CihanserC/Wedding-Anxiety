@@ -71,7 +71,9 @@ export type PropKind =
   | 'car'
   | 'cake-table'
   | 'wedding-arch'
-  | 'wedding-steps';
+  | 'wedding-steps'
+  | 'balloon-cluster'
+  | 'suzy-cat';
 
 export interface PropSpec {
   kind: PropKind;
@@ -83,7 +85,7 @@ export interface PropSpec {
 }
 
 export interface InteractableSpec {
-  kind: 'cat' | 'piano' | 'altar' | 'bride-chat' | 'groom-chat';
+  kind: 'cat' | 'piano' | 'altar' | 'cake' | 'suzy-cat' | 'bride-chat' | 'groom-chat';
   x: number;
   y: number;
   z: number;

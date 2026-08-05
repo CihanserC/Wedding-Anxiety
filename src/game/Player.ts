@@ -8,6 +8,7 @@ const PLAYER_HEIGHT = 1.75;
 const EYE_HEIGHT = 1.55;
 const WALK_SPEED = 4.5;
 const SPRINT_SPEED = 7.5;
+const SPEED_BOOST_MULTIPLIER = 1.45;
 const JUMP_SPEED = 7.5;
 const GRAVITY = 22;
 const MOUSE_SENSITIVITY_DEFAULT = 0.0022;
@@ -25,7 +26,16 @@ export class Player {
   private readonly input: InputManager;
   private mouseSensitivity = MOUSE_SENSITIVITY_DEFAULT;
   private fallRespawnY = 0.5;
+  private speedBoostRemaining = 0;
   onFall?: () => void;
+
+  applySpeedBoost(seconds: number): void {
+    this.speedBoostRemaining = Math.max(this.speedBoostRemaining, seconds);
+  }
+
+  get hasSpeedBoost(): boolean {
+    return this.speedBoostRemaining > 0;
+  }
 
   constructor(world: World, input: InputManager, aspect: number) {
     this.world = world;
@@ -101,7 +111,12 @@ export class Player {
     }
     if (wish.lengthSq() > 0) wish.normalize();
 
-    const speed = active && this.input.isDown('sprint') ? SPRINT_SPEED : WALK_SPEED;
+    if (this.speedBoostRemaining > 0) {
+      this.speedBoostRemaining = Math.max(0, this.speedBoostRemaining - dt);
+    }
+
+    const baseSpeed = active && this.input.isDown('sprint') ? SPRINT_SPEED : WALK_SPEED;
+    const speed = baseSpeed * (this.speedBoostRemaining > 0 ? SPEED_BOOST_MULTIPLIER : 1);
     this.velocity.x = wish.x * speed;
     this.velocity.z = wish.z * speed;
 
@@ -141,11 +156,11 @@ export class Player {
     const original = this.position[axis];
     this.position[axis] = original + delta;
     if (this.collides()) {
-      // Auto step-up up to ~1.2 blocks (voxel stairs / ledges)
+      // Auto step-up: küçük basamaklar önce, sonra voxel pervazlar
       if (axis !== 'y') {
         const footY = this.position.y;
         let stepped = false;
-        for (const lift of [1.01, 1.1, 1.2]) {
+        for (const lift of [0.15, 0.18, 0.22, 0.3, 0.45, 0.65, 1.01, 1.1, 1.2]) {
           this.position.y = footY + lift;
           if (!this.collides()) {
             stepped = true;

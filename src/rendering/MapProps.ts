@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { PropSpec } from '../game/worldGen/types';
+import { buildSuzyCat } from './SuzyCat';
 
 /**
  * Non-voxel decorative props placed by map generators: stage instruments
@@ -43,6 +44,10 @@ function buildProp(spec: PropSpec): THREE.Group {
       return buildWeddingArch();
     case 'wedding-steps':
       return buildWeddingStageSteps();
+    case 'balloon-cluster':
+      return buildBalloonCluster();
+    case 'suzy-cat':
+      return buildSuzyCat();
   }
   return new THREE.Group();
 }
@@ -171,6 +176,7 @@ function buildWeddingArch(): THREE.Group {
       2.2 + idx * 0.55,
       0.55 + idx * 0.2,
       balloonColors[i],
+      'arch',
     );
   }
 
@@ -198,43 +204,45 @@ function buildWeddingArch(): THREE.Group {
   return g;
 }
 
-/** Three white marble steps from the stage lip (y=2) down to the carpet (y=1). */
+/** Sarı-beyaz tören merdiveni — sahne (y=2) ile halı (y=1) arası. */
 function buildWeddingStageSteps(): THREE.Group {
   const g = new THREE.Group();
   g.name = 'wedding-stage-steps';
 
-  const marble = lambert(0xf8f4ee);
-  const white = lambert(0xffffff);
+  const white = lambert(0xfffaf5);
+  const cream = lambert(0xf2ebe3);
+  const yellow = lambert(0xf0d060);
   const gold = lambert(0xd4af37);
 
-  const stepH = 0.33;
+  const stepCount = 7;
+  const totalH = 1.0;
+  const stepH = totalH / stepCount;
+  const stepD = 0.42;
+  const width = 4.2;
 
-  // Top step — north edge flush with stage lip
-  const s3 = box(1.05, stepH, 0.4, marble);
-  s3.position.set(0, stepH * 2.5, 0.45);
-  g.add(s3);
-  const s3Trim = box(1.1, 0.04, 0.42, gold);
-  s3Trim.position.set(0, stepH * 2, 0.45);
-  g.add(s3Trim);
+  for (let i = 0; i < stepCount; i++) {
+    // i=0 en alt (seyirci tarafı), i=stepCount-1 en üst (sahne kenarı)
+    const treadMat = i % 2 === 0 ? white : cream;
+    const y = stepH * (i + 0.5);
+    const z = -((stepCount - 1 - i) * stepD);
 
-  // Middle step
-  const s2 = box(1.5, stepH, 0.45, white);
-  s2.position.set(0, stepH * 1.5, 0);
-  g.add(s2);
-  const s2Trim = box(1.56, 0.04, 0.48, gold);
-  s2Trim.position.set(0, stepH, 0);
-  g.add(s2Trim);
+    const tread = box(width - i * 0.08, stepH, stepD - 0.02, treadMat);
+    tread.position.set(0, y, z);
+    g.add(tread);
 
-  // Bottom step — south, toward audience
-  const s1 = box(2.0, stepH, 0.5, marble);
-  s1.position.set(0, stepH * 0.5, -0.5);
-  g.add(s1);
-  const s1TrimL = box(0.06, stepH, 0.5, gold);
-  s1TrimL.position.set(-0.97, stepH * 0.5, -0.5);
-  g.add(s1TrimL);
-  const s1TrimR = box(0.06, stepH, 0.5, gold);
-  s1TrimR.position.set(0.97, stepH * 0.5, -0.5);
-  g.add(s1TrimR);
+    // Sarı/altın ön kenar (nosing)
+    const nose = box(width - i * 0.08 + 0.06, 0.05, 0.06, i % 2 === 0 ? yellow : gold);
+    nose.position.set(0, y + stepH * 0.5 - 0.02, z - (stepD - 0.02) * 0.5 + 0.02);
+    g.add(nose);
+
+    // Yan sarı şeritler
+    const sideL = box(0.07, stepH, stepD - 0.02, yellow);
+    sideL.position.set(-(width - i * 0.08) * 0.5, y, z);
+    g.add(sideL);
+    const sideR = box(0.07, stepH, stepD - 0.02, gold);
+    sideR.position.set((width - i * 0.08) * 0.5, y, z);
+    g.add(sideR);
+  }
 
   return g;
 }
@@ -280,25 +288,59 @@ function addBalloon(
   y: number,
   z: number,
   color: number,
-): void {
+  zone: 'arch' | 'garden' = 'garden',
+): THREE.Group {
+  const g = new THREE.Group();
+  g.userData.isBalloon = true;
+  g.userData.balloonColor = color;
+  g.userData.balloonZone = zone;
+  g.position.set(x, y, z);
+
   const string = box(0.02, 0.55, 0.02, lambert(0xbbbbbb));
-  string.position.set(x, y - 0.35, z);
-  parent.add(string);
+  string.position.set(0, -0.35, 0);
+  g.add(string);
 
   const balloon = new THREE.Mesh(
     new THREE.SphereGeometry(0.22, 10, 10),
     lambert(color),
   );
   balloon.scale.set(1, 1.15, 1);
-  balloon.position.set(x, y, z);
-  parent.add(balloon);
+  g.add(balloon);
 
   const knot = new THREE.Mesh(
     new THREE.SphereGeometry(0.04, 6, 6),
     lambert(0xdddddd),
   );
-  knot.position.set(x, y - 0.28, z);
-  parent.add(knot);
+  knot.position.set(0, -0.28, 0);
+  g.add(knot);
+
+  parent.add(g);
+  return g;
+}
+
+/** Garden balloon bouquet — weighted cluster for outdoor decoration. */
+function buildBalloonCluster(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'balloon-cluster';
+
+  const colors = [0xff6b9d, 0xffd166, 0x7ec8e3, 0xffffff, 0xc9a0ff];
+  const layout: Array<[number, number, number]> = [
+    [0, 1.55, 0],
+    [-0.42, 1.95, 0.18],
+    [0.48, 1.82, -0.14],
+    [-0.18, 2.4, -0.12],
+    [0.32, 2.2, 0.28],
+  ];
+  for (let i = 0; i < layout.length; i++) {
+    const [lx, ly, lz] = layout[i];
+    addBalloon(g, lx, ly, lz, colors[i % colors.length], 'garden');
+  }
+
+  const base = box(0.3, 0.1, 0.3, lambert(0xcccccc));
+  base.position.set(0, 0.05, 0);
+  g.add(base);
+
+  return g;
 }
 
 /** Target height for the wedding cake GLB on the table (~0.9 blocks). */

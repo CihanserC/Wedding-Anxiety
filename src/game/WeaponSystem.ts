@@ -3,19 +3,30 @@ import type { Enemy, EnemyUpdateEvents } from '../entities/Enemy';
 import type { ProjectileEffects } from '../entities/Projectile';
 import type { World } from './World';
 import { WEAPONS, type WeaponDefinition, type WeaponId } from '../data/weapons';
+import type { BalloonRaycastHit } from './BalloonManager';
 
 export interface FireResult {
   hitEnemy: Enemy | null;
   killedEnemy: Enemy | null;
   hitPoint: THREE.Vector3;
   recoil: number;
+  balloonHits: unknown[];
 }
+
+export type BalloonRaycastFn = (
+  origin: THREE.Vector3,
+  direction: THREE.Vector3,
+  maxDistance: number,
+) => BalloonRaycastHit | null;
 
 export class WeaponSystem {
   private cooldown = 0;
   private currentCooldownMax = 0.22;
   private readonly effects: ProjectileEffects;
   private world: World;
+  private balloonRaycast: BalloonRaycastFn | null = null;
+  damageMultiplier = 1;
+  noCooldown = false;
 
   constructor(world: World, effects: ProjectileEffects) {
     this.world = world;
@@ -26,11 +37,21 @@ export class WeaponSystem {
     this.world = world;
   }
 
+  setBalloonRaycast(fn: BalloonRaycastFn | null): void {
+    this.balloonRaycast = fn;
+  }
+
+  resetCheatModifiers(): void {
+    this.damageMultiplier = 1;
+    this.noCooldown = false;
+  }
+
   update(dt: number): void {
     if (this.cooldown > 0) this.cooldown -= dt;
   }
 
   canFire(): boolean {
+    if (this.noCooldown) return true;
     return this.cooldown <= 0;
   }
 
@@ -48,12 +69,13 @@ export class WeaponSystem {
   ): FireResult | null {
     if (!this.canFire()) return null;
     const weapon = WEAPONS[weaponId];
-    this.cooldown = weapon.cooldown;
-    this.currentCooldownMax = weapon.cooldown;
+    this.cooldown = this.noCooldown ? 0 : weapon.cooldown;
+    this.currentCooldownMax = this.noCooldown ? 0 : weapon.cooldown;
 
     let bestHitEnemy: Enemy | null = null;
     let killed: Enemy | null = null;
     let hitPoint = origin.clone().addScaledVector(direction, weapon.range);
+    const balloonHits: unknown[] = [];
 
     const right = tempRight(direction);
     const up = tempUp(direction, right);
@@ -67,6 +89,7 @@ export class WeaponSystem {
       }
 
       const end = this.fireOneRay(weapon, origin, pelletDir, enemies, enemyEvents);
+      if (end.balloonEntry) balloonHits.push(end.balloonEntry);
       if (end.hitEnemy && !bestHitEnemy) bestHitEnemy = end.hitEnemy;
       if (end.killedEnemy && !killed) killed = end.killedEnemy;
       if (p === 0) hitPoint = end.point;
@@ -81,6 +104,7 @@ export class WeaponSystem {
       killedEnemy: killed,
       hitPoint,
       recoil: weapon.recoil,
+      balloonHits,
     };
   }
 
@@ -90,23 +114,40 @@ export class WeaponSystem {
     direction: THREE.Vector3,
     enemies: Enemy[],
     enemyEvents?: EnemyUpdateEvents,
-  ): { point: THREE.Vector3; hitEnemy: Enemy | null; killedEnemy: Enemy | null } {
+  ): {
+    point: THREE.Vector3;
+    hitEnemy: Enemy | null;
+    killedEnemy: Enemy | null;
+    balloonEntry: unknown | null;
+  } {
     const worldHit = this.raycastWorld(origin, direction, weapon.range);
-    const enemyHit = this.raycastEnemies(
-      origin,
-      direction,
-      enemies,
-      worldHit?.distance ?? weapon.range,
-    );
+    let bestDist = worldHit?.distance ?? weapon.range;
+
+    const enemyHit = this.raycastEnemies(origin, direction, enemies, bestDist);
+    if (enemyHit && enemyHit.distance < bestDist) {
+      bestDist = enemyHit.distance;
+    }
+
+    let balloonEntry: unknown | null = null;
+    if (this.balloonRaycast) {
+      const balloonHit = this.balloonRaycast(origin, direction, bestDist);
+      if (balloonHit && balloonHit.distance < bestDist) {
+        bestDist = balloonHit.distance;
+        balloonEntry = balloonHit.entry;
+      }
+    }
 
     let end: THREE.Vector3;
     let hitEnemy: Enemy | null = null;
     let killedEnemy: Enemy | null = null;
 
-    if (enemyHit) {
+    if (balloonEntry) {
+      end = origin.clone().addScaledVector(direction, bestDist);
+    } else if (enemyHit && enemyHit.distance <= bestDist) {
       end = enemyHit.point;
       hitEnemy = enemyHit.enemy;
-      const killedNow = enemyHit.enemy.applyHitWithEvents(weapon.damage, enemyEvents);
+      const damage = weapon.damage * this.damageMultiplier;
+      const killedNow = enemyHit.enemy.applyHitWithEvents(damage, enemyEvents);
       if (killedNow) killedEnemy = enemyHit.enemy;
       this.effects.spawnHitSpark(end, enemyHit.enemy.stats.accentColor);
     } else if (worldHit) {
@@ -118,9 +159,13 @@ export class WeaponSystem {
 
     const muzzle = origin.clone().addScaledVector(direction, 0.6);
     muzzle.y -= 0.15;
-    this.effects.spawnTracer(muzzle, end, weapon.tracerColor);
+    if (weapon.boltStyle) {
+      this.effects.spawnLaserBolt(muzzle, end, weapon.tracerColor);
+    } else {
+      this.effects.spawnTracer(muzzle, end, weapon.tracerColor);
+    }
 
-    return { point: end, hitEnemy, killedEnemy };
+    return { point: end, hitEnemy, killedEnemy, balloonEntry };
   }
 
   private raycastWorld(

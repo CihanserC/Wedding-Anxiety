@@ -4,9 +4,10 @@ import { createLighting, type SceneLighting } from '../rendering/Lighting';
 import { HUD } from '../ui/HUD';
 import { MenuScreen } from '../ui/MenuScreen';
 import { DialogueBox } from '../ui/DialogueBox';
-import { CAT_FEED_MESSAGES, PIANO_PLAY_MESSAGES, ALTAR_MESSAGES, WEDDING_NPC_MESSAGES, WIN_MESSAGES } from '../data/messages';
+import { CAT_FEED_MESSAGES, PIANO_PLAY_MESSAGES, ALTAR_MESSAGES, CAKE_MESSAGES, SUZY_CAT_MESSAGES, HUD_LABELS, WEDDING_NPC_MESSAGES, WIN_MESSAGES } from '../data/messages';
 import { AnxietyMeter } from './AnxietyMeter';
 import { AudioManager } from './AudioManager';
+import { BalloonManager } from './BalloonManager';
 import { EnemyManager } from './EnemyManager';
 import { NpcManager } from './NpcManager';
 import { Player } from './Player';
@@ -19,13 +20,20 @@ import { WEAPONS, WEAPON_ORDER, type WeaponId } from '../data/weapons';
 import { createNeonWallSign, createWallSign } from '../rendering/WallSign';
 import { buildHallDecorations } from '../rendering/WeddingDecorations';
 import { buildProps, updateEatingCat } from '../rendering/MapProps';
+import { updateSuzyCatIdle } from '../rendering/SuzyCat';
 import { PauseScreen } from '../ui/PauseScreen';
+import { CommandConsole } from '../ui/CommandConsole';
 import { BossCinematic } from '../ui/BossCinematic';
 import { ConfettiOverlay } from '../ui/ConfettiOverlay';
 import { EnemyProjectileManager } from './EnemyProjectiles';
 import { loadSettings, saveSettings, type GameSettings } from './GameSettings';
 
-import { MAPS, totalLevelCount } from '../data/maps';
+import { MAPS, totalLevelCount, type MapId } from '../data/maps';
+import { NPC_STATS } from '../data/npcs';
+import { getCheatHelpEditorText, resolveCheat, type CheatId } from './CheatCodes';
+import type { CommandSubmitResult } from '../ui/CommandConsole';
+
+const CAKE_BUFF_DURATION = 15;
 
 type GameState = 'menu' | 'intro' | 'playing' | 'paused' | 'boss-cinematic' | 'transition' | 'map-intro' | 'win' | 'lose';
 
@@ -45,12 +53,14 @@ export class Game {
   private readonly hud: HUD;
   private readonly menu: MenuScreen;
   private readonly pause: PauseScreen;
+  private readonly commandConsole: CommandConsole;
   private readonly bossCinematic: BossCinematic;
   private readonly confetti: ConfettiOverlay;
   private readonly dialogue: DialogueBox;
   private readonly effects: ProjectileEffects;
   private readonly enemyProjectiles: EnemyProjectileManager;
   private readonly audio: AudioManager;
+  private readonly balloons: BalloonManager;
 
   private state: GameState = 'menu';
   private mapIndex = 0;
@@ -61,13 +71,17 @@ export class Game {
   private lastTime = 0;
   private running = false;
   private activeWeapon: WeaponId = 'pistol';
+  private cheatGodMode = false;
   private catFed = false;
   private catAnimTime = 0;
   private catMesh: THREE.Object3D | null = null;
+  private suzyCatMesh: THREE.Object3D | null = null;
+  private suzyAnimTime = 0;
   private pianoPlayed = false;
   private pianoInteractArmed = false;
   private catInteractArmed = false;
   private altarUsedThisLevel = false;
+  private cakeUsedThisLevel = false;
   private settings: GameSettings = loadSettings();
   private intentionalUnlock = false;
   private extraEnemiesRequired = 0;
@@ -77,6 +91,8 @@ export class Game {
   private weddingChatNpc: 'bride' | 'groom' | null = null;
   private pendingFinalWin = false;
   private finalWinDelay = 0;
+  private consoleResumePointerLock = false;
+  private consoleResumePaused = false;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -89,6 +105,7 @@ export class Game {
     this.scene = new THREE.Scene();
     this.npcs = new NpcManager(this.scene);
     this.lighting = createLighting(this.scene, MAPS[0].atmosphere);
+    this.balloons = new BalloonManager();
 
     this.loadMap(0);
 
@@ -99,6 +116,10 @@ export class Game {
     this.effects = new ProjectileEffects(this.scene);
     this.enemyProjectiles = new EnemyProjectileManager(this.scene);
     this.weapon = new WeaponSystem(this.world, this.effects);
+    this.weapon.setBalloonRaycast((origin, direction, maxDistance) => {
+      if (MAPS[this.mapIndex]?.id !== 'wedding-hall' || !this.balloons.hasRemaining()) return null;
+      return this.balloons.raycastHit(origin, direction, maxDistance);
+    });
     this.audio = new AudioManager();
 
     this.anxiety = new AnxietyMeter();
@@ -126,6 +147,10 @@ export class Game {
       onMainMenu: () => this.returnToMainMenu(),
       onSettingsChange: (settings) => this.applySettings(settings),
     });
+    this.commandConsole = new CommandConsole(container, {
+      onSubmit: (command) => this.handleCommandConsoleSubmit(command),
+      onClose: () => this.closeCommandConsole(),
+    });
     this.bossCinematic = new BossCinematic(container);
     this.confetti = new ConfettiOverlay(container);
 
@@ -134,6 +159,7 @@ export class Game {
     this.player.onFall = () => this.handlePlayerFall();
 
     window.addEventListener('resize', this.onResize);
+    window.addEventListener('keydown', this.onCommandConsoleToggleKey);
     this.input.onLockChange(() => this.handlePointerLockChange());
 
     this.menu.showStart();
@@ -189,11 +215,15 @@ export class Game {
 
   private addProps(): void {
     this.catMesh = null;
+    this.suzyCatMesh = null;
+    this.balloons.clear();
     if (this.world.props.length === 0) return;
     const props = buildProps(this.world.props);
     this.worldGroup.add(props);
+    this.balloons.registerFromScene(props);
     props.traverse((child) => {
       if (child.name === 'eating-cat') this.catMesh = child;
+      if (child.name === 'suzy-cat') this.suzyCatMesh = child;
     });
   }
 
@@ -258,6 +288,7 @@ export class Game {
 
   private handlePlayerFall(): void {
     if (this.state !== 'playing') return;
+    if (this.cheatGodMode) return;
     this.anxiety.add(8);
     this.hud.flashDamage();
     this.audio.play('hurt');
@@ -289,6 +320,8 @@ export class Game {
   };
 
   private update(dt: number): void {
+    if (this.commandConsole.isOpen()) return;
+
     const active = this.state === 'playing' && this.input.isLocked();
 
     this.player.update(dt, active);
@@ -326,6 +359,8 @@ export class Game {
       this.tickPianoInteraction();
       this.tickAltarInteraction();
       this.tickWeddingNpcInteraction();
+      this.tickSuzyCatInteraction(dt);
+      this.tickCakeInteraction();
 
       if (active && this.levelState.phase !== 'celebration') {
         const requested = this.input.consumeWeaponSelect();
@@ -351,8 +386,14 @@ export class Game {
           },
         );
         if (result) {
-          this.audio.play('shoot');
+          this.audio.play(this.activeWeapon === 'happiness' ? 'laser' : 'shoot');
           this.player.rig.onFire(result.recoil);
+          for (const entry of result.balloonHits) {
+            this.balloons.pop(entry, (pos, color) => {
+              this.effects.spawnBalloonPop(pos, color);
+              this.audio.play('balloon-pop');
+            });
+          }
           if (result.hitEnemy) this.audio.play('hit');
           if (result.killedEnemy) this.handleBossKillCascade(result.killedEnemy);
         }
@@ -386,7 +427,9 @@ export class Game {
         this.levelState.level.totalEnemies + this.extraEnemiesRequired - this.levelState.killedTotal,
       ),
       reloadRatio: this.weapon.cooldownRatio(),
-      weaponName: WEAPONS[this.activeWeapon].displayName,
+      weaponName: this.player.rig.isCelebrationMode()
+        ? HUD_LABELS.bouquet
+        : WEAPONS[this.activeWeapon].displayName,
       bossHpRatio: this.getBossHpRatio(),
     });
   }
@@ -482,14 +525,7 @@ export class Game {
     if (this.levelState.phase === 'celebration') return;
 
     const altar = this.world.interactables.find((item) => item.kind === 'altar');
-    if (!altar) return;
-
-    const dx = this.player.position.x - altar.x;
-    const dz = this.player.position.z - altar.z;
-    const dist = Math.sqrt(dx * dx + dz * dz);
-    const near = dist <= (altar.radius ?? 3);
-
-    if (!near) return;
+    if (!altar || !this.isNearInteractable(altar)) return;
 
     this.hud.setInteractPrompt(ALTAR_MESSAGES.prompt);
 
@@ -513,6 +549,96 @@ export class Game {
         if (this.state === 'playing') this.input.requestPointerLock();
       },
     });
+  }
+
+  private tickCakeInteraction(): void {
+    if (this.cakeUsedThisLevel || !this.input.isLocked()) return;
+
+    const cake = this.world.interactables.find((item) => item.kind === 'cake');
+    if (!cake || !this.isNearInteractable(cake)) return;
+
+    this.hud.setInteractPrompt(CAKE_MESSAGES.prompt);
+
+    if (this.input.consumeInteract()) {
+      this.useCakeBoost();
+    }
+  }
+
+  private useCakeBoost(): void {
+    if (this.cakeUsedThisLevel) return;
+    this.cakeUsedThisLevel = true;
+    this.anxiety.freezeRise(CAKE_BUFF_DURATION);
+    this.player.applySpeedBoost(CAKE_BUFF_DURATION);
+    this.hud.setInteractPrompt(null);
+    this.intentionalUnlock = true;
+    this.input.releasePointerLock();
+    this.dialogue.show({
+      title: CAKE_MESSAGES.title,
+      body: CAKE_MESSAGES.body,
+      continueLabel: 'Devam Et',
+      onContinue: () => {
+        if (this.state === 'playing') this.input.requestPointerLock();
+      },
+    });
+  }
+
+  private getSuzyInteractPoint(): { x: number; z: number; radius: number } | null {
+    if (this.suzyCatMesh) {
+      const pos = new THREE.Vector3();
+      this.suzyCatMesh.getWorldPosition(pos);
+      const suzy = this.world.interactables.find((item) => item.kind === 'suzy-cat');
+      return { x: pos.x, z: pos.z, radius: suzy?.radius ?? 2.2 };
+    }
+    const suzy = this.world.interactables.find((item) => item.kind === 'suzy-cat');
+    return suzy ? { x: suzy.x, z: suzy.z, radius: suzy.radius ?? 2.2 } : null;
+  }
+
+  private tickSuzyCatInteraction(dt: number): void {
+    if (this.suzyCatMesh) {
+      this.suzyAnimTime += dt;
+      updateSuzyCatIdle(this.suzyCatMesh, this.suzyAnimTime);
+    }
+
+    if (!this.input.isLocked() || MAPS[this.mapIndex].id !== 'wedding-hall') return;
+
+    const suzy = this.getSuzyInteractPoint();
+    if (!suzy || !this.isNearInteractable(suzy)) return;
+
+    // Gelin/damada daha yakınsak Suzy prompt'unu gösterme.
+    if (this.levelState.phase === 'celebration') {
+      const suzyDist = Math.hypot(this.player.position.x - suzy.x, this.player.position.z - suzy.z);
+      const groom = this.world.interactables.find((item) => item.kind === 'groom-chat');
+      const bride = this.world.interactables.find((item) => item.kind === 'bride-chat');
+      const groomDist =
+        groom && this.isNearInteractable(groom)
+          ? Math.hypot(this.player.position.x - groom.x, this.player.position.z - groom.z)
+          : Infinity;
+      const brideDist =
+        bride && this.isNearInteractable(bride)
+          ? Math.hypot(this.player.position.x - bride.x, this.player.position.z - bride.z)
+          : Infinity;
+      if (Math.min(groomDist, brideDist) <= suzyDist) return;
+    }
+
+    this.hud.setInteractPrompt(SUZY_CAT_MESSAGES.prompt);
+
+    if (this.input.consumeInteract()) {
+      this.petSuzyCat();
+    }
+  }
+
+  private petSuzyCat(): void {
+    if (!this.suzyCatMesh) return;
+
+    const dx = this.player.position.x - this.suzyCatMesh.position.x;
+    const dz = this.player.position.z - this.suzyCatMesh.position.z;
+    this.suzyCatMesh.rotation.y = Math.atan2(dx, dz);
+
+    const heartOrigin = new THREE.Vector3();
+    this.suzyCatMesh.getWorldPosition(heartOrigin);
+    heartOrigin.y += 0.38;
+    this.effects.spawnFloatingHearts(heartOrigin);
+    this.audio.play('meow');
   }
 
   private tickWeddingNpcInteraction(): void {
@@ -544,10 +670,10 @@ export class Game {
     const lines: string[] = [];
 
     if (groom && this.isNearInteractable(groom)) {
-      lines.push(`Damat: ${WEDDING_NPC_MESSAGES.groomStressed}`);
+      lines.push(`${NPC_STATS.groom.displayName}: ${WEDDING_NPC_MESSAGES.groomStressed}`);
     }
     if (bride && this.isNearInteractable(bride)) {
-      lines.push(`Gelin: ${WEDDING_NPC_MESSAGES.brideStressed}`);
+      lines.push(`${NPC_STATS.bride.displayName}: ${WEDDING_NPC_MESSAGES.brideStressed}`);
     }
 
     this.hud.setSubtitle(lines);
@@ -558,22 +684,34 @@ export class Game {
 
     const groom = this.world.interactables.find((item) => item.kind === 'groom-chat');
     const bride = this.world.interactables.find((item) => item.kind === 'bride-chat');
+    const suzy = this.getSuzyInteractPoint();
     const nearGroom = groom ? this.isNearInteractable(groom) : false;
     const nearBride = bride ? this.isNearInteractable(bride) : false;
+    const nearSuzy = suzy ? this.isNearInteractable(suzy) : false;
 
     if (!nearGroom && !nearBride) {
-      this.hud.setInteractPrompt(null);
+      // Pasta / Suzy kendi prompt'unu ayarlasın; burada silme.
+      const cake = this.world.interactables.find((item) => item.kind === 'cake');
+      const nearCake = cake ? this.isNearInteractable(cake) : false;
+      if (!nearSuzy && !nearCake) this.hud.setInteractPrompt(null);
       return;
     }
 
+    const groomDist = nearGroom && groom
+      ? Math.hypot(this.player.position.x - groom.x, this.player.position.z - groom.z)
+      : Infinity;
+    const brideDist = nearBride && bride
+      ? Math.hypot(this.player.position.x - bride.x, this.player.position.z - bride.z)
+      : Infinity;
+    const suzyDist = nearSuzy && suzy
+      ? Math.hypot(this.player.position.x - suzy.x, this.player.position.z - suzy.z)
+      : Infinity;
+
+    // Suzy daha yakınsa sohbet prompt'unu dayatma.
+    if (suzyDist < Math.min(groomDist, brideDist)) return;
+
     let target: 'bride' | 'groom' | null = null;
     if (nearGroom && nearBride) {
-      const groomDist = groom
-        ? Math.hypot(this.player.position.x - groom.x, this.player.position.z - groom.z)
-        : Infinity;
-      const brideDist = bride
-        ? Math.hypot(this.player.position.x - bride.x, this.player.position.z - bride.z)
-        : Infinity;
       target = groomDist <= brideDist ? 'groom' : 'bride';
     } else if (nearGroom) {
       target = 'groom';
@@ -604,11 +742,11 @@ export class Game {
 
     this.dialogue.showChoices({
       title: WEDDING_NPC_MESSAGES.choiceTitle,
-      speaker: npc === 'groom' ? 'Damat' : 'Gelin',
+      speaker: NPC_STATS[npc].displayName,
       choices: [
-        { id: 'a', label: WEDDING_NPC_MESSAGES.choices.a },
-        { id: 'b', label: WEDDING_NPC_MESSAGES.choices.b },
-        { id: 'c', label: WEDDING_NPC_MESSAGES.choices.c },
+        { id: 'a', label: WEDDING_NPC_MESSAGES.choices[npc].a },
+        { id: 'b', label: WEDDING_NPC_MESSAGES.choices[npc].b },
+        { id: 'c', label: WEDDING_NPC_MESSAGES.choices[npc].c },
       ],
       onChoose: (id) => this.showWeddingChatResponse(npc, id),
     });
@@ -617,7 +755,7 @@ export class Game {
   private showWeddingChatResponse(npc: 'bride' | 'groom', choice: 'a' | 'b' | 'c'): void {
     const body = WEDDING_NPC_MESSAGES.responses[npc][choice];
     this.dialogue.show({
-      title: npc === 'groom' ? 'Damat' : 'Gelin',
+      title: NPC_STATS[npc].displayName,
       body,
       continueLabel: 'Devam Et',
       onContinue: () => {
@@ -808,10 +946,203 @@ export class Game {
     });
   }
 
+  private onCommandConsoleToggleKey = (event: KeyboardEvent): void => {
+    if (this.commandConsole.isOpen() || event.key !== '"') return;
+    if (this.state === 'menu') return;
+
+    event.preventDefault();
+    this.openCommandConsole();
+  };
+
+  private openCommandConsole(): void {
+    this.consoleResumePointerLock =
+      this.state === 'playing' && this.input.isLocked() && this.levelState.phase !== 'celebration';
+    this.consoleResumePaused = this.state === 'paused';
+
+    if (this.consoleResumePointerLock) {
+      this.intentionalUnlock = true;
+      this.input.releasePointerLock();
+    }
+    if (this.consoleResumePaused) {
+      this.pause.hide();
+    }
+
+    this.commandConsole.openConsole();
+  }
+
+  private closeCommandConsole(): void {
+    if (this.consoleResumePaused && this.state === 'paused') {
+      this.pause.show(this.settings);
+    } else if (this.consoleResumePointerLock && this.state === 'playing') {
+      this.input.requestPointerLock();
+    }
+
+    this.consoleResumePointerLock = false;
+    this.consoleResumePaused = false;
+  }
+
+  private handleCommandConsoleSubmit(command: string): CommandSubmitResult {
+    const cheatId = resolveCheat(command);
+    if (!cheatId) return 'Komut bulunamadı';
+    return this.applyCheat(cheatId);
+  }
+
+  private applyCheat(cheatId: CheatId): CommandSubmitResult {
+    switch (cheatId) {
+      case 'happilymarried':
+        this.teleportToWeddingEpilogue();
+        return null;
+      case 'nefesal':
+        this.anxiety.reset();
+        return null;
+      case 'sakinol':
+        this.anxiety.lockAtZero();
+        return null;
+      case 'iddqd':
+        this.anxiety.lockAtZero();
+        this.cheatGodMode = true;
+        return null;
+      case 'gulumse':
+        if (this.state !== 'playing' && this.state !== 'boss-cinematic') {
+          return 'Şu an kullanılamaz';
+        }
+        this.cheatKillAllEnemies();
+        return null;
+      case 'sabir999': {
+        const enabled = this.weapon.damageMultiplier <= 1;
+        this.weapon.damageMultiplier = enabled ? 10 : 1;
+        return enabled ? 'Süper hasar: açık' : 'Süper hasar: kapalı';
+      }
+      case 'hizliates': {
+        this.weapon.noCooldown = !this.weapon.noCooldown;
+        return this.weapon.noCooldown ? 'Hızlı ateş: açık' : 'Hızlı ateş: kapalı';
+      }
+      case 'kosgelin':
+        this.player.applySpeedBoost(60);
+        return null;
+      case 'dugunvakti':
+        return this.cheatSkipLevel();
+      case 'konserde':
+        return this.teleportToMap('concert-hall', 0);
+      case 'denizfeneri':
+        return this.teleportToMap('lighthouse', 0);
+      case 'baloncu':
+        this.cheatPopAllBalloons();
+        return null;
+      case 'help':
+        return { help: getCheatHelpEditorText() };
+      default:
+        return 'Komut bulunamadı';
+    }
+  }
+
+  private resetCheatState(): void {
+    this.cheatGodMode = false;
+    this.weapon.resetCheatModifiers();
+  }
+
+  private cheatKillAllEnemies(): void {
+    this.enemies.killAllLiving();
+  }
+
+  private cheatSkipLevel(): string | null {
+    if (this.state !== 'playing' || this.levelState.phase !== 'active') {
+      return 'Şu an kullanılamaz';
+    }
+    this.enemies.clear();
+    this.enemyProjectiles.clear();
+    this.levelState.phase = 'clearing';
+    this.finishLevel();
+    return null;
+  }
+
+  private cheatPopAllBalloons(): void {
+    this.balloons.popAll((pos, color) => {
+      this.effects.spawnBalloonPop(pos, color);
+      this.audio.play('balloon-pop');
+    });
+  }
+
+  private teleportToMap(mapId: MapId, levelIndex: number): string | null {
+    if (
+      this.state === 'menu' ||
+      this.state === 'win' ||
+      this.state === 'lose' ||
+      this.state === 'boss-cinematic'
+    ) {
+      return 'Şu an kullanılamaz';
+    }
+
+    const mapIndex = MAPS.findIndex((map) => map.id === mapId);
+    if (mapIndex < 0) return 'Şu an kullanılamaz';
+    const mapDef = MAPS[mapIndex];
+    if (!mapDef.levels[levelIndex]) return 'Şu an kullanılamaz';
+
+    this.pendingFinalWin = false;
+    this.finalWinDelay = 0;
+    this.pendingBossPhase = null;
+    this.bossCinematicEnemy = null;
+    this.weddingChatNpc = null;
+    this.extraEnemiesRequired = 0;
+    this.bossCinematicPlayed.clear();
+    this.confetti.hide();
+    this.bossCinematic.hide();
+    this.dialogue.hide();
+    this.menu.hide();
+    this.pause.hide();
+    this.consoleResumePointerLock = false;
+    this.consoleResumePaused = false;
+
+    this.mapIndex = mapIndex;
+    this.levelIndex = levelIndex;
+    this.loadMap(mapIndex);
+    this.enemies.clear();
+    this.enemyProjectiles.clear();
+    this.player.rig.setCelebrationMode(false);
+    this.player.respawn();
+    this.hud.show();
+    this.beginLevel(mapIndex, levelIndex);
+    return null;
+  }
+
+  private teleportToWeddingEpilogue(): void {
+    this.audio.ensureStarted();
+    const weddingMapIndex = MAPS.findIndex((map) => map.id === 'wedding-hall');
+    if (weddingMapIndex < 0) return;
+
+    this.pendingFinalWin = false;
+    this.finalWinDelay = 0;
+    this.pendingBossPhase = null;
+    this.bossCinematicEnemy = null;
+    this.weddingChatNpc = null;
+    this.extraEnemiesRequired = 0;
+    this.bossCinematicPlayed.clear();
+    this.confetti.hide();
+    this.bossCinematic.hide();
+    this.dialogue.hide();
+    this.menu.hide();
+    this.pause.hide();
+    this.consoleResumePointerLock = false;
+    this.consoleResumePaused = false;
+
+    this.mapIndex = weddingMapIndex;
+    this.levelIndex = MAPS[weddingMapIndex].levels.length - 1;
+    this.stagesCleared = totalLevelCount();
+    this.loadMap(weddingMapIndex);
+    this.levelState = makeLevelState(MAPS[weddingMapIndex].levels[this.levelIndex]);
+    this.enemies.clear();
+    this.enemyProjectiles.clear();
+    this.anxiety.lockAtZero();
+    this.player.respawn();
+    this.hud.show();
+    this.enterWeddingEpilogue();
+  }
+
   private enterWeddingEpilogue(): void {
     this.menu.hide();
     this.state = 'playing';
     this.levelState.phase = 'celebration';
+    this.cakeUsedThisLevel = false;
     this.player.rig.setCelebrationMode(true);
     this.hud.show();
     this.hud.setCrosshairVisible(false);
@@ -892,6 +1223,7 @@ export class Game {
     this.levelState = makeLevelState(level);
     this.state = 'intro';
     this.altarUsedThisLevel = false;
+    this.cakeUsedThisLevel = false;
     this.extraEnemiesRequired = 0;
     this.bossCinematicPlayed.clear();
     this.enemyProjectiles.clear();
@@ -936,6 +1268,7 @@ export class Game {
   }
 
   private handleEnemyContact(enemy: Enemy, dt: number): void {
+    if (this.cheatGodMode) return;
     this.anxiety.add(enemy.stats.contactAnxietyPerSecond * enemy.contactAnxietyMultiplier * dt);
     enemy.contactAccumulator += dt;
     if (enemy.contactAccumulator >= 0.6) {
@@ -946,6 +1279,7 @@ export class Game {
   }
 
   private handleEnemyFlash(_enemy: Enemy): void {
+    if (this.cheatGodMode) return;
     this.anxiety.add(12);
     this.hud.flashDamage();
     this.audio.play('hurt');
@@ -1009,11 +1343,13 @@ export class Game {
     this.catAnimTime = 0;
     this.pianoPlayed = false;
     this.altarUsedThisLevel = false;
+    this.cakeUsedThisLevel = false;
     this.player.rig.setCelebrationMode(false);
     this.bossCinematicPlayed.clear();
     this.pendingFinalWin = false;
     this.finalWinDelay = 0;
     this.confetti.hide();
+    this.resetCheatState();
     this.loadMap(0);
     this.anxiety.unlock();
     this.anxiety.reset();

@@ -4,7 +4,7 @@
  * (public-domain melody) when no external mp3 is present.
  */
 
-type Sfx = 'shoot' | 'hit' | 'kill' | 'wave-clear' | 'hurt' | 'win' | 'lose';
+type Sfx = 'shoot' | 'laser' | 'hit' | 'kill' | 'wave-clear' | 'hurt' | 'win' | 'lose' | 'balloon-pop' | 'meow';
 export type BgmId = 'mozart-allegro' | 'lighthouse-ambient' | 'wedding-hope' | null;
 
 export class AudioManager {
@@ -77,6 +77,9 @@ export class AudioManager {
       case 'shoot':
         this.playShoot();
         break;
+      case 'laser':
+        this.playLaser();
+        break;
       case 'hit':
         this.playHit();
         break;
@@ -94,6 +97,12 @@ export class AudioManager {
         break;
       case 'lose':
         this.playLose();
+        break;
+      case 'balloon-pop':
+        this.playBalloonPop();
+        break;
+      case 'meow':
+        this.playMeow();
         break;
     }
   }
@@ -339,6 +348,41 @@ export class AudioManager {
     this.noiseBurst(0.06, 2400, 0.15);
   }
 
+  /** Star Wars-style blaster pew — quick descending sweep + snap. */
+  private playLaser(): void {
+    if (!this.ctx || !this.masterGain) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(920, now);
+    osc.frequency.exponentialRampToValueAtTime(110, now + 0.11);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(0.42, now + 0.002);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.13);
+
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'square';
+    osc2.frequency.setValueAtTime(1400, now);
+    osc2.frequency.exponentialRampToValueAtTime(200, now + 0.06);
+    gain2.gain.setValueAtTime(0.0001, now);
+    gain2.gain.linearRampToValueAtTime(0.18, now + 0.001);
+    gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+    osc2.connect(gain2);
+    gain2.connect(this.masterGain);
+    osc2.start(now);
+    osc2.stop(now + 0.08);
+
+    this.noiseBurst(0.028, 2800, 0.2);
+  }
+
   private playHit(): void {
     this.beep(520, 'triangle', 0.005, 0.08, 0.3, 340);
   }
@@ -371,5 +415,44 @@ export class AudioManager {
     notes.forEach((n, i) => {
       setTimeout(() => this.beep(n, 'sawtooth', 0.01, 0.35, 0.4), i * 160);
     });
+  }
+
+  private playBalloonPop(): void {
+    this.beep(160 + Math.random() * 100, 'sine', 0.001, 0.07, 0.5, 55);
+    this.noiseBurst(0.045, 2000, 0.28);
+  }
+
+  /** Kısa, tatlı miyav — Suzy Çıtçıt. */
+  private playMeow(): void {
+    if (!this.ctx || !this.masterGain) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(780, now);
+    osc.frequency.linearRampToValueAtTime(980, now + 0.07);
+    osc.frequency.exponentialRampToValueAtTime(420, now + 0.28);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(0.45, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.32);
+
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(1170, now + 0.02);
+    osc2.frequency.exponentialRampToValueAtTime(520, now + 0.22);
+    gain2.gain.setValueAtTime(0.0001, now + 0.02);
+    gain2.gain.linearRampToValueAtTime(0.18, now + 0.04);
+    gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
+    osc2.connect(gain2);
+    gain2.connect(this.masterGain);
+    osc2.start(now + 0.02);
+    osc2.stop(now + 0.26);
   }
 }

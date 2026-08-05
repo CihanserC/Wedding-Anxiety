@@ -81,6 +81,7 @@ export class InputManager {
     if (event.code === 'Digit1') this.weaponSelect = 0;
     else if (event.code === 'Digit2') this.weaponSelect = 1;
     else if (event.code === 'Digit3') this.weaponSelect = 2;
+    else if (event.code === 'Digit4') this.weaponSelect = 3;
     else if (event.code === 'KeyE') {
       this.interactPressed = true;
       event.preventDefault();

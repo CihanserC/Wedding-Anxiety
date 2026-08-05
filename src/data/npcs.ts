@@ -10,13 +10,13 @@ export interface NpcStats {
 export const NPC_STATS: Record<NpcType, NpcStats> = {
   bride: {
     type: 'bride',
-    displayName: 'Gelin',
+    displayName: 'Hilal',
     height: 1.72,
     radius: 0.32,
   },
   groom: {
     type: 'groom',
-    displayName: 'Damat',
+    displayName: 'Cihanser',
     height: 1.78,
     radius: 0.3,
   },

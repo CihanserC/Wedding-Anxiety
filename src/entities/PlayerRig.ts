@@ -24,6 +24,7 @@ export class PlayerRig {
     this.weapons.set('pistol', buildPistol());
     this.weapons.set('rifle', buildRifle());
     this.weapons.set('shield', buildShield());
+    this.weapons.set('happiness', buildHappinessBlaster());
 
     for (const [id, group] of this.weapons) {
       group.visible = id === this.activeId;
@@ -211,6 +212,85 @@ function buildShield(): THREE.Group {
     ray.position.set(rx, 0.1 + ry, -0.35);
     g.add(ray);
   }
+
+  return g;
+}
+
+/** Voxel E-11 style blaster for Mutluluk Işını */
+function buildHappinessBlaster(): THREE.Group {
+  const g = new THREE.Group();
+  const bodyMat = makeMat(0x2a2a30);
+  const metalMat = makeMat(0x7a7a82);
+  const darkMat = makeMat(0x181820);
+  const gripMat = makeMat(0x3a3028);
+
+  const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.18, 0.42), bodyMat);
+  receiver.position.set(0, 0, 0);
+  g.add(receiver);
+
+  const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.72), darkMat);
+  barrel.position.set(0, 0.02, -0.52);
+  g.add(barrel);
+
+  for (let i = 0; i < 5; i++) {
+    const ventL = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.06, 0.06), darkMat);
+    ventL.position.set(-0.06, 0.02, -0.22 - i * 0.11);
+    g.add(ventL);
+    const ventR = ventL.clone();
+    ventR.position.x = 0.06;
+    g.add(ventR);
+  }
+
+  for (let i = 0; i < 4; i++) {
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.03, 0.08), metalMat);
+    fin.position.set(0, 0.08, -0.28 - i * 0.13);
+    g.add(fin);
+  }
+
+  const scopeBase = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.18), bodyMat);
+  scopeBase.position.set(0, 0.16, -0.08);
+  g.add(scopeBase);
+  const scopeMid = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.14), metalMat);
+  scopeMid.position.set(0, 0.22, -0.02);
+  g.add(scopeMid);
+  const scopeEye = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.1), darkMat);
+  scopeEye.position.set(0, 0.24, 0.1);
+  g.add(scopeEye);
+
+  const mag = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.2, 0.14), darkMat);
+  mag.position.set(-0.14, -0.08, -0.02);
+  mag.rotation.z = 0.15;
+  g.add(mag);
+
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.26, 0.13), gripMat);
+  grip.position.set(0, -0.2, 0.1);
+  grip.rotation.x = 0.3;
+  g.add(grip);
+
+  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.08, 0.1), metalMat);
+  guard.position.set(0, -0.08, 0.05);
+  g.add(guard);
+
+  const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.06, 0.04), metalMat);
+  trigger.position.set(0, -0.1, 0.06);
+  g.add(trigger);
+
+  const stock1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.32), metalMat);
+  stock1.position.set(0, -0.06, -0.42);
+  stock1.rotation.x = -0.2;
+  g.add(stock1);
+  const stock2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.22), metalMat);
+  stock2.position.set(0, -0.1, -0.24);
+  stock2.rotation.x = 0.15;
+  g.add(stock2);
+
+  const rearCap = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.14, 0.12), bodyMat);
+  rearCap.position.set(0, 0, 0.26);
+  g.add(rearCap);
+
+  const loop = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.06, 0.04), metalMat);
+  loop.position.set(0, 0.02, 0.34);
+  g.add(loop);
 
   return g;
 }

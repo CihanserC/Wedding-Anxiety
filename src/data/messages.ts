@@ -8,7 +8,7 @@ export const START_MESSAGES = {
     'W A S D - Hareket',
     'Fare - Bakış',
     'Sol Tık - Ateş',
-    '1 · 2 · 3 - Silah Değiştir (Gülümseme · Sabır · Enerji Kalkanı)',
+    '1 · 2 · 3 · 4 - Silah Değiştir (Gülümseme · Sabır · Enerji Kalkanı · Mutluluk Işını)',
     'Fare Tekerleği - Silahlar arası geçiş',
     'E - Etkileşim',
     'Space - Zıpla',
@@ -42,6 +42,7 @@ export const HUD_LABELS = {
   score: 'Skor',
   enemiesLeft: 'Kalan Düşman',
   reloading: 'Nefes al…',
+  bouquet: 'Gelin Buketi',
 };
 
 export const CAT_FEED_MESSAGES = {
@@ -68,6 +69,17 @@ export const ALTAR_MESSAGES = {
   body: 'Salonun ortasında durdun. Derin bir nefes aldın; bu gün senin, Hilal.',
 };
 
+export const CAKE_MESSAGES = {
+  prompt: 'E - Düğün pastasından bir dilim al',
+  title: 'Şeker Patlaması!',
+  body:
+    'Lezzetli bir dilim düğün pastası ısırdın — tadı dillere destan! Tatlı mutluluk damarlarında dolaşırken adımların hafifliyor. Bir süre hiçbir şey seni yavaşlatamaz.',
+};
+
+export const SUZY_CAT_MESSAGES = {
+  prompt: 'E - Suzy Çıtçıt\'ı sev',
+};
+
 export const WAVE_TRANSITION_LABELS = {
   breather: 'Bir nefes molası',
   continueButton: 'Devam Et',
@@ -76,23 +88,32 @@ export const WAVE_TRANSITION_LABELS = {
 export const WEDDING_NPC_MESSAGES = {
   groomStressed: 'Oh olamaz, çok gerginim. Bu teyzeler, dayılar... alın üzerimden!',
   brideStressed: 'Keşke birisi beni kurtarsa...',
-  groomChatPrompt: 'E - Damatla sohbet et',
-  brideChatPrompt: 'E - Gelinle sohbet et',
+  groomChatPrompt: 'E - Cihanser ile sohbet et',
+  brideChatPrompt: 'E - Hilal ile sohbet et',
   choiceTitle: 'Ne söylemek istersin?',
   choices: {
-    a: 'Harika Bir Düğündü!',
-    b: 'Wow bu teyzeler çok can sıkıcıydı, neyse ki sizin için onları hakladım',
-    c: 'Sırada Ne Var?',
+    groom: {
+      a: 'Harika Bir Düğündü!',
+      b: 'Duyduğuma göre bilgisayar mühendisiymişsin. Bu oyunu neden yaptın?',
+      c: 'Sırada Ne Var?',
+    },
+    bride: {
+      a: 'Harika Bir Düğündü!',
+      b: 'Diyetisyenlik nasıl gidiyor, Hilal?',
+      c: 'Sırada Ne Var?',
+    },
   },
   responses: {
     groom: {
-      a: 'Haklısın Hilal, gerçekten büyülü bir gün oldu. Seninle evlenmek hayatımın en güzel kararı.',
-      b: 'Vay be, sen gerçek bir kahramansın! Artık biraz nefes alabiliriz sanırım.',
+      a: 'Gerçekten büyülü bir gün oldu. Hilal ile evlenmek hayatımın en güzel kararı.',
+      b:
+        'Düğün gününde yaşadığımız o küçük stresleri eğlenceli bir şekilde yenip aslında ne kadar önemsiz olduklarını görmeni istedim. Kafamızdaki o anksiyete canavarlarını bu oyuna döktük; onlara silahla vurup gülmek ikimizi de rahatlatır diye düşündüm.',
       c: 'Sırada balayı, sonra da uzun ve mutlu bir hayat var. Seninle her şey güzel olacak.',
     },
     bride: {
-      a: 'Çok teşekkür ederim Hilal! Bugün her şey hayal ettiğim gibi geçti, sen de buna çok katkı sağladın.',
-      b: 'İnanılmazsın! Onları haklamadan düğün bitmezdi zaten. Artık rahatça dans edebiliriz.',
+      a: 'Çok teşekkür ederim! Bugün her şey hayal ettiğim gibi geçti, sen de buna çok katkı sağladın.',
+      b:
+        'İyi gidiyor, teşekkürler! Şu ara özellikle bağırsak-beyin ekseninde vagus sinir stimülasyonunun, Bifidobacterium ve Faecalibacterium gibi butirat üreten kommensal türlerin çeşitliliğine bağlı olarak enteroendokrin hücrelerden serotonin salınımını modüle ettiğini inceliyorum.',
       c: 'Belki biraz dinlenip pasta keseriz? Sonra da yıldızların altında dans ederiz.',
     },
   },

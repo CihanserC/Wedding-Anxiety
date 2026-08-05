@@ -1,4 +1,4 @@
-export type WeaponId = 'pistol' | 'rifle' | 'shield';
+export type WeaponId = 'pistol' | 'rifle' | 'shield' | 'happiness';
 
 export interface WeaponDefinition {
   id: WeaponId;
@@ -12,6 +12,8 @@ export interface WeaponDefinition {
   muzzleColor: number;
   muzzleSize: number;
   recoil: number;
+  /** Star Wars-style traveling bolt instead of instant tracer line */
+  boltStyle?: boolean;
 }
 
 export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
@@ -54,6 +56,20 @@ export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
     muzzleSize: 0.18,
     recoil: 0.08,
   },
+  happiness: {
+    id: 'happiness',
+    displayName: 'Mutluluk Işını',
+    damage: 1,
+    cooldown: 0.28,
+    range: 55,
+    pellets: 1,
+    spread: 0,
+    tracerColor: 0xff2020,
+    muzzleColor: 0xff6060,
+    muzzleSize: 0.1,
+    recoil: 0.07,
+    boltStyle: true,
+  },
 };
 
-export const WEAPON_ORDER: WeaponId[] = ['pistol', 'rifle', 'shield'];
+export const WEAPON_ORDER: WeaponId[] = ['pistol', 'rifle', 'shield', 'happiness'];

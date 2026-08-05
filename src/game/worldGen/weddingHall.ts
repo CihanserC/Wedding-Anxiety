@@ -13,7 +13,7 @@ import {
   BLOCK_SEAT,
   BLOCK_WOOD,
 } from '../../data/blocks';
-import type { WorldWriter, GeneratorResult } from './types';
+import type { WorldWriter, GeneratorResult, CollisionBox } from './types';
 
 /**
  * Grand luxury wedding hall: south garden approach, marble palace with dome,
@@ -49,7 +49,8 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
     1.01,
     Math.floor(hallZ0 * 0.4) + 0.5,
   );
-  const spawnFacing = 0;
+  const spawnFacing = Math.PI;
+  const stairsOrigin = { x: centerX, y: 1.01, z: stageFrontZ - 0.15 };
 
   return {
     playerSpawn: spawn,
@@ -82,6 +83,7 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
         names: 'Hilal & Cihanser',
       },
     },
+    collisionBoxes: buildWeddingStairCollisionBoxes(stairsOrigin),
     npcs: [
       {
         type: 'bride',
@@ -101,9 +103,9 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
     props: [
       {
         kind: 'wedding-steps',
-        x: centerX,
-        y: 1.01,
-        z: stageFrontZ - 0.65,
+        x: stairsOrigin.x,
+        y: stairsOrigin.y,
+        z: stairsOrigin.z,
         rotationY: 0,
       },
       {
@@ -121,6 +123,42 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
         z: coupleZ + 0.5,
         rotationY: Math.PI,
         scale: 1,
+      },
+      {
+        kind: 'suzy-cat',
+        x: centerX - 3.0,
+        y: 2.01,
+        z: coupleZ - 0.7,
+        rotationY: Math.PI,
+        scale: 1.55,
+      },
+      {
+        kind: 'balloon-cluster',
+        x: centerX - 5,
+        y: 1.01,
+        z: 10,
+        rotationY: 0,
+      },
+      {
+        kind: 'balloon-cluster',
+        x: centerX + 5,
+        y: 1.01,
+        z: 14,
+        rotationY: 0.4,
+      },
+      {
+        kind: 'balloon-cluster',
+        x: centerX - 4.5,
+        y: 1.01,
+        z: hallZ0 - 10,
+        rotationY: -0.3,
+      },
+      {
+        kind: 'balloon-cluster',
+        x: centerX + 4,
+        y: 1.01,
+        z: hallZ0 - 6,
+        rotationY: 0.2,
       },
     ],
     interactables: [
@@ -144,6 +182,20 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
         y: 2.01,
         z: coupleZ,
         radius: 2.4,
+      },
+      {
+        kind: 'cake',
+        x: cakeTableX,
+        y: 2.01,
+        z: coupleZ + 0.5,
+        radius: 3.2,
+      },
+      {
+        kind: 'suzy-cat',
+        x: centerX - 3.0,
+        y: 2.01,
+        z: coupleZ - 0.7,
+        radius: 2.2,
       },
     ],
   };
@@ -339,7 +391,7 @@ function generateHall(w: WorldWriter, x0: number, z0: number, HW: number, HD: nu
   addHallDome(w, x0, z0, HW, HD, wallHeight);
 }
 
-/** Small white marble steps descending from the stage to the carpet aisle. */
+/** Halı önünde sarı-beyaz zemin (çarpışma collisionBoxes ile). */
 function addStageFrontSteps(
   w: WorldWriter,
   x0: number,
@@ -347,19 +399,45 @@ function addStageFrontSteps(
   centerX: number,
   stageFrontLocal: number,
 ): void {
-  // Three tiers rising south→north; top tier flush with the stage lip at y=1
-  const tiers: Array<{ zOff: number; halfW: number; y: number }> = [
-    { zOff: -3, halfW: 2, y: 0 },
-    { zOff: -2, halfW: 2, y: 0 },
-    { zOff: -1, halfW: 2, y: 1 },
-  ];
-
-  for (const tier of tiers) {
-    const z = stageFrontLocal + tier.zOff;
-    for (let dx = -tier.halfW; dx < tier.halfW; dx++) {
-      w.setBlock(x0 + centerX + dx, tier.y, z0 + z, BLOCK_MARBLE);
+  for (let zOff = -4; zOff <= -1; zOff++) {
+    for (let dx = -3; dx < 3; dx++) {
+      const block = (zOff + dx) % 2 === 0 ? BLOCK_GOLD : BLOCK_MARBLE;
+      w.setBlock(x0 + centerX + dx, 0, z0 + stageFrontLocal + zOff, block);
     }
   }
+}
+
+/** Görsel merdivenle aynı ölçülerde basamak çarpışma kutuları. */
+function buildWeddingStairCollisionBoxes(origin: {
+  x: number;
+  y: number;
+  z: number;
+}): CollisionBox[] {
+  const stepCount = 7;
+  const totalH = 1.0;
+  const stepH = totalH / stepCount;
+  const stepD = 0.42;
+  const width = 4.2;
+  const boxes: CollisionBox[] = [];
+
+  for (let i = 0; i < stepCount; i++) {
+    const w = width - i * 0.08;
+    const depth = stepD - 0.02;
+    const localZ = -((stepCount - 1 - i) * stepD);
+    const minY = origin.y + stepH * i;
+    const maxY = origin.y + stepH * (i + 1);
+    const centerZ = origin.z + localZ;
+    boxes.push({
+      minX: origin.x - w * 0.5,
+      maxX: origin.x + w * 0.5,
+      minY,
+      maxY,
+      minZ: centerZ - depth * 0.5,
+      maxZ: centerZ + depth * 0.5,
+    });
+  }
+
+  return boxes;
 }
 
 function placeGuestTables(

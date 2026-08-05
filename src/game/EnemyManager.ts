@@ -126,4 +126,12 @@ export class EnemyManager {
       enemy.forceKill();
     }
   }
+
+  /** Start death animation on every living enemy. */
+  killAllLiving(): void {
+    for (const enemy of this.enemies) {
+      if (enemy.dying || enemy.dead) continue;
+      enemy.forceKill();
+    }
+  }
 }
