@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
   BLOCK_AIR,
+  BLOCK_ASPHALT,
   BLOCK_CARPET,
   BLOCK_GLASS,
   BLOCK_GOLD,
@@ -24,15 +25,20 @@ import type {
 const VILLA_DEPTH = 16;
 
 /**
- * Dubai luxury compound: desert dunes, marble villa with infinity pool,
- * Lamborghini out front, bride & groom lounging in the living room.
- * Peaceful exploration only — no combat spawns.
+ * Dubai luxury compound on a long desert highway: marble villa, infinity pool,
+ * Lamborghini, and kilometres of asphalt for driving. Peaceful exploration only.
  */
 export function generateDubai(w: WorldWriter): GeneratorResult {
   const W = w.width;
   const D = w.depth;
   const cx = Math.floor(W / 2);
-  const cz = Math.floor(D / 2);
+  // Villa sits in the northern third so the highway has a long south run
+  const villaX = cx - 11;
+  const villaZ = Math.floor(D * 0.22);
+  const roadCenterX = villaX + 27; // east of villa + terrace — highway stays outside
+  const roadHalfW = 2; // total width ~5 blocks
+  const roadNorthZ = Math.max(4, villaZ - 28);
+  const roadSouthZ = D - 6;
 
   // Desert sand floor everywhere
   for (let z = 0; z < D; z++) {
@@ -42,26 +48,27 @@ export function generateDubai(w: WorldWriter): GeneratorResult {
     }
   }
 
-  // Soft dune undulation (extra sand mounds)
+  // Soft dune undulation — keep the highway corridor flat
   for (let z = 2; z < D - 2; z++) {
     for (let x = 2; x < W - 2; x++) {
+      if (isNearHighway(x, z, roadCenterX, roadHalfW, roadNorthZ, roadSouthZ, villaX, villaZ)) {
+        continue;
+      }
       const dx = x - cx;
-      const dz = z - cz;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      const noise = Math.sin(x * 0.35) * Math.cos(z * 0.28) + Math.sin((x + z) * 0.15);
-      if (dist > 18 && noise > 0.55) {
+      const dz = z - villaZ;
+      const dist = Math.sqrt(dx * dx + dz * dz * 0.35);
+      const noise = Math.sin(x * 0.35) * Math.cos(z * 0.18) + Math.sin((x + z) * 0.12);
+      if (dist > 22 && noise > 0.55) {
         w.setBlock(x, 2, z, BLOCK_SAND);
       }
-      if (dist > 26 && noise > 1.1) {
+      if (dist > 36 && noise > 1.05) {
         w.setBlock(x, 3, z, BLOCK_SAND);
       }
     }
   }
 
-  const villaX = cx - 11;
-  const villaZ = cz - 10;
   buildLuxuryVilla(w, villaX, villaZ);
-  buildApproachRoad(w, villaX, villaZ, cx);
+  buildAsphaltHighway(w, villaX, villaZ, roadCenterX, roadHalfW, roadNorthZ, roadSouthZ);
   placeSkyline(w, cx);
   placeVillaEntranceStepFloor(w, villaX, villaZ);
   flattenLamborghiniPad(w, villaX, villaZ);
@@ -73,14 +80,20 @@ export function generateDubai(w: WorldWriter): GeneratorResult {
   };
 
   const lamboX = villaX + 10.5;
-  const lamboY = 2.01;
+  // Pad surface is top of block y=2 → world y=3; wheels sit just above
+  const lamboY = 3.01;
   const lamboZ = villaZ + VILLA_DEPTH + 12;
+  // Model nose is -Z locally; Math.PI aims +Z south down the highway
   const lamboRotation = Math.PI;
 
   const salonX = villaX + 9;
   const salonZ = villaZ + 6.5;
-  const sofaX = salonX;
-  const sofaZ = salonZ;
+  // Sofa is rotated 90° — long axis runs along Z, front faces east (+X) toward the TV.
+  const sofaSeatY = 3.62;
+  const sofaFacingTv = Math.PI / 2;
+  const brideSeatZ = salonZ - 0.42;
+  const groomSeatZ = salonZ + 0.42;
+  const seatX = salonX - 0.05;
 
   const props: PropSpec[] = [
     {
@@ -91,7 +104,7 @@ export function generateDubai(w: WorldWriter): GeneratorResult {
       rotationY: Math.PI,
     },
     ...placeVillaFurniture(villaX, villaZ),
-    ...placePalmTrees(cx, cz, villaX, villaZ),
+    ...placePalmTrees(cx, villaZ, villaX, roadCenterX, roadNorthZ, roadSouthZ),
     {
       kind: 'lamborghini',
       x: lamboX,
@@ -102,36 +115,41 @@ export function generateDubai(w: WorldWriter): GeneratorResult {
     },
   ];
 
+  const locals = placeFriendlyLocals(villaX, villaZ, cx, roadCenterX);
+
   const npcs: NpcSpec[] = [
     {
       type: 'bride',
-      x: sofaX - 0.55,
-      y: 3.01,
-      z: sofaZ + 0.15,
-      rotationY: Math.PI * 0.5 + 0.2,
+      x: seatX,
+      y: sofaSeatY,
+      z: brideSeatZ,
+      rotationY: sofaFacingTv,
+      pose: 'sitting',
     },
     {
       type: 'groom',
-      x: sofaX + 0.55,
-      y: 3.01,
-      z: sofaZ + 0.15,
-      rotationY: Math.PI * 0.5 - 0.2,
+      x: seatX,
+      y: sofaSeatY,
+      z: groomSeatZ,
+      rotationY: sofaFacingTv,
+      pose: 'sitting',
     },
+    ...locals.npcs,
   ];
 
   const interactables: InteractableSpec[] = [
     {
       kind: 'bride-chat',
-      x: sofaX - 0.55,
-      y: 3.01,
-      z: sofaZ,
+      x: seatX,
+      y: sofaSeatY,
+      z: brideSeatZ,
       radius: 2.6,
     },
     {
       kind: 'groom-chat',
-      x: sofaX + 0.55,
-      y: 3.01,
-      z: sofaZ,
+      x: seatX,
+      y: sofaSeatY,
+      z: groomSeatZ,
       radius: 2.6,
     },
     {
@@ -141,19 +159,27 @@ export function generateDubai(w: WorldWriter): GeneratorResult {
       z: lamboZ,
       radius: 3.2,
     },
+    {
+      kind: 'plasma-tv',
+      x: villaX + 18.5,
+      y: 3.01,
+      z: villaZ + 6.5,
+      radius: 4.5,
+    },
+    ...locals.interactables,
   ];
 
   const spawnX = villaX + 9;
   const spawnZ = villaZ + 26;
 
   return {
-    playerSpawn: new THREE.Vector3(spawnX + 0.5, 2.01, spawnZ + 0.5),
+    playerSpawn: new THREE.Vector3(spawnX + 0.5, 3.01, spawnZ + 0.5),
     playerFacing: Math.PI,
     enemySpawnRegion: {
       minX: cx - 2,
       maxX: cx + 2,
-      minZ: cz - 2,
-      maxZ: cz + 2,
+      minZ: villaZ - 2,
+      maxZ: villaZ + 2,
     },
     bannerText: 'Dubai · Lüks Villa',
     bannerPosition: {
@@ -258,9 +284,8 @@ function buildLuxuryVilla(w: WorldWriter, ox: number, oz: number): void {
     w.setBlock(ox + x, 3, oz + vd - 2, BLOCK_GOLD);
   }
 
-  // Ceiling lights
+  // Ceiling lights — keep away from the east-wall TV (living room)
   w.setBlock(ox + 6, 6, oz + 5, BLOCK_LIGHT);
-  w.setBlock(ox + 15, 6, oz + 5, BLOCK_LIGHT);
   w.setBlock(ox + 11, 6, oz + 10, BLOCK_LIGHT);
 
   // Flat luxury roof with gold edge
@@ -379,36 +404,134 @@ function flattenLamborghiniPad(w: WorldWriter, ox: number, oz: number): void {
   }
 }
 
-function buildApproachRoad(w: WorldWriter, villaX: number, villaZ: number, _cx: number): void {
-  const roadZ0 = villaZ + 24;
-  const roadZ1 = villaZ + 30;
-  for (let z = roadZ0; z <= roadZ1; z++) {
-    for (let x = villaX + 7; x <= villaX + 14; x++) {
-      if (x < 1 || x >= w.width - 1 || z < 1 || z >= w.depth - 1) continue;
-      w.setBlock(x, 1, z, BLOCK_STONE);
-      w.setBlock(x, 2, z, BLOCK_PATH);
+function isNearHighway(
+  x: number,
+  z: number,
+  roadCenterX: number,
+  roadHalfW: number,
+  roadNorthZ: number,
+  roadSouthZ: number,
+  villaX: number,
+  villaZ: number,
+): boolean {
+  // Main N–S highway corridor (+ shoulders)
+  if (
+    z >= roadNorthZ - 2 &&
+    z <= roadSouthZ + 2 &&
+    x >= roadCenterX - roadHalfW - 3 &&
+    x <= roadCenterX + roadHalfW + 3
+  ) {
+    return true;
+  }
+  // Villa bypass / parking apron (south of house, outside walls)
+  if (
+    z >= villaZ + VILLA_DEPTH + 9 &&
+    z <= villaZ + VILLA_DEPTH + 17 &&
+    x >= villaX + 4 &&
+    x <= roadCenterX + roadHalfW + 3
+  ) {
+    return true;
+  }
+  // South turnaround plaza
+  if (z >= roadSouthZ - 14 && z <= roadSouthZ + 2 && x >= roadCenterX - 18 && x <= roadCenterX + 18) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Long asphalt highway for Lamborghini driving: wide N–S strip past the villa,
+ * connector to the parking pad, dashed center line, and a south U-turn loop.
+ */
+function buildAsphaltHighway(
+  w: WorldWriter,
+  villaX: number,
+  villaZ: number,
+  roadCenterX: number,
+  roadHalfW: number,
+  roadNorthZ: number,
+  roadSouthZ: number,
+): void {
+  const paint = (x: number, z: number, centerDash = false): void => {
+    if (x < 1 || x >= w.width - 1 || z < 1 || z >= w.depth - 1) return;
+    w.setBlock(x, 3, z, BLOCK_AIR);
+    w.setBlock(x, 4, z, BLOCK_AIR);
+    w.setBlock(x, 1, z, BLOCK_STONE);
+    w.setBlock(x, 2, z, centerDash ? BLOCK_PATH : BLOCK_ASPHALT);
+  };
+
+  const x0 = roadCenterX - roadHalfW;
+  const x1 = roadCenterX + roadHalfW;
+
+  // Main north–south highway (runs east of the villa, never through it)
+  for (let z = roadNorthZ; z <= roadSouthZ; z++) {
+    for (let x = x0; x <= x1; x++) {
+      const dash = x === roadCenterX && z % 4 < 2;
+      paint(x, z, dash);
+    }
+    // Gold shoulder trim
+    w.setBlock(x0 - 1, 2, z, BLOCK_GOLD);
+    w.setBlock(x1 + 1, 2, z, BLOCK_GOLD);
+    w.setBlock(x0 - 1, 1, z, BLOCK_STONE);
+    w.setBlock(x1 + 1, 1, z, BLOCK_STONE);
+  }
+
+  // East–west bypass: Lamborghini pad → highway, along the south outside the villa
+  const bypassZ0 = villaZ + VILLA_DEPTH + 10;
+  const bypassZ1 = villaZ + VILLA_DEPTH + 16;
+  const bypassX0 = villaX + 5;
+  for (let z = bypassZ0; z <= bypassZ1; z++) {
+    for (let x = bypassX0; x <= x1; x++) {
+      paint(x, z, x === roadCenterX && z % 4 < 2);
+    }
+    w.setBlock(bypassX0 - 1, 2, z, BLOCK_GOLD);
+    w.setBlock(x1 + 1, 2, z, BLOCK_GOLD);
+  }
+  for (let x = bypassX0; x <= x1; x++) {
+    w.setBlock(x, 2, bypassZ0 - 1, BLOCK_GOLD);
+    w.setBlock(x, 2, bypassZ1 + 1, BLOCK_GOLD);
+  }
+
+  // Short north link from pad up to the bypass (east side of pool / pad)
+  const linkX = villaX + 14;
+  for (let z = villaZ + VILLA_DEPTH + 6; z < bypassZ0; z++) {
+    paint(linkX, z, false);
+    paint(linkX + 1, z, false);
+    w.setBlock(linkX - 1, 2, z, BLOCK_GOLD);
+    w.setBlock(linkX + 2, 2, z, BLOCK_GOLD);
+  }
+
+  // South turnaround plaza — solid asphalt pad (no hollow center / pit)
+  const loopInner = roadSouthZ - 12;
+  const loopOuter = roadSouthZ;
+  const loopLeft = roadCenterX - 14;
+  const loopRight = roadCenterX + 14;
+  for (let z = loopInner; z <= loopOuter; z++) {
+    for (let x = loopLeft; x <= loopRight; x++) {
+      paint(x, z, x === roadCenterX && z % 4 < 2);
     }
   }
-  // Gold trim along road edges
-  for (let z = roadZ0; z <= roadZ1; z++) {
-    w.setBlock(villaX + 6, 2, z, BLOCK_GOLD);
-    w.setBlock(villaX + 15, 2, z, BLOCK_GOLD);
+  // Gold trim around the plaza edge
+  for (let x = loopLeft; x <= loopRight; x++) {
+    w.setBlock(x, 1, loopOuter + 1, BLOCK_STONE);
+    w.setBlock(x, 2, loopOuter + 1, BLOCK_GOLD);
+    w.setBlock(x, 1, loopInner - 1, BLOCK_STONE);
+    w.setBlock(x, 2, loopInner - 1, BLOCK_GOLD);
+  }
+  for (let z = loopInner; z <= loopOuter; z++) {
+    w.setBlock(loopLeft - 1, 1, z, BLOCK_STONE);
+    w.setBlock(loopLeft - 1, 2, z, BLOCK_GOLD);
+    w.setBlock(loopRight + 1, 1, z, BLOCK_STONE);
+    w.setBlock(loopRight + 1, 2, z, BLOCK_GOLD);
   }
 }
 
-/** Distant decorative skyscraper silhouettes along the north edge. */
+/** Distant decorative skyscraper silhouettes along the far north edge. */
 function placeSkyline(w: WorldWriter, cx: number): void {
-  const towers: Array<[number, number, number]> = [
-    [cx - 28, 4, 12],
-    [cx - 22, 3, 16],
-    [cx - 16, 5, 10],
-    [cx - 8, 4, 18],
-    [cx, 6, 22],
-    [cx + 6, 5, 14],
-    [cx + 14, 4, 11],
-    [cx + 22, 3, 15],
-    [cx + 28, 4, 9],
-  ];
+  const towers: Array<[number, number, number]> = [];
+  for (let i = -5; i <= 5; i++) {
+    towers.push([cx + i * 10, 3 + (Math.abs(i) % 3), 10 + ((i * i) % 12)]);
+  }
 
   for (const [tx, tz, h] of towers) {
     const baseW = 2 + (h % 3);
@@ -423,7 +546,6 @@ function placeSkyline(w: WorldWriter, cx: number): void {
         }
       }
     }
-    // Gold spire tip
     const tipY = Math.min(w.height - 1, 2 + h);
     w.setBlock(tx + 1, tipY, tz + 1, BLOCK_GOLD);
   }
@@ -435,7 +557,7 @@ function placeVillaFurniture(villaX: number, villaZ: number): PropSpec[] {
     { kind: 'king-bed', x: villaX + 4.5, y, z: villaZ + 4.5, rotationY: 0 },
     // Sofa faces east toward TV — bride & groom sit here
     { kind: 'sofa', x: villaX + 9, y, z: villaZ + 6.5, rotationY: Math.PI / 2 },
-    { kind: 'plasma-tv', x: villaX + 18.5, y, z: villaZ + 6.5, rotationY: -Math.PI / 2 },
+    { kind: 'plasma-tv', x: villaX + 18.5, y, z: villaZ + 6.5, rotationY: -Math.PI / 2, scale: 3.3 },
     { kind: 'dining-table', x: villaX + 15, y, z: villaZ + 12, rotationY: 0 },
   ];
 
@@ -465,30 +587,111 @@ function isInVillaZone(x: number, z: number, villaX: number, villaZ: number): bo
   );
 }
 
-function placePalmTrees(cx: number, cz: number, villaX: number, villaZ: number): PropSpec[] {
+/** Camels & local Arab NPCs scattered around the compound — friendly chatter. */
+function placeFriendlyLocals(
+  villaX: number,
+  villaZ: number,
+  cx: number,
+  roadCenterX: number,
+): { npcs: NpcSpec[]; interactables: InteractableSpec[] } {
+  const npcs: NpcSpec[] = [];
+  const interactables: InteractableSpec[] = [];
+
+  // Open sand beside the highway / villa — not on asphalt
+  const camels: Array<[number, number, number, string]> = [
+    [villaX - 12, villaZ + 30, Math.PI * 0.35, 'Jamal'],
+    [roadCenterX + 14, villaZ + 55, -Math.PI * 0.6, 'Habibi-Deve'],
+    [roadCenterX - 16, villaZ + 90, Math.PI, 'WAHEED-Camel'],
+  ];
+  for (const [x, z, rot, name] of camels) {
+    npcs.push({
+      type: 'camel',
+      x: x + 0.5,
+      y: 2.01,
+      z: z + 0.5,
+      rotationY: rot,
+      wander: true,
+      wanderRadius: 7,
+    });
+    interactables.push({
+      kind: 'camel-chat',
+      x: x + 0.5,
+      y: 2.01,
+      z: z + 0.5,
+      radius: 3.2,
+      speakerName: name,
+    });
+  }
+
+  const arabs: Array<['arab-man' | 'arab-woman', number, number, number, string]> = [
+    ['arab-man', villaX + 21, villaZ + 34, Math.PI * 1.15, 'Waheed'],
+    ['arab-man', villaX - 10, villaZ + 28, Math.PI * 0.4, 'Ahmed'],
+    ['arab-woman', roadCenterX + 12, villaZ + 40, -Math.PI * 0.3, 'Fatima'],
+    ['arab-woman', cx - 18, villaZ + 20, Math.PI * 0.8, 'Layla'],
+  ];
+  for (const [type, x, z, rot, name] of arabs) {
+    npcs.push({
+      type,
+      x: x + 0.5,
+      y: 2.01,
+      z: z + 0.5,
+      rotationY: rot,
+      wander: true,
+      wanderRadius: 5.5,
+    });
+    interactables.push({
+      kind: 'arab-chat',
+      x: x + 0.5,
+      y: 2.01,
+      z: z + 0.5,
+      radius: 2.8,
+      speakerName: name,
+    });
+  }
+
+  return { npcs, interactables };
+}
+
+function placePalmTrees(
+  cx: number,
+  villaZ: number,
+  villaX: number,
+  roadCenterX: number,
+  roadNorthZ: number,
+  roadSouthZ: number,
+): PropSpec[] {
   const props: PropSpec[] = [];
   const spots: Array<[number, number]> = [
     [villaX - 4, villaZ + 8],
     [villaX - 5, villaZ + 18],
     [villaX + 24, villaZ + 8],
-    [villaX + 25, villaZ + 18],
     [villaX + 2, villaZ - 4],
     [villaX + 18, villaZ - 4],
-    [villaX + 10, villaZ + 28],
-    [villaX + 16, villaZ + 28],
-    [cx - 20, cz + 10],
-    [cx + 22, cz + 12],
-    [cx - 18, cz - 14],
-    [cx + 20, cz - 12],
-    [cx - 10, cz + 24],
-    [cx + 12, cz + 22],
+    [cx - 22, villaZ + 12],
+    [cx + 28, villaZ + 16],
   ];
+
+  // Roadside palm avenue along the highway
+  for (let z = roadNorthZ + 4; z < roadSouthZ - 4; z += 8) {
+    spots.push([roadCenterX - 6, z]);
+    spots.push([roadCenterX + 6, z + 4]);
+  }
 
   for (const [x, z] of spots) {
     if (isInVillaZone(x, z, villaX, villaZ) && z < villaZ + 20) continue;
-    // Keep palms off the pool and road; allow garden row south of pool
     if (x >= villaX + 5 && x <= villaX + 17 && z >= villaZ + 20 && z <= villaZ + 27) continue;
     if (x >= villaX + 5 && x <= villaX + 15 && z >= villaZ + 26 && z <= villaZ + 32) continue;
+    // Keep palms off the asphalt itself
+    if (Math.abs(x - roadCenterX) <= 3) continue;
+    // Keep palms off the south turnaround plaza
+    if (
+      z >= roadSouthZ - 14 &&
+      z <= roadSouthZ + 2 &&
+      x >= roadCenterX - 16 &&
+      x <= roadCenterX + 16
+    ) {
+      continue;
+    }
     props.push({
       kind: 'palm-tree',
       x: x + 0.5,

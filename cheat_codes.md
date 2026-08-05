@@ -30,6 +30,7 @@ Toggle kodlar tekrar yazılınca kapanır; durum mesajı konsolda görünür.
 | `bali` | Bali | Bali Adası (balayı), level 1 | Hayır |
 | `dubai` | Dubai | Dubai Lüks Villa (keşif), level 1 | Hayır |
 | `baloncu` | Baloncu | Tüm balonları patlat (varsa) | Hayır |
+| `lightsaber` | Kırmızı ışın kılıcı | Işın kılıcı modu (kırmızı bıçak + sesler) | Evet |
 | `help` | Yardım | Konsolda kayan mini editörde tüm kod listesini açar / kapatır | Hayır |
 
 ## Notlar

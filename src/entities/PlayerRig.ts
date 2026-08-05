@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { WeaponId } from '../data/weapons';
+import { buildCarInteriorViewmodel } from '../rendering/carInterior';
 import { buildCelebrationBouquet } from '../rendering/FlowerBouquet';
 import { buildMoneyBills } from '../rendering/MoneyBills';
 
@@ -12,14 +13,17 @@ export type HeldItem = 'none' | 'bouquet' | 'money';
  */
 export class PlayerRig {
   readonly root: THREE.Group;
+  private readonly carInteriorGroup: THREE.Group;
   private readonly weapons: Map<WeaponId, THREE.Group> = new Map();
   private readonly bouquetGroup: THREE.Group;
   private readonly moneyGroup: THREE.Group;
   private activeId: WeaponId = 'pistol';
   private heldItem: HeldItem = 'none';
+  private driving = false;
   private time = 0;
   private recoilPhase = 0;
   private swayPhase = 0;
+  private swingPhase = 0;
 
   constructor() {
     this.root = new THREE.Group();
@@ -29,6 +33,7 @@ export class PlayerRig {
     this.weapons.set('rifle', buildRifle());
     this.weapons.set('shield', buildShield());
     this.weapons.set('happiness', buildHappinessBlaster());
+    this.weapons.set('lightsaber', buildLightsaber());
 
     for (const [id, group] of this.weapons) {
       group.visible = id === this.activeId;
@@ -42,10 +47,15 @@ export class PlayerRig {
     this.moneyGroup = buildMoneyBills();
     this.moneyGroup.visible = false;
     this.root.add(this.moneyGroup);
+
+    this.carInteriorGroup = buildCarInteriorViewmodel();
+    this.carInteriorGroup.position.set(0, -0.48, -0.28);
+    this.carInteriorGroup.visible = false;
   }
 
   attachTo(parent: THREE.Object3D): void {
     parent.add(this.root);
+    parent.add(this.carInteriorGroup);
   }
 
   setActive(id: WeaponId): void {
@@ -58,6 +68,7 @@ export class PlayerRig {
   }
 
   setHeldItem(item: HeldItem): void {
+    if (this.driving) return;
     this.heldItem = item;
     this.bouquetGroup.visible = item === 'bouquet';
     this.moneyGroup.visible = item === 'money';
@@ -67,6 +78,24 @@ export class PlayerRig {
     if (item !== 'none') {
       this.recoilPhase = 0;
     }
+  }
+
+  /** First-person cabin view while driving — hides weapons / held items. */
+  setDrivingMode(enabled: boolean): void {
+    this.driving = enabled;
+    this.carInteriorGroup.visible = enabled;
+    this.root.visible = !enabled;
+    if (enabled) {
+      this.bouquetGroup.visible = false;
+      this.moneyGroup.visible = false;
+      for (const group of this.weapons.values()) {
+        group.visible = false;
+      }
+    }
+  }
+
+  isDrivingMode(): boolean {
+    return this.driving;
   }
 
   /** Wedding epilogue bouquet — wraps setHeldItem. */
@@ -91,12 +120,23 @@ export class PlayerRig {
     this.recoilPhase = Math.min(1, this.recoilPhase + recoil * 4);
   }
 
-  update(dt: number, moving: boolean): void {
+  onLightsaberSwing(): void {
+    if (this.heldItem !== 'none') return;
+    // Full swing cycle: 1 → 0 travels top → bottom along a 45° diagonal
+    this.swingPhase = 1;
+  }
+
+  update(dt: number, moving: boolean, driveSpeed = 0): void {
     this.time += dt;
     if (moving) {
       this.swayPhase += dt * 8;
     } else {
       this.swayPhase += dt * 2;
+    }
+
+    if (this.driving) {
+      this.bobCarInterior(driveSpeed);
+      return;
     }
 
     if (this.heldItem === 'bouquet') {
@@ -110,16 +150,89 @@ export class PlayerRig {
     }
 
     this.recoilPhase = Math.max(0, this.recoilPhase - dt * 5);
+    // ~0.4s slash duration
+    this.swingPhase = Math.max(0, this.swingPhase - dt * 2.5);
 
     const active = this.weapons.get(this.activeId);
     if (!active) return;
 
     const bobX = Math.cos(this.swayPhase) * (moving ? 0.02 : 0.005);
     const bobY = Math.abs(Math.sin(this.swayPhase)) * (moving ? 0.02 : 0.005);
+
+    if (this.activeId === 'lightsaber') {
+      this.applyLightsaberPose(active, bobX, bobY);
+      return;
+    }
+
     active.position.x = bobX;
     active.position.y = bobY;
     active.position.z = -this.recoilPhase * 0.15;
     active.rotation.x = -this.recoilPhase * 0.4;
+    active.rotation.y = 0;
+    active.rotation.z = 0;
+  }
+
+  /**
+   * Idle tip points forward; on fire, blade arcs ~90° from raised
+   * (top-right) to low (bottom-left) on a 45° diagonal plane.
+   * swingPhase 1 = wind-up high, 0 = idle.
+   */
+  private applyLightsaberPose(
+    active: THREE.Group,
+    bobX: number,
+    bobY: number,
+  ): void {
+    // Blade tip up: mesh extends along -Z, so flip 180° on X so tip isn't downward
+    const idleX = -1.15 + Math.PI;
+    const idleY = 0.08;
+    const idleZ = 0.18;
+
+    if (this.swingPhase <= 0) {
+      active.position.set(bobX, bobY, 0);
+      active.rotation.set(idleX, idleY, idleZ);
+      return;
+    }
+
+    // progress 0 = start (raised), 1 = end of arc (then blend to idle)
+    const progress = 1 - this.swingPhase;
+    // Ease-in-out so the mid slash is the fast part
+    const t = progress * progress * (3 - 2 * progress);
+
+    // Raised (top of 45° diagonal) → follow-through (bottom of diagonal)
+    const raised = { x: -1.75 + Math.PI, y: 0.4, z: 0.85 };
+    const lowered = { x: -0.15 + Math.PI, y: -0.5, z: -0.75 };
+
+    const rx = raised.x + (lowered.x - raised.x) * t;
+    const ry = raised.y + (lowered.y - raised.y) * t;
+    const rz = raised.z + (lowered.z - raised.z) * t;
+
+    // Last ~20% of the cycle eases back toward idle so it doesn't stick low
+    const recover = Math.max(0, (progress - 0.8) / 0.2);
+    const recoverEase = recover * recover * (3 - 2 * recover);
+
+    active.rotation.x = rx + (idleX - rx) * recoverEase;
+    active.rotation.y = ry + (idleY - ry) * recoverEase;
+    active.rotation.z = rz + (idleZ - rz) * recoverEase;
+
+    // Hilt stays near hand; tip travels with the arc
+    const lift = (1 - t) * 0.12 * (1 - recoverEase);
+    const side = (0.5 - t) * 0.22 * (1 - recoverEase);
+    active.position.x = bobX + side;
+    active.position.y = bobY + lift;
+    active.position.z = -0.04 * Math.sin(t * Math.PI) * (1 - recoverEase);
+  }
+
+  private bobCarInterior(driveSpeed: number): void {
+    const speedFactor = Math.min(1, Math.abs(driveSpeed) / 10);
+    const bobAmp = 0.008 + speedFactor * 0.018;
+    const bobX = Math.cos(this.swayPhase * 1.4) * bobAmp;
+    const bobY = Math.sin(this.swayPhase * 2.2) * bobAmp * 0.7;
+    this.carInteriorGroup.position.set(bobX, -0.48 + bobY, -0.28);
+
+    const wheel = this.carInteriorGroup.getObjectByName('steering-wheel');
+    if (wheel) {
+      wheel.rotation.z = Math.sin(this.swayPhase * 0.6) * speedFactor * 0.08;
+    }
   }
 
   private bobHeld(
@@ -329,5 +442,60 @@ function buildHappinessBlaster(): THREE.Group {
   loop.position.set(0, 0.02, 0.34);
   g.add(loop);
 
+  return g;
+}
+
+/** Voxel red lightsaber — cheat-only weapon viewmodel */
+function buildLightsaber(): THREE.Group {
+  const g = new THREE.Group();
+  const hiltMat = makeMat(0x8a8a92);
+  const darkMat = makeMat(0x2a2a30);
+  const emitterMat = makeMat(0x404048, { emissive: 0x220000, emissiveIntensity: 0.3 });
+  const bladeMat = new THREE.MeshLambertMaterial({
+    color: 0xff2020,
+    emissive: 0xff1010,
+    emissiveIntensity: 0.95,
+  });
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0xffaaaa });
+
+  // Grip / hilt pointing roughly toward camera (held bottom-right)
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.28), hiltMat);
+  grip.position.set(0, -0.02, 0.12);
+  g.add(grip);
+
+  const gripBands: number[] = [-0.02, 0.06, 0.14];
+  for (const z of gripBands) {
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.03), darkMat);
+    band.position.set(0, -0.02, z);
+    g.add(band);
+  }
+
+  const pommel = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.06), darkMat);
+  pommel.position.set(0, -0.02, 0.28);
+  g.add(pommel);
+
+  const emitter = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.1), emitterMat);
+  emitter.position.set(0, -0.02, -0.06);
+  g.add(emitter);
+
+  const emitterRing = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.03), hiltMat);
+  emitterRing.position.set(0, -0.02, -0.12);
+  g.add(emitterRing);
+
+  // Blade extends forward (-Z) from emitter
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 1.05), bladeMat);
+  blade.position.set(0, -0.02, -0.68);
+  g.add(blade);
+
+  const core = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, 1.02), coreMat);
+  core.position.set(0, -0.02, -0.68);
+  g.add(core);
+
+  // Tip
+  const tip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.06), bladeMat);
+  tip.position.set(0, -0.02, -1.22);
+  g.add(tip);
+
+  // Idle pose applied in update (upright); keep mesh local identity here
   return g;
 }

@@ -47,12 +47,18 @@ export interface PortraitSpec {
   names: string;
 }
 
+export type NpcPose = 'standing' | 'sitting';
+
 export interface NpcSpec {
   type: NpcType;
   x: number;
   y: number;
   z: number;
   rotationY: number;
+  pose?: NpcPose;
+  /** Slow idle wander near spawn (Dubai locals). */
+  wander?: boolean;
+  wanderRadius?: number;
 }
 
 export interface HallDecorations {
@@ -106,12 +112,17 @@ export interface InteractableSpec {
     | 'suzy-cat'
     | 'bride-chat'
     | 'groom-chat'
+    | 'camel-chat'
+    | 'arab-chat'
     | 'treasure-chest'
-    | 'lamborghini-drive';
+    | 'lamborghini-drive'
+    | 'plasma-tv';
   x: number;
   y: number;
   z: number;
   radius?: number;
+  /** Optional display name override for local Dubai chatter NPCs. */
+  speakerName?: string;
 }
 
 export interface TreasureChestSpec {

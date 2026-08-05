@@ -81,35 +81,48 @@ export function buildSofa(): THREE.Group {
   return g;
 }
 
-/** Flat-screen TV on a low wooden stand. */
+function createTvOffScreenMaterial(): THREE.MeshLambertMaterial {
+  return new THREE.MeshLambertMaterial({ color: 0x1a1a22 });
+}
+
+/** Wall-mounted cinema TV — screen mesh named `tv-screen` for on/off toggling. */
 export function buildPlasmaTv(): THREE.Group {
   const g = new THREE.Group();
   g.name = 'plasma-tv';
 
-  const black = lambert(0x1a1a1a);
-  const screen = lambert(0x2a3a4a);
-  const wood = lambert(0x7a5535);
-  const silver = lambert(0xa0a0a0);
+  const black = lambert(0x111111);
+  const wood = lambert(0x5c4030);
+  const silver = lambert(0x909090);
 
-  const stand = box(1.4, 0.12, 0.45, wood);
-  stand.position.set(0, 0.2, 0);
-  g.add(stand);
+  // Low media console
+  const console = box(1.8, 0.14, 0.55, wood);
+  console.position.set(0, 0.18, 0);
+  g.add(console);
 
-  const standLeg = box(0.15, 0.35, 0.15, wood);
-  standLeg.position.set(0, 0.45, 0);
-  g.add(standLeg);
+  for (const side of [-1, 1]) {
+    const leg = box(0.1, 0.22, 0.45, wood);
+    leg.position.set(side * 0.72, 0.08, 0);
+    g.add(leg);
+  }
 
-  const bezel = box(1.5, 0.9, 0.08, black);
-  bezel.position.set(0, 1.0, 0);
+  // Panel sits on the console — not floating above it
+  const panelY = 0.86;
+  const bracket = box(0.35, 0.05, 0.1, silver);
+  bracket.position.set(0, 0.34, -0.02);
+  g.add(bracket);
+
+  const bezel = box(1.75, 1.08, 0.07, black);
+  bezel.position.set(0, panelY, 0);
   g.add(bezel);
 
-  const display = box(1.35, 0.75, 0.04, screen);
-  display.position.set(0, 1.0, 0.04);
+  const display = box(1.65, 0.98, 0.035, createTvOffScreenMaterial());
+  display.name = 'tv-screen';
+  display.position.set(0, panelY, 0.038);
   g.add(display);
 
-  const basePlate = box(0.5, 0.04, 0.3, silver);
-  basePlate.position.set(0, 0.64, 0);
-  g.add(basePlate);
+  const chin = box(0.4, 0.03, 0.04, silver);
+  chin.position.set(0, panelY - 0.52, 0.04);
+  g.add(chin);
 
   return g;
 }

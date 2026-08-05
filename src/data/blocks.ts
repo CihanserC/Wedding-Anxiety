@@ -15,7 +15,8 @@ export type BlockId =
   | 13
   | 14
   | 15
-  | 16;
+  | 16
+  | 17;
 
 export interface BlockDefinition {
   id: BlockId;
@@ -42,6 +43,7 @@ export const BLOCK_WATER: BlockId = 13;
 export const BLOCK_ROCK: BlockId = 14;
 export const BLOCK_SAND: BlockId = 15;
 export const BLOCK_LIGHT: BlockId = 16;
+export const BLOCK_ASPHALT: BlockId = 17;
 
 export const BLOCKS: Record<BlockId, BlockDefinition> = {
   0: { id: 0, name: 'air', color: 0x000000, solid: false, opacity: 0 },
@@ -61,6 +63,7 @@ export const BLOCKS: Record<BlockId, BlockDefinition> = {
   14: { id: 14, name: 'rock', color: 0x5a5560, solid: true, opacity: 1 },
   15: { id: 15, name: 'sand', color: 0xe4cf9a, solid: true, opacity: 1 },
   16: { id: 16, name: 'light', color: 0xfff2a0, solid: true, opacity: 1 },
+  17: { id: 17, name: 'asphalt', color: 0x3a3a40, solid: true, opacity: 1 },
 };
 
 export function isSolidBlock(id: BlockId): boolean {

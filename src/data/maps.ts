@@ -303,8 +303,8 @@ export const MAPS: MapDefinition[] = [
     id: 'dubai',
     displayName: 'Dubai · Lüks Villa',
     description:
-      'Çöl güneşi, beyaz mermer ve sonsuzluk havuzu. Lamborghini kapıda, gelinle damat salonda — savaş bitti, sadece keşfet.',
-    worldSize: { width: 80, depth: 80, height: 20 },
+      'Çöl güneşi, beyaz mermer, sonsuzluk havuzu ve kilometrelerce asfalt. Lamborghini kapıda — savaş bitti, sadece sür.',
+    worldSize: { width: 128, depth: 240, height: 20 },
     bgm: 'dubai-luxury',
     explorationOnly: true,
     atmosphere: {
@@ -316,15 +316,16 @@ export const MAPS: MapDefinition[] = [
       fillColor: 0x80c0ff,
       fillIntensity: 0.3,
       fogColor: 0xe8d0a8,
-      fogNear: 40,
-      fogFar: 130,
+      fogNear: 55,
+      fogFar: 200,
       skyColor: 0x87b8e8,
     },
     levels: [
       {
         index: 1,
         title: 'Altın Şehir',
-        intro: 'Çöl güneşi, beyaz mermer ve sonsuzluk havuzu. Artık savaş yok — sadece keşfet.',
+        intro:
+          'Çöl güneşi, beyaz mermer ve sonsuzluk havuzu. Uzun asfalt seni bekliyor — Lambo\'ya bin, keşfet.',
         clearMessage: 'Dubai senin. Keyfini çıkar.',
         totalEnemies: 0,
         batchInterval: 999,

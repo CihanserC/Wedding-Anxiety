@@ -13,6 +13,7 @@ export type CheatId =
   | 'bali'
   | 'dubai'
   | 'baloncu'
+  | 'lightsaber'
   | 'help';
 
 export type CheatCategory = 'anxiety' | 'combat' | 'level' | 'map' | 'meta';
@@ -111,6 +112,13 @@ export const CHEAT_REGISTRY: readonly CheatDefinition[] = [
     code: 'baloncu',
     description: 'Tüm balonları patlat',
     category: 'combat',
+  },
+  {
+    id: 'lightsaber',
+    code: 'lightsaber',
+    description: 'Kırmızı ışın kılıcı modu',
+    category: 'combat',
+    toggle: true,
   },
   {
     id: 'help',

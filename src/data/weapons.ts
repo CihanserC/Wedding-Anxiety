@@ -1,4 +1,4 @@
-export type WeaponId = 'pistol' | 'rifle' | 'shield' | 'happiness';
+export type WeaponId = 'pistol' | 'rifle' | 'shield' | 'happiness' | 'lightsaber';
 
 export interface WeaponDefinition {
   id: WeaponId;
@@ -69,6 +69,20 @@ export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
     muzzleSize: 0.1,
     recoil: 0.07,
     boltStyle: true,
+  },
+  /** Cheat-only — not in WEAPON_ORDER */
+  lightsaber: {
+    id: 'lightsaber',
+    displayName: 'Kırmızı Işın Kılıcı',
+    damage: 4,
+    cooldown: 0.38,
+    range: 11,
+    pellets: 1,
+    spread: 0,
+    tracerColor: 0xff2020,
+    muzzleColor: 0xff4040,
+    muzzleSize: 0.06,
+    recoil: 0,
   },
 };
 

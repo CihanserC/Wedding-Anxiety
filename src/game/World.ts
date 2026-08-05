@@ -164,6 +164,60 @@ export class World {
     return false;
   }
 
+  /**
+   * Vehicle body overlap — ignores floor slabs under each column so the car
+   * can drive off raised asphalt onto lower sand without snagging the road lip.
+   */
+  vehicleBodyCollides(
+    minX: number,
+    maxX: number,
+    minZ: number,
+    maxZ: number,
+    bodyMinY: number,
+    bodyMaxY: number,
+    groundClearance = 0.06,
+  ): boolean {
+    const x0 = Math.floor(minX);
+    const x1 = Math.floor(maxX - 1e-4);
+    const z0 = Math.floor(minZ);
+    const z1 = Math.floor(maxZ - 1e-4);
+    const yEnd = Math.floor(bodyMaxY - 1e-4);
+
+    for (let z = z0; z <= z1; z++) {
+      for (let x = x0; x <= x1; x++) {
+        let topSolid = -1;
+        for (let y = this.height - 1; y >= 0; y--) {
+          if (this.isSolidAt(x, y, z)) {
+            topSolid = y;
+            break;
+          }
+        }
+        if (topSolid < 0) continue;
+
+        const checkFrom = Math.max(bodyMinY, topSolid + 1 + groundClearance);
+        for (let y = Math.floor(checkFrom); y <= yEnd; y++) {
+          if (this.isSolidAt(x, y, z)) return true;
+        }
+      }
+    }
+
+    const min = new THREE.Vector3(minX, bodyMinY, minZ);
+    const max = new THREE.Vector3(maxX, bodyMaxY, maxZ);
+    for (const box of this.collisionBoxes) {
+      if (
+        min.x < box.maxX &&
+        max.x > box.minX &&
+        min.y < box.maxY &&
+        max.y > box.minY &&
+        min.z < box.maxZ &&
+        max.z > box.minZ
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   bounds(): WorldBounds {
     return {
       minX: 1,

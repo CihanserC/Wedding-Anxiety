@@ -8,6 +8,9 @@ function box(w: number, h: number, d: number, material: THREE.Material): THREE.M
   return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
 }
 
+/** Parts that block the camera in first-person — toggled while driving. */
+export const LAMBORGHINI_CABIN_HIDE = 'lambo-cabin-hide';
+
 /**
  * Voxel Lamborghini-style supercar — low wedge body, gold paint, black glass.
  * ~4.5 blocks long to match other vehicle props.
@@ -25,7 +28,7 @@ export function buildLamborghini(): THREE.Group {
   const lightMat = lambert(0xfff0c0, { emissive: 0xffe080, emissiveIntensity: 0.45 });
   const rearLight = lambert(0xff2020, { emissive: 0xff1010, emissiveIntensity: 0.55 });
 
-  // Main wedge body (long along Z, nose toward -Z)
+  // Main wedge body (long along Z, nose toward -Z) — stays visible in FPS
   const chassis = box(1.85, 0.28, 4.2, gold);
   chassis.position.set(0, 0.42, 0);
   g.add(chassis);
@@ -36,11 +39,13 @@ export function buildLamborghini(): THREE.Group {
 
   // Cabin / roof scoop
   const cabin = box(1.55, 0.32, 1.7, gold);
+  cabin.name = LAMBORGHINI_CABIN_HIDE;
   cabin.position.set(0, 0.68, 0.15);
   g.add(cabin);
 
   // Sloped windshield
   const windshield = box(1.4, 0.28, 0.9, glass);
+  windshield.name = LAMBORGHINI_CABIN_HIDE;
   windshield.position.set(0, 0.72, -0.75);
   windshield.rotation.x = -0.45;
   g.add(windshield);
@@ -48,12 +53,14 @@ export function buildLamborghini(): THREE.Group {
   // Side windows
   for (const side of [-1, 1]) {
     const win = box(0.06, 0.22, 1.2, glass);
+    win.name = LAMBORGHINI_CABIN_HIDE;
     win.position.set(side * 0.82, 0.7, 0.1);
     g.add(win);
   }
 
   // Rear glass / engine cover
   const rearGlass = box(1.35, 0.12, 0.7, glass);
+  rearGlass.name = LAMBORGHINI_CABIN_HIDE;
   rearGlass.position.set(0, 0.78, 1.05);
   rearGlass.rotation.x = 0.25;
   g.add(rearGlass);
@@ -88,10 +95,12 @@ export function buildLamborghini(): THREE.Group {
 
   // Rear wing
   const wing = box(1.7, 0.06, 0.35, black);
+  wing.name = LAMBORGHINI_CABIN_HIDE;
   wing.position.set(0, 0.95, 1.55);
   g.add(wing);
   for (const side of [-1, 1]) {
     const strut = box(0.06, 0.22, 0.08, chrome);
+    strut.name = LAMBORGHINI_CABIN_HIDE;
     strut.position.set(side * 0.55, 0.82, 1.55);
     g.add(strut);
   }

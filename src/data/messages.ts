@@ -135,6 +135,11 @@ export const LAMBO_DRIVE_MESSAGES = {
   exitPrompt: 'E - Arabadan in',
 };
 
+export const TV_MESSAGES = {
+  turnOn: 'E - Televizyonu aç',
+  turnOff: 'E - Televizyonu kapat',
+};
+
 export const DUBAI_NPC_MESSAGES = {
   groomChatPrompt: 'E - Cihanser ile sohbet et',
   brideChatPrompt: 'E - Hilal ile sohbet et',
@@ -163,4 +168,18 @@ export const DUBAI_NPC_MESSAGES = {
       c: 'Salonda takılalım, havuza girelim, Lambo\'yu seyredelim. Artık acele yok, Hilal.',
     },
   },
+};
+
+/** Friendly Dubai locals — camel & Arab NPCs speak pure gibberish Arabic. */
+export const DUBAI_LOCAL_MESSAGES = {
+  camelPrompt: 'E - Deveye selam ver',
+  arabPrompt: 'E - Sohbet et',
+  continueLabel: '???',
+  lines: [
+    'WAHEEEED WAHEEEDDD!!!\n\nمرحبا يا حبيبي يالله يالله\n\nشوف الشوف يا وحيد واهيد واهيييد',
+    'WAHEEEED WAHEEEDDD\n\nهههههه يلا يلا\n\nوين رايح يا صاحبي؟',
+    'WAHEEEED!!!\n\nالحين الحين يالله برررر\n\nWAHEEEDDD WAHEEEED',
+    'يا وحيد WAHEEEED WAHEEEDDD\n\nشوي شوي habibi\n\nما فهمتك بس أحبك',
+    'WAHEEEEDDD!!!\n\nالجمل يقول: هههههه\n\nياهلا وسهلا يا غريب\n\nWAHEEEED',
+  ],
 };

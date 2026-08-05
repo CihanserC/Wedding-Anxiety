@@ -9,6 +9,7 @@ export type BgmId =
   | 'mozart-allegro'
   | 'lighthouse-ambient'
   | 'wedding-hope'
+  | 'wedding-celebration'
   | 'bali-tropical'
   | 'dubai-luxury'
   | null;
@@ -26,6 +27,22 @@ export class AudioManager {
   private bgmNoteIndex = 0;
   private blasterBuffer: AudioBuffer | null = null;
   private blasterLoadPromise: Promise<void> | null = null;
+  private lightsaberHitBuffer: AudioBuffer | null = null;
+  private lightsaberHoldBuffer: AudioBuffer | null = null;
+  private lightsaberLoadPromise: Promise<void> | null = null;
+  private lightsaberHoldSource: AudioBufferSourceNode | null = null;
+  private lightsaberHoldGain: GainNode | null = null;
+  private lightsaberHoldWanted = false;
+  private lightsaberHoldResumeTimer: number | null = null;
+  private readonly lightsaberHoldPeak = 0.14;
+
+  private carEngineWanted = false;
+  private carEngineGain: GainNode | null = null;
+  private carEngineOscLow: OscillatorNode | null = null;
+  private carEngineOscHigh: OscillatorNode | null = null;
+  private carEngineNoise: AudioBufferSourceNode | null = null;
+  private carEngineFilter: BiquadFilterNode | null = null;
+  private carEngineSpeed = 0;
 
   ensureStarted(): void {
     if (this.ctx) return;
@@ -41,6 +58,7 @@ export class AudioManager {
       this.musicGain.gain.value = 0.12;
       this.musicGain.connect(this.ctx.destination);
       void this.loadBlasterSound();
+      void this.loadLightsaberSounds();
     } catch {
       this.ctx = null;
     }
@@ -78,6 +96,12 @@ export class AudioManager {
       this.musicGain.gain.value = this.muted ? 0 : this.musicVolume;
     }
     if (this.bgmHtml) this.bgmHtml.muted = this.muted;
+    if (this.lightsaberHoldGain) {
+      this.lightsaberHoldGain.gain.value = this.muted ? 0 : this.lightsaberHoldPeak;
+    }
+    if (this.carEngineGain && this.carEngineWanted) {
+      this.carEngineGain.gain.value = this.muted ? 0 : this.carEngineTargetGain(this.carEngineSpeed);
+    }
   }
 
   play(sfx: Sfx): void {
@@ -129,6 +153,8 @@ export class AudioManager {
       this.startLighthouseAmbient();
     } else if (id === 'wedding-hope') {
       this.startWeddingHope();
+    } else if (id === 'wedding-celebration') {
+      this.startWeddingCelebration();
     } else if (id === 'bali-tropical') {
       this.startBaliTropical();
     } else if (id === 'dubai-luxury') {
@@ -350,6 +376,42 @@ export class AudioManager {
     step();
   }
 
+  /** Bridal chorus loop — plays when the wedding hall boss is defeated. */
+  private startWeddingCelebration(): void {
+    if (!this.ctx || !this.musicGain || this.bgmId !== 'wedding-celebration') return;
+
+    const melody: Array<{ freq: number; beats: number }> = [
+      { freq: 493.88, beats: 1.5 },
+      { freq: 659.25, beats: 1 },
+      { freq: 659.25, beats: 1 },
+      { freq: 739.99, beats: 1 },
+      { freq: 830.61, beats: 1 },
+      { freq: 659.25, beats: 1 },
+      { freq: 830.61, beats: 1 },
+      { freq: 659.25, beats: 1 },
+      { freq: 830.61, beats: 1 },
+      { freq: 659.25, beats: 2 },
+      { freq: 987.77, beats: 1 },
+      { freq: 987.77, beats: 1 },
+      { freq: 987.77, beats: 1 },
+      { freq: 830.61, beats: 1 },
+      { freq: 659.25, beats: 1 },
+      { freq: 739.99, beats: 1 },
+      { freq: 830.61, beats: 2 },
+      { freq: 0, beats: 1 },
+    ];
+
+    const beatMs = 360;
+    const step = (): void => {
+      if (this.bgmId !== 'wedding-celebration' || !this.ctx || !this.musicGain || this.muted) return;
+      const note = melody[this.bgmNoteIndex % melody.length];
+      this.bgmNoteIndex++;
+      if (note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000, 0.75);
+      this.bgmTimer = window.setTimeout(step, note.beats * beatMs);
+    };
+    step();
+  }
+
   private playMusicNote(freq: number, duration: number, peak = 0.9): void {
     if (!this.ctx || !this.musicGain) return;
     const now = this.ctx.currentTime;
@@ -465,6 +527,263 @@ export class AudioManager {
       this.blasterLoadPromise = null;
     });
     return this.blasterLoadPromise;
+  }
+
+  /** One-shot swing/hit — public/lightsaber-hit.mp3 */
+  playLightsaberHit(): void {
+    if (!this.ctx || !this.masterGain || this.muted) return;
+    if (!this.lightsaberHitBuffer) {
+      void this.loadLightsaberSounds();
+      return;
+    }
+    this.pauseLightsaberHoldBriefly(180);
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.lightsaberHitBuffer;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0.85;
+    src.connect(gain);
+    gain.connect(this.masterGain);
+    src.start();
+  }
+
+  /** Soft looping idle hum while lightsaber mode is active. */
+  startLightsaberHold(): void {
+    this.lightsaberHoldWanted = true;
+    this.clearLightsaberHoldResume();
+    if (!this.ctx || !this.masterGain) {
+      this.ensureStarted();
+    }
+    void this.loadLightsaberSounds().then(() => {
+      if (this.lightsaberHoldWanted) this.beginLightsaberHoldLoop();
+    });
+  }
+
+  stopLightsaberHold(): void {
+    this.lightsaberHoldWanted = false;
+    this.clearLightsaberHoldResume();
+    this.endLightsaberHoldLoop();
+  }
+
+  /** Briefly mute the hold loop so the hit SFX is clear. */
+  pauseLightsaberHoldBriefly(ms: number): void {
+    if (!this.lightsaberHoldWanted) return;
+    this.endLightsaberHoldLoop();
+    this.clearLightsaberHoldResume();
+    this.lightsaberHoldResumeTimer = window.setTimeout(() => {
+      this.lightsaberHoldResumeTimer = null;
+      if (this.lightsaberHoldWanted) this.beginLightsaberHoldLoop();
+    }, ms);
+  }
+
+  private clearLightsaberHoldResume(): void {
+    if (this.lightsaberHoldResumeTimer !== null) {
+      window.clearTimeout(this.lightsaberHoldResumeTimer);
+      this.lightsaberHoldResumeTimer = null;
+    }
+  }
+
+  private beginLightsaberHoldLoop(): void {
+    if (!this.ctx || !this.masterGain || !this.lightsaberHoldBuffer) return;
+    if (this.lightsaberHoldSource) return;
+
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.lightsaberHoldBuffer;
+    src.loop = true;
+    const gain = this.ctx.createGain();
+    gain.gain.value = this.muted ? 0 : this.lightsaberHoldPeak;
+    src.connect(gain);
+    gain.connect(this.masterGain);
+    src.start();
+    this.lightsaberHoldSource = src;
+    this.lightsaberHoldGain = gain;
+    src.onended = () => {
+      if (this.lightsaberHoldSource === src) {
+        this.lightsaberHoldSource = null;
+        this.lightsaberHoldGain = null;
+      }
+    };
+  }
+
+  private endLightsaberHoldLoop(): void {
+    if (this.lightsaberHoldSource) {
+      try {
+        this.lightsaberHoldSource.stop();
+      } catch {
+        /* already stopped */
+      }
+      this.lightsaberHoldSource.disconnect();
+      this.lightsaberHoldSource = null;
+    }
+    if (this.lightsaberHoldGain) {
+      this.lightsaberHoldGain.disconnect();
+      this.lightsaberHoldGain = null;
+    }
+  }
+
+  private loadLightsaberSounds(): Promise<void> {
+    if (this.lightsaberHitBuffer && this.lightsaberHoldBuffer) return Promise.resolve();
+    if (this.lightsaberLoadPromise) return this.lightsaberLoadPromise;
+    this.lightsaberLoadPromise = (async () => {
+      if (!this.ctx) return;
+      const base = import.meta.env.BASE_URL;
+      const [hitRes, holdRes] = await Promise.all([
+        fetch(`${base}lightsaber-hit.mp3`),
+        fetch(`${base}lightsaber-hold.mp3`),
+      ]);
+      if (!hitRes.ok) throw new Error(`lightsaber-hit fetch failed: ${hitRes.status}`);
+      if (!holdRes.ok) throw new Error(`lightsaber-hold fetch failed: ${holdRes.status}`);
+      const [hitArr, holdArr] = await Promise.all([
+        hitRes.arrayBuffer(),
+        holdRes.arrayBuffer(),
+      ]);
+      const [hitBuf, holdBuf] = await Promise.all([
+        this.ctx!.decodeAudioData(hitArr.slice(0)),
+        this.ctx!.decodeAudioData(holdArr.slice(0)),
+      ]);
+      this.lightsaberHitBuffer = hitBuf;
+      this.lightsaberHoldBuffer = holdBuf;
+    })().catch(() => {
+      this.lightsaberLoadPromise = null;
+    });
+    return this.lightsaberLoadPromise;
+  }
+
+  /** Looping supercar engine — pitch/volume follow |speed| / maxSpeed. */
+  startCarEngine(): void {
+    this.carEngineWanted = true;
+    this.carEngineSpeed = 0;
+    if (!this.ctx || !this.masterGain) this.ensureStarted();
+    this.beginCarEngineLoop();
+  }
+
+  stopCarEngine(): void {
+    this.carEngineWanted = false;
+    this.carEngineSpeed = 0;
+    this.endCarEngineLoop();
+  }
+
+  /** @param normalizedSpeed 0..1 relative to top speed */
+  updateCarEngine(normalizedSpeed: number): void {
+    if (!this.carEngineWanted) return;
+    const t = Math.max(0, Math.min(1, normalizedSpeed));
+    this.carEngineSpeed = t;
+    if (!this.carEngineGain) {
+      this.beginCarEngineLoop();
+      return;
+    }
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const idleHz = 58;
+    const topHz = 145;
+    const lowHz = idleHz + (topHz - idleHz) * t;
+    if (this.carEngineOscLow) {
+      this.carEngineOscLow.frequency.setTargetAtTime(lowHz, now, 0.08);
+    }
+    if (this.carEngineOscHigh) {
+      this.carEngineOscHigh.frequency.setTargetAtTime(lowHz * 2.05, now, 0.08);
+    }
+    if (this.carEngineFilter) {
+      this.carEngineFilter.frequency.setTargetAtTime(420 + t * 1600, now, 0.1);
+    }
+    if (!this.muted) {
+      this.carEngineGain.gain.setTargetAtTime(this.carEngineTargetGain(t), now, 0.06);
+    }
+  }
+
+  private carEngineTargetGain(normalizedSpeed: number): number {
+    return 0.04 + normalizedSpeed * 0.12;
+  }
+
+  private beginCarEngineLoop(): void {
+    if (!this.ctx || !this.masterGain || !this.carEngineWanted) return;
+    if (this.carEngineGain) return;
+
+    const ctx = this.ctx;
+    const gain = ctx.createGain();
+    gain.gain.value = this.muted ? 0 : this.carEngineTargetGain(this.carEngineSpeed);
+
+    const oscLow = ctx.createOscillator();
+    oscLow.type = 'sawtooth';
+    oscLow.frequency.value = 58;
+
+    const oscHigh = ctx.createOscillator();
+    oscHigh.type = 'square';
+    oscHigh.frequency.value = 119;
+
+    const lowGain = ctx.createGain();
+    lowGain.gain.value = 0.55;
+    const highGain = ctx.createGain();
+    highGain.gain.value = 0.12;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 480;
+    filter.Q.value = 0.7;
+
+    // Soft exhaust hiss
+    const noiseDur = 1.5;
+    const noiseBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * noiseDur), ctx.sampleRate);
+    const data = noiseBuf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuf;
+    noise.loop = true;
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.value = 900;
+    noiseFilter.Q.value = 0.6;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.value = 0.045;
+
+    oscLow.connect(lowGain);
+    oscHigh.connect(highGain);
+    lowGain.connect(filter);
+    highGain.connect(filter);
+    filter.connect(gain);
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(gain);
+    gain.connect(this.masterGain);
+
+    oscLow.start();
+    oscHigh.start();
+    noise.start();
+
+    this.carEngineGain = gain;
+    this.carEngineOscLow = oscLow;
+    this.carEngineOscHigh = oscHigh;
+    this.carEngineNoise = noise;
+    this.carEngineFilter = filter;
+  }
+
+  private endCarEngineLoop(): void {
+    const stopOsc = (osc: OscillatorNode | AudioBufferSourceNode | null): void => {
+      if (!osc) return;
+      try {
+        osc.stop();
+      } catch {
+        /* already stopped */
+      }
+      try {
+        osc.disconnect();
+      } catch {
+        /* already disconnected */
+      }
+    };
+    stopOsc(this.carEngineOscLow);
+    stopOsc(this.carEngineOscHigh);
+    stopOsc(this.carEngineNoise);
+    this.carEngineOscLow = null;
+    this.carEngineOscHigh = null;
+    this.carEngineNoise = null;
+    if (this.carEngineFilter) {
+      this.carEngineFilter.disconnect();
+      this.carEngineFilter = null;
+    }
+    if (this.carEngineGain) {
+      this.carEngineGain.disconnect();
+      this.carEngineGain = null;
+    }
   }
 
   private playHit(): void {

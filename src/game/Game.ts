@@ -9,11 +9,13 @@ import {
   BALI_TREASURE_MESSAGES,
   CAKE_MESSAGES,
   CAT_FEED_MESSAGES,
+  DUBAI_LOCAL_MESSAGES,
   DUBAI_NPC_MESSAGES,
   HUD_LABELS,
   LAMBO_DRIVE_MESSAGES,
   PIANO_PLAY_MESSAGES,
   SUZY_CAT_MESSAGES,
+  TV_MESSAGES,
   WEDDING_NPC_MESSAGES,
   WIN_MESSAGES,
 } from '../data/messages';
@@ -31,6 +33,8 @@ import type { Enemy } from '../entities/Enemy';
 import { WEAPONS, WEAPON_ORDER, type WeaponId } from '../data/weapons';
 import { createNeonWallSign, createWallSign } from '../rendering/WallSign';
 import { buildHallDecorations } from '../rendering/WeddingDecorations';
+import { LAMBORGHINI_CABIN_HIDE } from '../rendering/lamborghini';
+import { TvSlideshow } from '../rendering/TvSlideshow';
 import { buildProps, updateEatingCat } from '../rendering/MapProps';
 import { updateSuzyCatIdle } from '../rendering/SuzyCat';
 import { buildTreasureChest } from '../rendering/TreasureChest';
@@ -56,9 +60,11 @@ const CAR_TURN_RATE = 2.35;
 const CAR_HALF_W = 0.95;
 const CAR_HALF_L = 2.05;
 const CAR_HEIGHT = 1.05;
-const CAR_EYE_HEIGHT = 0.82;
-const CAR_MIN_PITCH = -0.22;
-const CAR_MAX_PITCH = 0.18;
+/** Eye above car origin — low enough to read the hood, above the chassis. */
+const CAR_EYE_HEIGHT = 0.78;
+const CAR_MIN_PITCH = -0.35;
+const CAR_MAX_PITCH = 0.22;
+const CAR_DEFAULT_PITCH = -0.12;
 
 type GameState = 'menu' | 'intro' | 'playing' | 'paused' | 'boss-cinematic' | 'transition' | 'map-intro' | 'win' | 'lose';
 
@@ -97,6 +103,8 @@ export class Game {
   private running = false;
   private activeWeapon: WeaponId = 'pistol';
   private cheatGodMode = false;
+  private lightsaberMode = false;
+  private weaponBeforeLightsaber: WeaponId = 'pistol';
   private catFed = false;
   private catAnimTime = 0;
   private catMesh: THREE.Object3D | null = null;
@@ -124,12 +132,15 @@ export class Game {
   private lamborghiniMesh: THREE.Group | null = null;
   private drivingCar = false;
   private carX = 0;
-  private carY = 2.01;
+  private carY = 3.01;
   private carZ = 0;
   private carYaw = 0;
   private carPitch = -0.06;
   private carSpeed = 0;
   private lamboInteractArmed = false;
+  private plasmaTvMesh: THREE.Group | null = null;
+  private plasmaTvOn = false;
+  private tvSlideshow = new TvSlideshow();
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -236,7 +247,7 @@ export class Game {
     this.addBanner();
     this.addDecorations();
     this.addProps();
-    this.npcs.spawnAll(this.world.npcs);
+    this.npcs.spawnAll(this.world.npcs, this.world);
     this.audio?.setBgm(mapDef.bgm ?? null);
     this.catFed = false;
     this.pianoPlayed = false;
@@ -245,7 +256,10 @@ export class Game {
     this.drivingCar = false;
     this.lamboInteractArmed = false;
     this.player?.setExternalDrive(false);
-    if (this.player) this.player.rig.root.visible = true;
+    this.player?.setEyeHeightOverride(null);
+    if (this.player) this.player.rig.setDrivingMode(false);
+    this.setCabinOccludersVisible(true);
+    this.audio?.stopCarEngine();
 
     this.weapon?.setWorld(this.world);
     this.enemies?.setWorld(this.world);
@@ -275,6 +289,10 @@ export class Game {
     this.suzyCatMesh = null;
     this.treasureChestMesh = null;
     this.treasureDiscovered = false;
+    this.plasmaTvMesh = null;
+    this.plasmaTvOn = false;
+    this.tvSlideshow.dispose();
+    this.tvSlideshow = new TvSlideshow();
     this.balloons.clear();
     if (this.world.props.length === 0) return;
     const props = buildProps(this.world.props);
@@ -284,7 +302,9 @@ export class Game {
       if (child.name === 'eating-cat') this.catMesh = child;
       if (child.name === 'suzy-cat') this.suzyCatMesh = child;
       if (child.name === 'lamborghini') this.lamborghiniMesh = child as THREE.Group;
+      if (child.name === 'plasma-tv') this.plasmaTvMesh = child as THREE.Group;
     });
+    this.setPlasmaTvPower(false);
     this.initLamborghiniFromWorld();
   }
 
@@ -292,7 +312,7 @@ export class Game {
     this.drivingCar = false;
     this.lamboInteractArmed = false;
     this.carSpeed = 0;
-    this.carPitch = -0.06;
+    this.carPitch = CAR_DEFAULT_PITCH;
 
     const spec = this.world.props.find((p) => p.kind === 'lamborghini');
     if (!spec) return;
@@ -301,6 +321,7 @@ export class Game {
     this.carY = spec.y;
     this.carZ = spec.z;
     this.carYaw = spec.rotationY ?? 0;
+    this.snapCarToGround();
     this.syncLamborghiniMesh();
   }
 
@@ -441,6 +462,7 @@ export class Game {
       }
 
       this.enemies.update(dt, this.player.position);
+      this.npcs.update(dt, this.world, this.world.interactables);
       this.enemyProjectiles.update(dt, this.player.position, this.world, (amount) => {
         this.anxiety.add(amount);
         this.hud.flashDamage();
@@ -454,15 +476,21 @@ export class Game {
       this.tickAltarInteraction();
       this.tickWeddingNpcInteraction();
       this.tickDubaiExploreInteraction();
+      if (this.plasmaTvOn) this.tvSlideshow.update(dt);
       this.tickSuzyCatInteraction(dt);
       this.tickCakeInteraction();
       this.tickBaliTreasureInteraction();
 
       if (active && this.levelState.phase !== 'celebration') {
-        const requested = this.input.consumeWeaponSelect();
-        if (requested !== null) this.setActiveWeapon(WEAPON_ORDER[requested]);
-        const wheel = this.input.consumeWeaponScroll();
-        if (wheel !== 0) this.cycleWeapon(wheel);
+        if (!this.lightsaberMode) {
+          const requested = this.input.consumeWeaponSelect();
+          if (requested !== null) this.setActiveWeapon(WEAPON_ORDER[requested]);
+          const wheel = this.input.consumeWeaponScroll();
+          if (wheel !== 0) this.cycleWeapon(wheel);
+        } else {
+          this.input.consumeWeaponSelect();
+          this.input.consumeWeaponScroll();
+        }
       }
 
       if (
@@ -482,15 +510,20 @@ export class Game {
           },
         );
         if (result) {
-          this.audio.play(this.activeWeapon === 'happiness' ? 'laser' : 'shoot');
-          this.player.rig.onFire(result.recoil);
+          if (this.activeWeapon === 'lightsaber') {
+            this.audio.playLightsaberHit();
+            this.player.rig.onLightsaberSwing();
+          } else {
+            this.audio.play(this.activeWeapon === 'happiness' ? 'laser' : 'shoot');
+            this.player.rig.onFire(result.recoil);
+          }
           for (const entry of result.balloonHits) {
             this.balloons.pop(entry, (pos, color) => {
               this.effects.spawnBalloonPop(pos, color);
               this.audio.play('balloon-pop');
             });
           }
-          if (result.hitEnemy) this.audio.play('hit');
+          if (result.hitEnemy && this.activeWeapon !== 'lightsaber') this.audio.play('hit');
           if (result.killedEnemy) this.handleBossKillCascade(result.killedEnemy);
         }
       }
@@ -1013,6 +1046,7 @@ export class Game {
 
       if (isFinalBoss) {
         s.phase = 'clearing';
+        this.startWeddingCelebrationMusic();
         this.audio.play('wave-clear');
         this.stagesCleared++;
         this.anxiety.lockAtZero();
@@ -1056,7 +1090,6 @@ export class Game {
     this.dialogue.hide();
     this.hud.hide();
     this.input.releasePointerLock();
-    this.audio.stopBgm();
     this.audio.play('win');
     this.menu.showWin(this.score, this.stagesCleared, totalLevelCount(), {
       message: WIN_MESSAGES.finaleBody,
@@ -1151,6 +1184,22 @@ export class Game {
       case 'baloncu':
         this.cheatPopAllBalloons();
         return null;
+      case 'lightsaber': {
+        if (this.lightsaberMode) {
+          this.lightsaberMode = false;
+          this.audio.stopLightsaberHold();
+          this.setActiveWeapon(this.weaponBeforeLightsaber);
+          return 'Işın kılıcı: kapalı';
+        }
+        if (this.activeWeapon !== 'lightsaber') {
+          this.weaponBeforeLightsaber = this.activeWeapon;
+        }
+        this.lightsaberMode = true;
+        this.setActiveWeapon('lightsaber');
+        this.audio.ensureStarted();
+        this.audio.startLightsaberHold();
+        return 'Işın kılıcı: açık';
+      }
       case 'help':
         return { help: getCheatHelpEditorText() };
       default:
@@ -1160,6 +1209,8 @@ export class Game {
 
   private resetCheatState(): void {
     this.cheatGodMode = false;
+    this.lightsaberMode = false;
+    this.audio.stopLightsaberHold();
     this.weapon.resetCheatModifiers();
   }
 
@@ -1271,7 +1322,7 @@ export class Game {
     this.hud.setInteractPrompt(null);
     this.hud.setSubtitle([]);
     this.anxiety.lockAtZero();
-    this.audio.setBgm(MAPS[this.mapIndex].bgm ?? null);
+    this.startWeddingCelebrationMusic();
     this.input.requestPointerLock();
   }
 
@@ -1413,11 +1464,15 @@ export class Game {
     const lambo = this.world.interactables.find((item) => item.kind === 'lamborghini-drive');
     const groom = this.world.interactables.find((item) => item.kind === 'groom-chat');
     const bride = this.world.interactables.find((item) => item.kind === 'bride-chat');
+    const tv = this.world.interactables.find((item) => item.kind === 'plasma-tv');
+    const nearestLocal = this.findNearestDubaiLocal();
     const nearLambo = lambo ? this.isNearInteractable(lambo) : false;
     const nearGroom = groom ? this.isNearInteractable(groom) : false;
     const nearBride = bride ? this.isNearInteractable(bride) : false;
+    const nearTv = tv ? this.isNearInteractable(tv) : false;
+    const nearLocal = nearestLocal !== null;
 
-    if (!nearLambo && !nearGroom && !nearBride) {
+    if (!nearLambo && !nearGroom && !nearBride && !nearLocal && !nearTv) {
       this.lamboInteractArmed = false;
       this.hud.setInteractPrompt(null);
       return;
@@ -1435,8 +1490,11 @@ export class Game {
       nearBride && bride
         ? Math.hypot(this.player.position.x - bride.x, this.player.position.z - bride.z)
         : Infinity;
+    const localDist = nearestLocal?.dist ?? Infinity;
+    const tvDist =
+      nearTv && tv ? Math.hypot(this.player.position.x - tv.x, this.player.position.z - tv.z) : Infinity;
 
-    const closest = Math.min(lamboDist, groomDist, brideDist);
+    const closest = Math.min(lamboDist, groomDist, brideDist, localDist, tvDist);
     if (closest === lamboDist && nearLambo) {
       this.hud.setInteractPrompt(LAMBO_DRIVE_MESSAGES.prompt);
       if (!this.lamboInteractArmed) {
@@ -1449,6 +1507,25 @@ export class Game {
     }
 
     this.lamboInteractArmed = false;
+
+    if (closest === tvDist && nearTv) {
+      this.hud.setInteractPrompt(this.plasmaTvOn ? TV_MESSAGES.turnOff : TV_MESSAGES.turnOn);
+      if (this.input.consumeInteract()) this.setPlasmaTvPower(!this.plasmaTvOn);
+      return;
+    }
+
+    if (closest === localDist && nearestLocal) {
+      const prompt =
+        nearestLocal.kind === 'camel-chat'
+          ? DUBAI_LOCAL_MESSAGES.camelPrompt
+          : DUBAI_LOCAL_MESSAGES.arabPrompt;
+      this.hud.setInteractPrompt(prompt);
+      if (this.input.consumeInteract()) {
+        this.openDubaiLocalChat(nearestLocal.kind, nearestLocal.speakerName);
+      }
+      return;
+    }
+
     let target: 'bride' | 'groom' | null = null;
     if (nearGroom && nearBride) {
       target = groomDist <= brideDist ? 'groom' : 'bride';
@@ -1470,36 +1547,113 @@ export class Game {
     }
   }
 
+  private setPlasmaTvPower(on: boolean): void {
+    this.plasmaTvOn = on;
+    if (!this.plasmaTvMesh) return;
+
+    const screen = this.plasmaTvMesh.getObjectByName('tv-screen') as THREE.Mesh | undefined;
+    if (!screen) return;
+
+    if (on) {
+      void this.tvSlideshow.start(screen);
+    } else {
+      this.tvSlideshow.stop(screen);
+    }
+  }
+
+  private findNearestDubaiLocal(): {
+    kind: 'camel-chat' | 'arab-chat';
+    dist: number;
+    speakerName: string;
+  } | null {
+    let best: { kind: 'camel-chat' | 'arab-chat'; dist: number; speakerName: string } | null = null;
+    for (const item of this.world.interactables) {
+      if (item.kind !== 'camel-chat' && item.kind !== 'arab-chat') continue;
+      if (!this.isNearInteractable(item)) continue;
+      const dist = Math.hypot(this.player.position.x - item.x, this.player.position.z - item.z);
+      if (!best || dist < best.dist) {
+        best = {
+          kind: item.kind,
+          dist,
+          speakerName:
+            item.speakerName ??
+            (item.kind === 'camel-chat' ? NPC_STATS.camel.displayName : NPC_STATS['arab-man'].displayName),
+        };
+      }
+    }
+    return best;
+  }
+
+  private openDubaiLocalChat(kind: 'camel-chat' | 'arab-chat', speakerName: string): void {
+    this.intentionalUnlock = true;
+    this.input.releasePointerLock();
+    this.hud.setInteractPrompt(null);
+    this.hud.setCrosshairVisible(false);
+
+    const lines = DUBAI_LOCAL_MESSAGES.lines;
+    const body = lines[Math.floor(Math.random() * lines.length)] ?? lines[0];
+    const title =
+      kind === 'camel-chat' ? `${speakerName} 🐪` : speakerName;
+
+    this.dialogue.show({
+      title,
+      body: body.replace(/\n/g, '<br/>'),
+      continueLabel: DUBAI_LOCAL_MESSAGES.continueLabel,
+      onContinue: () => {
+        if (this.state === 'playing' && this.levelState.phase === 'celebration') {
+          this.hud.setCrosshairVisible(false);
+          this.input.requestPointerLock();
+        }
+      },
+    });
+  }
+
   private enterCarDrive(): void {
     if (!this.lamborghiniMesh) return;
     this.drivingCar = true;
     this.carSpeed = 0;
-    this.carPitch = -0.06;
+    this.carPitch = CAR_DEFAULT_PITCH;
     this.player.setExternalDrive(true);
     this.player.setEyeHeightOverride(CAR_EYE_HEIGHT);
-    this.player.rig.root.visible = false;
-    this.player.rig.setHeldItem('none');
+    this.setCabinOccludersVisible(false);
+    this.player.rig.setDrivingMode(true);
+    this.snapCarToGround();
     this.player.position.set(this.carX, this.carY, this.carZ);
     this.player.setViewAngles(this.carYaw, this.carPitch);
     this.hud.setCrosshairVisible(false);
     this.hud.setInteractPrompt(LAMBO_DRIVE_MESSAGES.exitPrompt);
+    this.audio.ensureStarted();
+    this.audio.startCarEngine();
   }
 
   private exitCarDrive(): void {
     this.drivingCar = false;
     this.carSpeed = 0;
+    this.audio.stopCarEngine();
     this.player.setExternalDrive(false);
-    this.player.rig.root.visible = true;
+    this.player.setEyeHeightOverride(null);
+    this.setCabinOccludersVisible(true);
+    this.player.rig.setDrivingMode(false);
     this.player.rig.setHeldItem('money');
     const exitSide = 1.35;
+    const exitX = this.carX - Math.cos(this.carYaw) * exitSide;
+    const exitZ = this.carZ + Math.sin(this.carYaw) * exitSide;
+    const stand = this.world.resolveStandingPoint(exitX, exitZ, 0.35, 1.7, 4);
     this.player.position.set(
-      this.carX - Math.cos(this.carYaw) * exitSide,
-      this.carY,
-      this.carZ + Math.sin(this.carYaw) * exitSide,
+      stand?.x ?? exitX,
+      stand?.y ?? this.carY,
+      stand?.z ?? exitZ,
     );
     this.player.setViewAngles(this.carYaw + Math.PI * 0.5, 0);
     this.hud.setCrosshairVisible(false);
     this.hud.setInteractPrompt(null);
+  }
+
+  private setCabinOccludersVisible(visible: boolean): void {
+    if (!this.lamborghiniMesh) return;
+    this.lamborghiniMesh.traverse((obj) => {
+      if (obj.name === LAMBORGHINI_CABIN_HIDE) obj.visible = visible;
+    });
   }
 
   private tickCarDriving(dt: number, active: boolean): void {
@@ -1537,44 +1691,84 @@ export class Game {
     const moveX = -Math.sin(this.carYaw) * this.carSpeed * dt;
     const moveZ = -Math.cos(this.carYaw) * this.carSpeed * dt;
     this.moveCar(moveX, moveZ);
+    this.snapCarToGround();
 
     this.player.position.set(this.carX, this.carY, this.carZ);
     this.player.setViewAngles(this.carYaw, this.carPitch);
     this.syncLamborghiniMesh();
-    this.player.rig.update(dt, Math.abs(this.carSpeed) > 0.5);
+    this.player.rig.update(dt, Math.abs(this.carSpeed) > 0.5, this.carSpeed);
+    this.audio.updateCarEngine(Math.abs(this.carSpeed) / CAR_MAX_SPEED);
+  }
+
+  /** Keep wheels on the top solid surface (sand, asphalt, pad, etc.). */
+  private snapCarToGround(): void {
+    const cos = Math.cos(this.carYaw);
+    const sin = Math.sin(this.carYaw);
+    const local: Array<[number, number]> = [
+      [0, 0],
+      [-CAR_HALF_W * 0.55, -CAR_HALF_L * 0.55],
+      [CAR_HALF_W * 0.55, -CAR_HALF_L * 0.55],
+      [-CAR_HALF_W * 0.55, CAR_HALF_L * 0.55],
+      [CAR_HALF_W * 0.55, CAR_HALF_L * 0.55],
+    ];
+
+    let sumY = 0;
+    let count = 0;
+    for (const [lx, lz] of local) {
+      const wx = this.carX + lx * cos + lz * sin;
+      const wz = this.carZ - lx * sin + lz * cos;
+      const fx = Math.floor(wx);
+      const fz = Math.floor(wz);
+      for (let y = this.world.height - 1; y >= 0; y--) {
+        if (this.world.isSolidAt(fx, y, fz)) {
+          sumY += y + 1.01;
+          count++;
+          break;
+        }
+      }
+    }
+
+    if (count > 0) {
+      this.carY = sumY / count;
+    }
   }
 
   private moveCar(deltaX: number, deltaZ: number): void {
     if (deltaX !== 0) {
-      const original = this.carX;
-      this.carX = original + deltaX;
+      const originalX = this.carX;
+      const originalY = this.carY;
+      this.carX = originalX + deltaX;
+      this.snapCarToGround();
       if (this.carBodyCollides()) {
-        this.carX = original;
+        this.carX = originalX;
+        this.carY = originalY;
+        this.snapCarToGround();
         this.carSpeed *= 0.35;
       }
     }
     if (deltaZ !== 0) {
-      const original = this.carZ;
-      this.carZ = original + deltaZ;
+      const originalZ = this.carZ;
+      const originalY = this.carY;
+      this.carZ = originalZ + deltaZ;
+      this.snapCarToGround();
       if (this.carBodyCollides()) {
-        this.carZ = original;
+        this.carZ = originalZ;
+        this.carY = originalY;
+        this.snapCarToGround();
         this.carSpeed *= 0.35;
       }
     }
   }
 
   private carBodyCollides(): boolean {
-    const min = new THREE.Vector3(
+    return this.world.vehicleBodyCollides(
       this.carX - CAR_HALF_W,
-      this.carY,
-      this.carZ - CAR_HALF_L,
-    );
-    const max = new THREE.Vector3(
       this.carX + CAR_HALF_W,
-      this.carY + CAR_HEIGHT,
+      this.carZ - CAR_HALF_L,
       this.carZ + CAR_HALF_L,
+      this.carY + 0.12,
+      this.carY + CAR_HEIGHT,
     );
-    return this.world.boxCollides(min, max);
   }
 
   private openDubaiChatChoices(): void {
@@ -1775,9 +1969,17 @@ export class Game {
     if (MAPS[this.mapIndex].id !== 'wedding-hall' || !killed.stats.isBoss) return;
 
     const isFinalBoss = this.levelIndex >= MAPS[this.mapIndex].levels.length - 1;
-    if (isFinalBoss) this.anxiety.lockAtZero();
+    if (isFinalBoss) {
+      this.anxiety.lockAtZero();
+      this.startWeddingCelebrationMusic();
+    }
 
     this.enemies.forceKillAllExcept(killed);
+  }
+
+  private startWeddingCelebrationMusic(): void {
+    this.audio.ensureStarted();
+    this.audio.setBgm('wedding-celebration');
   }
 
   private handleEnemyContact(enemy: Enemy, dt: number): void {
