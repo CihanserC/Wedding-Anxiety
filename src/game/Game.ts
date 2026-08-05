@@ -244,8 +244,8 @@ export class Game {
     this.catInteractArmed = false;
     this.drivingCar = false;
     this.lamboInteractArmed = false;
-    this.player.setExternalDrive(false);
-    this.player.rig.root.visible = true;
+    this.player?.setExternalDrive(false);
+    if (this.player) this.player.rig.root.visible = true;
 
     this.weapon?.setWorld(this.world);
     this.enemies?.setWorld(this.world);
