@@ -4,7 +4,19 @@ import { createLighting, type SceneLighting } from '../rendering/Lighting';
 import { HUD } from '../ui/HUD';
 import { MenuScreen } from '../ui/MenuScreen';
 import { DialogueBox } from '../ui/DialogueBox';
-import { CAT_FEED_MESSAGES, PIANO_PLAY_MESSAGES, ALTAR_MESSAGES, CAKE_MESSAGES, SUZY_CAT_MESSAGES, HUD_LABELS, WEDDING_NPC_MESSAGES, WIN_MESSAGES } from '../data/messages';
+import {
+  ALTAR_MESSAGES,
+  BALI_TREASURE_MESSAGES,
+  CAKE_MESSAGES,
+  CAT_FEED_MESSAGES,
+  DUBAI_NPC_MESSAGES,
+  HUD_LABELS,
+  LAMBO_DRIVE_MESSAGES,
+  PIANO_PLAY_MESSAGES,
+  SUZY_CAT_MESSAGES,
+  WEDDING_NPC_MESSAGES,
+  WIN_MESSAGES,
+} from '../data/messages';
 import { AnxietyMeter } from './AnxietyMeter';
 import { AudioManager } from './AudioManager';
 import { BalloonManager } from './BalloonManager';
@@ -21,6 +33,7 @@ import { createNeonWallSign, createWallSign } from '../rendering/WallSign';
 import { buildHallDecorations } from '../rendering/WeddingDecorations';
 import { buildProps, updateEatingCat } from '../rendering/MapProps';
 import { updateSuzyCatIdle } from '../rendering/SuzyCat';
+import { buildTreasureChest } from '../rendering/TreasureChest';
 import { PauseScreen } from '../ui/PauseScreen';
 import { CommandConsole } from '../ui/CommandConsole';
 import { BossCinematic } from '../ui/BossCinematic';
@@ -34,6 +47,18 @@ import { getCheatHelpEditorText, resolveCheat, type CheatId } from './CheatCodes
 import type { CommandSubmitResult } from '../ui/CommandConsole';
 
 const CAKE_BUFF_DURATION = 15;
+
+const CAR_MAX_SPEED = 14;
+const CAR_REVERSE_MAX = 5;
+const CAR_ACCEL = 26;
+const CAR_DRAG = 2.4;
+const CAR_TURN_RATE = 2.35;
+const CAR_HALF_W = 0.95;
+const CAR_HALF_L = 2.05;
+const CAR_HEIGHT = 1.05;
+const CAR_EYE_HEIGHT = 0.82;
+const CAR_MIN_PITCH = -0.22;
+const CAR_MAX_PITCH = 0.18;
 
 type GameState = 'menu' | 'intro' | 'playing' | 'paused' | 'boss-cinematic' | 'transition' | 'map-intro' | 'win' | 'lose';
 
@@ -93,6 +118,18 @@ export class Game {
   private finalWinDelay = 0;
   private consoleResumePointerLock = false;
   private consoleResumePaused = false;
+  private readonly waterOverlay: HTMLDivElement;
+  private treasureChestMesh: THREE.Object3D | null = null;
+  private treasureDiscovered = false;
+  private lamborghiniMesh: THREE.Group | null = null;
+  private drivingCar = false;
+  private carX = 0;
+  private carY = 2.01;
+  private carZ = 0;
+  private carYaw = 0;
+  private carPitch = -0.06;
+  private carSpeed = 0;
+  private lamboInteractArmed = false;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -154,6 +191,22 @@ export class Game {
     this.bossCinematic = new BossCinematic(container);
     this.confetti = new ConfettiOverlay(container);
 
+    this.waterOverlay = document.createElement('div');
+    this.waterOverlay.className = 'wa-water-overlay';
+    this.waterOverlay.setAttribute('aria-hidden', 'true');
+    Object.assign(this.waterOverlay.style, {
+      position: 'absolute',
+      inset: '0',
+      pointerEvents: 'none',
+      opacity: '0',
+      transition: 'opacity 0.35s ease',
+      background:
+        'radial-gradient(ellipse at center, rgba(40,140,200,0.18) 0%, rgba(20,90,150,0.38) 70%, rgba(10,60,110,0.5) 100%)',
+      boxShadow: 'inset 0 0 80px rgba(30,120,180,0.35)',
+      zIndex: '8',
+    });
+    container.appendChild(this.waterOverlay);
+
     this.levelState = makeLevelState(MAPS[0].levels[0]);
     this.applySettings(this.settings);
     this.player.onFall = () => this.handlePlayerFall();
@@ -189,6 +242,10 @@ export class Game {
     this.pianoPlayed = false;
     this.pianoInteractArmed = false;
     this.catInteractArmed = false;
+    this.drivingCar = false;
+    this.lamboInteractArmed = false;
+    this.player.setExternalDrive(false);
+    this.player.rig.root.visible = true;
 
     this.weapon?.setWorld(this.world);
     this.enemies?.setWorld(this.world);
@@ -216,6 +273,8 @@ export class Game {
   private addProps(): void {
     this.catMesh = null;
     this.suzyCatMesh = null;
+    this.treasureChestMesh = null;
+    this.treasureDiscovered = false;
     this.balloons.clear();
     if (this.world.props.length === 0) return;
     const props = buildProps(this.world.props);
@@ -224,7 +283,37 @@ export class Game {
     props.traverse((child) => {
       if (child.name === 'eating-cat') this.catMesh = child;
       if (child.name === 'suzy-cat') this.suzyCatMesh = child;
+      if (child.name === 'lamborghini') this.lamborghiniMesh = child as THREE.Group;
     });
+    this.initLamborghiniFromWorld();
+  }
+
+  private initLamborghiniFromWorld(): void {
+    this.drivingCar = false;
+    this.lamboInteractArmed = false;
+    this.carSpeed = 0;
+    this.carPitch = -0.06;
+
+    const spec = this.world.props.find((p) => p.kind === 'lamborghini');
+    if (!spec) return;
+
+    this.carX = spec.x;
+    this.carY = spec.y;
+    this.carZ = spec.z;
+    this.carYaw = spec.rotationY ?? 0;
+    this.syncLamborghiniMesh();
+  }
+
+  private syncLamborghiniMesh(): void {
+    if (!this.lamborghiniMesh) return;
+    this.lamborghiniMesh.position.set(this.carX, this.carY, this.carZ);
+    this.lamborghiniMesh.rotation.y = this.carYaw;
+
+    const driveSpot = this.world.interactables.find((i) => i.kind === 'lamborghini-drive');
+    if (driveSpot) {
+      driveSpot.x = this.carX;
+      driveSpot.z = this.carZ;
+    }
   }
 
   private onResize = (): void => {
@@ -324,7 +413,12 @@ export class Game {
 
     const active = this.state === 'playing' && this.input.isLocked();
 
-    this.player.update(dt, active);
+    if (this.drivingCar) {
+      this.tickCarDriving(dt, active);
+    } else {
+      this.player.update(dt, active);
+    }
+    this.tickWaterEffects();
     this.weapon.update(dt);
     this.effects.update(dt);
 
@@ -359,8 +453,10 @@ export class Game {
       this.tickPianoInteraction();
       this.tickAltarInteraction();
       this.tickWeddingNpcInteraction();
+      this.tickDubaiExploreInteraction();
       this.tickSuzyCatInteraction(dt);
       this.tickCakeInteraction();
+      this.tickBaliTreasureInteraction();
 
       if (active && this.levelState.phase !== 'celebration') {
         const requested = this.input.consumeWeaponSelect();
@@ -429,7 +525,9 @@ export class Game {
       reloadRatio: this.weapon.cooldownRatio(),
       weaponName: this.player.rig.isCelebrationMode()
         ? HUD_LABELS.bouquet
-        : WEAPONS[this.activeWeapon].displayName,
+        : this.player.rig.isMoneyMode()
+          ? HUD_LABELS.money
+          : WEAPONS[this.activeWeapon].displayName,
       bossHpRatio: this.getBossHpRatio(),
     });
   }
@@ -757,15 +855,35 @@ export class Game {
     this.dialogue.show({
       title: NPC_STATS[npc].displayName,
       body,
-      continueLabel: 'Devam Et',
+      continueLabel: choice === 'c' ? 'Bali\'ye Git' : 'Devam Et',
       onContinue: () => {
         this.weddingChatNpc = null;
+        if (choice === 'c') {
+          this.transitionToBaliHoneymoon();
+          return;
+        }
         if (this.state === 'playing' && this.levelState.phase === 'celebration') {
           this.hud.setCrosshairVisible(true);
           this.input.requestPointerLock();
         }
       },
     });
+  }
+
+  private transitionToBaliHoneymoon(): void {
+    const baliIndex = MAPS.findIndex((map) => map.id === 'bali');
+    if (baliIndex < 0) return;
+
+    this.dialogue.hide();
+    this.player.rig.setCelebrationMode(false);
+    this.anxiety.unlock();
+    this.anxiety.reduce(40);
+    this.mapIndex = baliIndex;
+    this.levelIndex = 0;
+    this.loadMap(baliIndex);
+    this.player.respawn();
+    this.hud.show();
+    this.beginLevel(baliIndex, 0);
   }
 
   private isNearInteractable(item: { x: number; z: number; radius?: number }): boolean {
@@ -1026,6 +1144,10 @@ export class Game {
         return this.teleportToMap('concert-hall', 0);
       case 'denizfeneri':
         return this.teleportToMap('lighthouse', 0);
+      case 'bali':
+        return this.teleportToMap('bali', 0);
+      case 'dubai':
+        return this.teleportToMap('dubai', 0);
       case 'baloncu':
         this.cheatPopAllBalloons();
         return null;
@@ -1153,13 +1275,363 @@ export class Game {
     this.input.requestPointerLock();
   }
 
+  private showBaliWinScreen(): void {
+    this.anxiety.lockAtZero();
+    this.state = 'win';
+    this.intentionalUnlock = true;
+    this.pause.hide();
+    this.bossCinematic.hide();
+    this.confetti.hide();
+    this.dialogue.hide();
+    this.hud.hide();
+    this.input.releasePointerLock();
+    this.audio.stopBgm();
+    this.audio.play('win');
+    this.menu.showWin(this.score, this.stagesCleared, totalLevelCount(), {
+      message: WIN_MESSAGES.baliFinaleBody,
+      onContinuePlaying: () => this.enterBaliEpilogue(),
+    });
+  }
+
+  private enterBaliEpilogue(): void {
+    this.menu.hide();
+    this.state = 'playing';
+    this.levelState.phase = 'celebration';
+    this.treasureDiscovered = false;
+    this.player.rig.setCelebrationMode(false);
+    this.hud.show();
+    this.hud.setCrosshairVisible(true);
+    this.hud.setInteractPrompt(null);
+    this.hud.setSubtitle([]);
+    this.anxiety.lockAtZero();
+    this.enemies.clear();
+    this.enemyProjectiles.clear();
+    this.spawnAmbientFauna();
+    this.spawnBaliTreasureChest();
+    this.audio.setBgm(MAPS[this.mapIndex].bgm ?? null);
+    this.input.requestPointerLock();
+  }
+
+  private spawnBaliTreasureChest(): void {
+    if (this.treasureChestMesh) {
+      this.worldGroup.remove(this.treasureChestMesh);
+      this.treasureChestMesh = null;
+    }
+    const spot = this.world.treasureChest;
+    if (!spot || !this.worldGroup) return;
+
+    const chest = buildTreasureChest();
+    chest.position.set(spot.x, spot.y, spot.z);
+    if (spot.rotationY) chest.rotation.y = spot.rotationY;
+    this.worldGroup.add(chest);
+    this.treasureChestMesh = chest;
+
+    // Ensure interactable exists for this session
+    const existing = this.world.interactables.find((i) => i.kind === 'treasure-chest');
+    if (!existing) {
+      this.world.interactables.push({
+        kind: 'treasure-chest',
+        x: spot.x,
+        y: spot.y,
+        z: spot.z,
+        radius: 2.4,
+      });
+    }
+  }
+
+  private tickBaliTreasureInteraction(): void {
+    if (
+      MAPS[this.mapIndex].id !== 'bali' ||
+      this.levelState.phase !== 'celebration' ||
+      !this.input.isLocked() ||
+      this.treasureDiscovered ||
+      !this.treasureChestMesh
+    ) {
+      return;
+    }
+
+    const chest = this.world.interactables.find((item) => item.kind === 'treasure-chest');
+    if (!chest || !this.isNearInteractable(chest)) {
+      this.hud.setInteractPrompt(null);
+      return;
+    }
+
+    this.hud.setInteractPrompt(BALI_TREASURE_MESSAGES.prompt);
+
+    if (this.input.consumeInteract()) {
+      this.discoverBaliTreasure();
+    }
+  }
+
+  private discoverBaliTreasure(): void {
+    this.treasureDiscovered = true;
+    this.hud.setInteractPrompt(null);
+    this.intentionalUnlock = true;
+    this.input.releasePointerLock();
+    this.hud.setCrosshairVisible(false);
+    this.audio.play('win');
+
+    this.dialogue.show({
+      title: BALI_TREASURE_MESSAGES.title,
+      body: BALI_TREASURE_MESSAGES.body,
+      continueLabel: BALI_TREASURE_MESSAGES.continueLabel,
+      onContinue: () => this.transitionToDubai(),
+    });
+  }
+
+  private transitionToDubai(): void {
+    const dubaiIndex = MAPS.findIndex((map) => map.id === 'dubai');
+    if (dubaiIndex < 0) return;
+
+    this.dialogue.hide();
+    this.player.rig.setHeldItem('none');
+    this.anxiety.lockAtZero();
+    this.mapIndex = dubaiIndex;
+    this.levelIndex = 0;
+    this.loadMap(dubaiIndex);
+    this.enemies.clear();
+    this.enemyProjectiles.clear();
+    this.player.respawn();
+    this.beginLevel(dubaiIndex, 0);
+  }
+
+  private tickDubaiExploreInteraction(): void {
+    if (MAPS[this.mapIndex].id !== 'dubai' || !this.input.isLocked()) {
+      return;
+    }
+    if (this.levelState.phase !== 'celebration') return;
+
+    if (this.drivingCar) {
+      this.hud.setSubtitle([]);
+      this.hud.setInteractPrompt(LAMBO_DRIVE_MESSAGES.exitPrompt);
+      if (this.input.consumeInteract()) this.exitCarDrive();
+      return;
+    }
+
+    this.hud.setSubtitle([]);
+
+    const lambo = this.world.interactables.find((item) => item.kind === 'lamborghini-drive');
+    const groom = this.world.interactables.find((item) => item.kind === 'groom-chat');
+    const bride = this.world.interactables.find((item) => item.kind === 'bride-chat');
+    const nearLambo = lambo ? this.isNearInteractable(lambo) : false;
+    const nearGroom = groom ? this.isNearInteractable(groom) : false;
+    const nearBride = bride ? this.isNearInteractable(bride) : false;
+
+    if (!nearLambo && !nearGroom && !nearBride) {
+      this.lamboInteractArmed = false;
+      this.hud.setInteractPrompt(null);
+      return;
+    }
+
+    const lamboDist =
+      nearLambo && lambo
+        ? Math.hypot(this.player.position.x - lambo.x, this.player.position.z - lambo.z)
+        : Infinity;
+    const groomDist =
+      nearGroom && groom
+        ? Math.hypot(this.player.position.x - groom.x, this.player.position.z - groom.z)
+        : Infinity;
+    const brideDist =
+      nearBride && bride
+        ? Math.hypot(this.player.position.x - bride.x, this.player.position.z - bride.z)
+        : Infinity;
+
+    const closest = Math.min(lamboDist, groomDist, brideDist);
+    if (closest === lamboDist && nearLambo) {
+      this.hud.setInteractPrompt(LAMBO_DRIVE_MESSAGES.prompt);
+      if (!this.lamboInteractArmed) {
+        this.lamboInteractArmed = true;
+        this.input.flushInteract();
+        return;
+      }
+      if (this.input.consumeInteract()) this.enterCarDrive();
+      return;
+    }
+
+    this.lamboInteractArmed = false;
+    let target: 'bride' | 'groom' | null = null;
+    if (nearGroom && nearBride) {
+      target = groomDist <= brideDist ? 'groom' : 'bride';
+    } else if (nearGroom) {
+      target = 'groom';
+    } else if (nearBride) {
+      target = 'bride';
+    }
+
+    if (target === 'groom') {
+      this.hud.setInteractPrompt(DUBAI_NPC_MESSAGES.groomChatPrompt);
+    } else if (target === 'bride') {
+      this.hud.setInteractPrompt(DUBAI_NPC_MESSAGES.brideChatPrompt);
+    }
+
+    if (this.input.consumeInteract() && target) {
+      this.weddingChatNpc = target;
+      this.openDubaiChatChoices();
+    }
+  }
+
+  private enterCarDrive(): void {
+    if (!this.lamborghiniMesh) return;
+    this.drivingCar = true;
+    this.carSpeed = 0;
+    this.carPitch = -0.06;
+    this.player.setExternalDrive(true);
+    this.player.setEyeHeightOverride(CAR_EYE_HEIGHT);
+    this.player.rig.root.visible = false;
+    this.player.rig.setHeldItem('none');
+    this.player.position.set(this.carX, this.carY, this.carZ);
+    this.player.setViewAngles(this.carYaw, this.carPitch);
+    this.hud.setCrosshairVisible(false);
+    this.hud.setInteractPrompt(LAMBO_DRIVE_MESSAGES.exitPrompt);
+  }
+
+  private exitCarDrive(): void {
+    this.drivingCar = false;
+    this.carSpeed = 0;
+    this.player.setExternalDrive(false);
+    this.player.rig.root.visible = true;
+    this.player.rig.setHeldItem('money');
+    const exitSide = 1.35;
+    this.player.position.set(
+      this.carX - Math.cos(this.carYaw) * exitSide,
+      this.carY,
+      this.carZ + Math.sin(this.carYaw) * exitSide,
+    );
+    this.player.setViewAngles(this.carYaw + Math.PI * 0.5, 0);
+    this.hud.setCrosshairVisible(false);
+    this.hud.setInteractPrompt(null);
+  }
+
+  private tickCarDriving(dt: number, active: boolean): void {
+    if (active) {
+      const { dx, dy } = this.input.consumeMouseDelta();
+      const sens = this.player.getMouseSensitivity();
+      this.carYaw -= dx * sens;
+      this.carPitch -= dy * sens;
+      if (this.carPitch > CAR_MAX_PITCH) this.carPitch = CAR_MAX_PITCH;
+      if (this.carPitch < CAR_MIN_PITCH) this.carPitch = CAR_MIN_PITCH;
+
+      const wishForward = this.input.isDown('forward') ? 1 : 0;
+      const wishBack = this.input.isDown('back') ? 1 : 0;
+      const throttle = wishForward - wishBack;
+
+      if (throttle !== 0) {
+        this.carSpeed += throttle * CAR_ACCEL * dt;
+      } else {
+        this.carSpeed *= Math.max(0, 1 - CAR_DRAG * dt);
+      }
+
+      if (this.carSpeed > CAR_MAX_SPEED) this.carSpeed = CAR_MAX_SPEED;
+      if (this.carSpeed < -CAR_REVERSE_MAX) this.carSpeed = -CAR_REVERSE_MAX;
+
+      if (Math.abs(this.carSpeed) > 0.35) {
+        const steer = (this.input.isDown('left') ? 1 : 0) + (this.input.isDown('right') ? -1 : 0);
+        if (steer !== 0) {
+          this.carYaw += steer * CAR_TURN_RATE * dt * Math.sign(this.carSpeed);
+        }
+      }
+    } else {
+      this.carSpeed *= Math.max(0, 1 - CAR_DRAG * dt);
+    }
+
+    const moveX = -Math.sin(this.carYaw) * this.carSpeed * dt;
+    const moveZ = -Math.cos(this.carYaw) * this.carSpeed * dt;
+    this.moveCar(moveX, moveZ);
+
+    this.player.position.set(this.carX, this.carY, this.carZ);
+    this.player.setViewAngles(this.carYaw, this.carPitch);
+    this.syncLamborghiniMesh();
+    this.player.rig.update(dt, Math.abs(this.carSpeed) > 0.5);
+  }
+
+  private moveCar(deltaX: number, deltaZ: number): void {
+    if (deltaX !== 0) {
+      const original = this.carX;
+      this.carX = original + deltaX;
+      if (this.carBodyCollides()) {
+        this.carX = original;
+        this.carSpeed *= 0.35;
+      }
+    }
+    if (deltaZ !== 0) {
+      const original = this.carZ;
+      this.carZ = original + deltaZ;
+      if (this.carBodyCollides()) {
+        this.carZ = original;
+        this.carSpeed *= 0.35;
+      }
+    }
+  }
+
+  private carBodyCollides(): boolean {
+    const min = new THREE.Vector3(
+      this.carX - CAR_HALF_W,
+      this.carY,
+      this.carZ - CAR_HALF_L,
+    );
+    const max = new THREE.Vector3(
+      this.carX + CAR_HALF_W,
+      this.carY + CAR_HEIGHT,
+      this.carZ + CAR_HALF_L,
+    );
+    return this.world.boxCollides(min, max);
+  }
+
+  private openDubaiChatChoices(): void {
+    const npc = this.weddingChatNpc;
+    if (!npc) return;
+
+    this.intentionalUnlock = true;
+    this.input.releasePointerLock();
+    this.hud.setInteractPrompt(null);
+    this.hud.setCrosshairVisible(false);
+
+    this.dialogue.showChoices({
+      title: DUBAI_NPC_MESSAGES.choiceTitle,
+      speaker: NPC_STATS[npc].displayName,
+      choices: [
+        { id: 'a', label: DUBAI_NPC_MESSAGES.choices[npc].a },
+        { id: 'b', label: DUBAI_NPC_MESSAGES.choices[npc].b },
+        { id: 'c', label: DUBAI_NPC_MESSAGES.choices[npc].c },
+      ],
+      onChoose: (id) => this.showDubaiChatResponse(npc, id),
+    });
+  }
+
+  private showDubaiChatResponse(npc: 'bride' | 'groom', choice: 'a' | 'b' | 'c'): void {
+    const body = DUBAI_NPC_MESSAGES.responses[npc][choice];
+    this.dialogue.show({
+      title: NPC_STATS[npc].displayName,
+      body,
+      continueLabel: 'Devam Et',
+      onContinue: () => {
+        this.weddingChatNpc = null;
+        if (this.state === 'playing' && this.levelState.phase === 'celebration') {
+          this.hud.setCrosshairVisible(false);
+          this.input.requestPointerLock();
+        }
+      },
+    });
+  }
+
   private finishLevel(): void {
     this.audio.play('wave-clear');
     this.stagesCleared++;
     const currentMap = MAPS[this.mapIndex];
     const isLastLevelInMap = this.levelIndex >= currentMap.levels.length - 1;
-    const isLastMap = this.mapIndex >= MAPS.length - 1;
 
+    if (isLastLevelInMap && currentMap.id === 'bali') {
+      this.showBaliWinScreen();
+      return;
+    }
+
+    // Wedding remains the story finale; Bali is bonus and opened from epilogue chat.
+    if (isLastLevelInMap && currentMap.id === 'wedding-hall') {
+      this.transitionToWin();
+      return;
+    }
+
+    const isLastMap = this.mapIndex >= MAPS.length - 1;
     if (isLastLevelInMap && isLastMap) {
       this.transitionToWin();
       return;
@@ -1243,15 +1715,56 @@ export class Game {
 
   private activateLevel(): void {
     this.state = 'playing';
+    const mapDef = MAPS[this.mapIndex];
+
+    if (mapDef.explorationOnly) {
+      this.levelState.phase = 'celebration';
+      this.levelState.timer = 0;
+      this.player.rig.setHeldItem('money');
+      this.hud.setCrosshairVisible(false);
+      this.hud.setInteractPrompt(null);
+      this.hud.setSubtitle([]);
+      this.anxiety.lockAtZero();
+      this.enemies.clear();
+      this.enemyProjectiles.clear();
+      this.hud.show();
+      this.input.requestPointerLock();
+      return;
+    }
+
     this.levelState.phase = 'active';
     this.levelState.timer = 2.5;
+    this.player.rig.setHeldItem('none');
     this.hud.setCrosshairVisible(true);
     this.hud.show();
+    this.spawnAmbientFauna();
     this.input.requestPointerLock();
   }
 
+  private spawnAmbientFauna(): void {
+    if (!this.world.ambientFauna.length) return;
+    this.enemies.spawnAmbientFauna(this.world.ambientFauna);
+  }
+
+  private tickWaterEffects(): void {
+    const wet = this.player.isInWater();
+    this.waterOverlay.style.opacity = wet ? '1' : '0';
+
+    if (this.player.consumeEnteredWater()) {
+      const splashAt = this.player.position.clone();
+      splashAt.y += 0.85;
+      this.effects.spawnWaterSplash(splashAt, true);
+    }
+
+    if (wet && this.player.consumeWaterMovePulse(0.32)) {
+      const rippleAt = this.player.position.clone();
+      rippleAt.y += 0.9;
+      this.effects.spawnWaterRipple(rippleAt);
+    }
+  }
+
   private handleEnemyKilled(enemy: Enemy): void {
-    this.levelState.killedTotal++;
+    if (!enemy.ambient) this.levelState.killedTotal++;
     this.score += enemy.stats.scoreValue;
     this.anxiety.reduce(enemy.stats.anxietyReward);
     this.audio.play('kill');

@@ -1,18 +1,22 @@
 import * as THREE from 'three';
 import type { WeaponId } from '../data/weapons';
 import { buildCelebrationBouquet } from '../rendering/FlowerBouquet';
+import { buildMoneyBills } from '../rendering/MoneyBills';
+
+export type HeldItem = 'none' | 'bouquet' | 'money';
 
 /**
  * First-person weapon viewmodel. A THREE.Group is parented to the camera so
  * each weapon mesh sits in camera-space (bottom-right). Bob during movement,
- * kick back on fire.
+ * kick back on fire. Also supports celebration bouquet / cash wad held items.
  */
 export class PlayerRig {
   readonly root: THREE.Group;
   private readonly weapons: Map<WeaponId, THREE.Group> = new Map();
   private readonly bouquetGroup: THREE.Group;
+  private readonly moneyGroup: THREE.Group;
   private activeId: WeaponId = 'pistol';
-  private celebrationMode = false;
+  private heldItem: HeldItem = 'none';
   private time = 0;
   private recoilPhase = 0;
   private swayPhase = 0;
@@ -34,6 +38,10 @@ export class PlayerRig {
     this.bouquetGroup = buildCelebrationBouquet();
     this.bouquetGroup.visible = false;
     this.root.add(this.bouquetGroup);
+
+    this.moneyGroup = buildMoneyBills();
+    this.moneyGroup.visible = false;
+    this.root.add(this.moneyGroup);
   }
 
   attachTo(parent: THREE.Object3D): void {
@@ -41,7 +49,7 @@ export class PlayerRig {
   }
 
   setActive(id: WeaponId): void {
-    if (this.celebrationMode) return;
+    if (this.heldItem !== 'none') return;
     if (this.activeId === id) return;
     this.activeId = id;
     for (const [wid, group] of this.weapons) {
@@ -49,23 +57,37 @@ export class PlayerRig {
     }
   }
 
-  setCelebrationMode(enabled: boolean): void {
-    this.celebrationMode = enabled;
-    this.bouquetGroup.visible = enabled;
+  setHeldItem(item: HeldItem): void {
+    this.heldItem = item;
+    this.bouquetGroup.visible = item === 'bouquet';
+    this.moneyGroup.visible = item === 'money';
     for (const [wid, group] of this.weapons) {
-      group.visible = !enabled && wid === this.activeId;
+      group.visible = item === 'none' && wid === this.activeId;
     }
-    if (enabled) {
+    if (item !== 'none') {
       this.recoilPhase = 0;
     }
   }
 
+  /** Wedding epilogue bouquet — wraps setHeldItem. */
+  setCelebrationMode(enabled: boolean): void {
+    this.setHeldItem(enabled ? 'bouquet' : 'none');
+  }
+
   isCelebrationMode(): boolean {
-    return this.celebrationMode;
+    return this.heldItem === 'bouquet';
+  }
+
+  isMoneyMode(): boolean {
+    return this.heldItem === 'money';
+  }
+
+  getHeldItem(): HeldItem {
+    return this.heldItem;
   }
 
   onFire(recoil: number): void {
-    if (this.celebrationMode) return;
+    if (this.heldItem !== 'none') return;
     this.recoilPhase = Math.min(1, this.recoilPhase + recoil * 4);
   }
 
@@ -77,14 +99,13 @@ export class PlayerRig {
       this.swayPhase += dt * 2;
     }
 
-    if (this.celebrationMode) {
-      const bobX = Math.cos(this.swayPhase) * (moving ? 0.012 : 0.004);
-      const bobY = Math.abs(Math.sin(this.swayPhase)) * (moving ? 0.014 : 0.004);
-      const swayZ = Math.sin(this.swayPhase * 0.7) * 0.006;
-      this.bouquetGroup.position.x = 0.3 + bobX;
-      this.bouquetGroup.position.y = -0.4 + bobY;
-      this.bouquetGroup.position.z = -0.48 + swayZ;
-      this.bouquetGroup.rotation.z = 0.08 + Math.sin(this.swayPhase * 0.5) * 0.03;
+    if (this.heldItem === 'bouquet') {
+      this.bobHeld(this.bouquetGroup, moving, 0.3, -0.4, -0.48);
+      return;
+    }
+
+    if (this.heldItem === 'money') {
+      this.bobHeld(this.moneyGroup, moving, 0.28, -0.38, -0.5);
       return;
     }
 
@@ -99,6 +120,22 @@ export class PlayerRig {
     active.position.y = bobY;
     active.position.z = -this.recoilPhase * 0.15;
     active.rotation.x = -this.recoilPhase * 0.4;
+  }
+
+  private bobHeld(
+    group: THREE.Group,
+    moving: boolean,
+    baseX: number,
+    baseY: number,
+    baseZ: number,
+  ): void {
+    const bobX = Math.cos(this.swayPhase) * (moving ? 0.012 : 0.004);
+    const bobY = Math.abs(Math.sin(this.swayPhase)) * (moving ? 0.014 : 0.004);
+    const swayZ = Math.sin(this.swayPhase * 0.7) * 0.006;
+    group.position.x = baseX + bobX;
+    group.position.y = baseY + bobY;
+    group.position.z = baseZ + swayZ;
+    group.rotation.z = 0.08 + Math.sin(this.swayPhase * 0.5) * 0.03;
   }
 }
 

@@ -1,6 +1,6 @@
 import type { SpawnRequest } from '../game/EnemyManager';
 
-export type MapId = 'concert-hall' | 'lighthouse' | 'wedding-hall';
+export type MapId = 'concert-hall' | 'lighthouse' | 'wedding-hall' | 'bali' | 'dubai';
 
 export interface LevelDefinition {
   index: number;
@@ -34,7 +34,9 @@ export interface MapDefinition {
   worldSize: { width: number; depth: number; height: number };
   atmosphere: AtmosphereConfig;
   /** Optional looping background music for this map. */
-  bgm?: 'mozart-allegro' | 'lighthouse-ambient' | 'wedding-hope';
+  bgm?: 'mozart-allegro' | 'lighthouse-ambient' | 'wedding-hope' | 'bali-tropical' | 'dubai-luxury';
+  /** Peaceful roam map: no combat, no wave clear, celebration-style exploration. */
+  explorationOnly?: boolean;
   levels: LevelDefinition[];
 }
 
@@ -232,6 +234,101 @@ export const MAPS: MapDefinition[] = [
           { type: 'beklenti-golgesi', count: 1 },
         ],
         bossLevel: true,
+      },
+    ],
+  },
+  {
+    id: 'bali',
+    displayName: 'Bali Adası',
+    description:
+      'Balayı başladı. Turkuaz deniz, akan nehir, tropik orman ve villanız sizi bekliyor. Dikkat: meraklı maymunlar saldırgan olabilir.',
+    worldSize: { width: 96, depth: 96, height: 22 },
+    bgm: 'bali-tropical',
+    atmosphere: {
+      ambientColor: 0xfff0c8,
+      ambientIntensity: 0.65,
+      sunColor: 0xffe8a0,
+      sunIntensity: 1.15,
+      sunPosition: [40, 55, 25],
+      fillColor: 0x80d0ff,
+      fillIntensity: 0.35,
+      fogColor: 0xb8e0f0,
+      fogNear: 45,
+      fogFar: 160,
+      skyColor: 0x87ceeb,
+    },
+    levels: [
+      {
+        index: 1,
+        title: 'Tropik Sabah',
+        intro: 'Plajda uyanıyorsun. Uzakta maymun çığlıkları… Keşfet, ama tetikte kal.',
+        clearMessage: 'İlk maymun sürüsü dağıldı. Ada daha sakin görünüyor.',
+        totalEnemies: 6,
+        batchInterval: 4,
+        batches: [
+          { type: 'maymun', count: 3 },
+          { type: 'maymun', count: 3 },
+        ],
+      },
+      {
+        index: 2,
+        title: 'Maymun Ormanı',
+        intro: 'Ormanın derinliklerinden daha fazla maymun geliyor. Villaya doğru çekil!',
+        clearMessage: 'Orman sessizleşti. Ama villa henüz güvende değil.',
+        totalEnemies: 12,
+        batchInterval: 3.5,
+        batches: [
+          { type: 'maymun', count: 4 },
+          { type: 'maymun', count: 4 },
+          { type: 'maymun', count: 4 },
+        ],
+      },
+      {
+        index: 3,
+        title: 'Villa Kuşatması',
+        intro: 'Maymunlar villayı sardı! Infinity pool kenarında son savunma.',
+        clearMessage: 'Bali senin. Balayı resmen başladı — yaşasın!',
+        totalEnemies: 18,
+        batchInterval: 3,
+        batches: [
+          { type: 'maymun', count: 5 },
+          { type: 'maymun', count: 5 },
+          { type: 'maymun', count: 4 },
+          { type: 'maymun', count: 4 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'dubai',
+    displayName: 'Dubai · Lüks Villa',
+    description:
+      'Çöl güneşi, beyaz mermer ve sonsuzluk havuzu. Lamborghini kapıda, gelinle damat salonda — savaş bitti, sadece keşfet.',
+    worldSize: { width: 80, depth: 80, height: 20 },
+    bgm: 'dubai-luxury',
+    explorationOnly: true,
+    atmosphere: {
+      ambientColor: 0xffe8c8,
+      ambientIntensity: 0.72,
+      sunColor: 0xffd080,
+      sunIntensity: 1.25,
+      sunPosition: [45, 50, -20],
+      fillColor: 0x80c0ff,
+      fillIntensity: 0.3,
+      fogColor: 0xe8d0a8,
+      fogNear: 40,
+      fogFar: 130,
+      skyColor: 0x87b8e8,
+    },
+    levels: [
+      {
+        index: 1,
+        title: 'Altın Şehir',
+        intro: 'Çöl güneşi, beyaz mermer ve sonsuzluk havuzu. Artık savaş yok — sadece keşfet.',
+        clearMessage: 'Dubai senin. Keyfini çıkar.',
+        totalEnemies: 0,
+        batchInterval: 999,
+        batches: [],
       },
     ],
   },

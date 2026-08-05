@@ -8,7 +8,9 @@ import {
 } from '../data/blocks';
 import { buildVoxelMeshes, type VoxelInstanceInput } from '../rendering/VoxelMesh';
 import type { MapDefinition } from '../data/maps';
+import { generateBali } from './worldGen/bali';
 import { generateConcertHall } from './worldGen/concertHall';
+import { generateDubai } from './worldGen/dubai';
 import { generateLighthouse } from './worldGen/lighthouse';
 import { generateWeddingHall } from './worldGen/weddingHall';
 import type {
@@ -21,6 +23,8 @@ import type {
   InteractableSpec,
   NpcSpec,
   CollisionBox,
+  FaunaSpawnSpec,
+  TreasureChestSpec,
 } from './worldGen/types';
 
 export interface WorldBounds {
@@ -34,8 +38,7 @@ export interface WorldBounds {
 
 /**
  * Voxel arena driven by a MapDefinition. The active generator lays out blocks
- * for the chosen map (concert hall, lighthouse, wedding hall) and returns
- * player spawn + enemy spawn region + optional wall banner.
+ * for the chosen map and returns player spawn + enemy spawn region + extras.
  */
 export class World {
   readonly mapDef: MapDefinition;
@@ -51,6 +54,8 @@ export class World {
   readonly npcs: NpcSpec[];
   readonly interactables: InteractableSpec[];
   readonly collisionBoxes: CollisionBox[];
+  readonly ambientFauna: FaunaSpawnSpec[];
+  readonly treasureChest: TreasureChestSpec | null;
   private readonly cells: Uint8Array;
   private group: THREE.Group | null = null;
   private meshes: THREE.InstancedMesh[] = [];
@@ -82,6 +87,8 @@ export class World {
     this.npcs = result.npcs ?? [];
     this.interactables = result.interactables ?? [];
     this.collisionBoxes = result.collisionBoxes ?? [];
+    this.ambientFauna = result.ambientFauna ?? [];
+    this.treasureChest = result.treasureChest ?? null;
   }
 
   private runGenerator(mapDef: MapDefinition, writer: WorldWriter): GeneratorResult {
@@ -92,6 +99,10 @@ export class World {
         return generateLighthouse(writer);
       case 'wedding-hall':
         return generateWeddingHall(writer);
+      case 'bali':
+        return generateBali(writer);
+      case 'dubai':
+        return generateDubai(writer);
     }
   }
 
@@ -166,6 +177,57 @@ export class World {
 
   playerSpawn(): THREE.Vector3 {
     return this.spawn.clone();
+  }
+
+  /**
+   * Find a clear standing pose near (x, z): feet on the top solid surface,
+   * body AABB free of solids. Returns null if nothing nearby works.
+   */
+  resolveStandingPoint(
+    x: number,
+    z: number,
+    radius: number,
+    height: number,
+    searchRadius = 8,
+  ): THREE.Vector3 | null {
+    const tryAt = (px: number, pz: number): THREE.Vector3 | null => {
+      const fx = Math.floor(px);
+      const fz = Math.floor(pz);
+      let topSolid = -1;
+      for (let y = this.height - 1; y >= 0; y--) {
+        if (this.isSolidAt(fx, y, fz)) {
+          topSolid = y;
+          break;
+        }
+      }
+      if (topSolid < 0) return null;
+
+      const standY = topSolid + 1.01;
+      const min = new THREE.Vector3(px - radius, standY, pz - radius);
+      const max = new THREE.Vector3(px + radius, standY + height, pz + radius);
+      if (this.boxCollides(min, max)) return null;
+
+      // Need solid ground under the feet
+      const floorMin = new THREE.Vector3(px - radius, topSolid, pz - radius);
+      const floorMax = new THREE.Vector3(px + radius, standY, pz + radius);
+      if (!this.boxCollides(floorMin, floorMax)) return null;
+
+      return new THREE.Vector3(px, standY, pz);
+    };
+
+    const direct = tryAt(x, z);
+    if (direct) return direct;
+
+    for (let r = 1; r <= searchRadius; r++) {
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.abs(dx) !== r && Math.abs(dz) !== r) continue;
+          const found = tryAt(x + dx, z + dz);
+          if (found) return found;
+        }
+      }
+    }
+    return null;
   }
 
   /**

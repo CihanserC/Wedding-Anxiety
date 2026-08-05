@@ -10,6 +10,8 @@ export type CheatId =
   | 'dugunvakti'
   | 'konserde'
   | 'denizfeneri'
+  | 'bali'
+  | 'dubai'
   | 'baloncu'
   | 'help';
 
@@ -90,6 +92,18 @@ export const CHEAT_REGISTRY: readonly CheatDefinition[] = [
     id: 'denizfeneri',
     code: 'denizfeneri',
     description: 'Deniz Feneri, level 1',
+    category: 'map',
+  },
+  {
+    id: 'bali',
+    code: 'bali',
+    description: 'Bali Adası, level 1',
+    category: 'map',
+  },
+  {
+    id: 'dubai',
+    code: 'dubai',
+    description: 'Dubai Lüks Villa, keşif',
     category: 'map',
   },
   {

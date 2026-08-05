@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import type { EnemyStats, EnemyType } from '../../data/enemies';
+import { buildInek } from './inek';
+import { buildKertenkele } from './kertenkele';
+import { buildMaymun } from './maymun';
 
 export interface EnemyMeshResult {
   root: THREE.Group;
@@ -8,6 +11,7 @@ export interface EnemyMeshResult {
   armGroups?: THREE.Group[];
   jitterMeshes?: THREE.Object3D[];
   floatBody?: THREE.Object3D;
+  tail?: THREE.Object3D;
 }
 
 /**
@@ -26,6 +30,12 @@ export function buildEnemyMesh(type: EnemyType, stats: EnemyStats): EnemyMeshRes
       return buildFotografFlasoru(stats);
     case 'beklenti-golgesi':
       return buildBeklentiGolgesi(stats);
+    case 'maymun':
+      return buildMaymun(stats);
+    case 'inek':
+      return buildInek(stats);
+    case 'kertenkele':
+      return buildKertenkele(stats);
   }
 }
 

@@ -12,6 +12,10 @@ interface EffectEntry {
   materials: THREE.Material[];
   floatY?: number;
   bobPhase?: number;
+  driftX?: number;
+  driftZ?: number;
+  gravity?: number;
+  vy?: number;
 }
 
 interface LaserBoltEntry {
@@ -232,6 +236,99 @@ export class ProjectileEffects {
     }
   }
 
+  /** Entry splash — droplets + surface ring when the player hits water. */
+  spawnWaterSplash(origin: THREE.Vector3, big = true): void {
+    const count = big ? 14 : 6;
+    const colors = [0x9ad8ff, 0xffffff, 0x5eb8e8, 0xd0f0ff];
+    for (let i = 0; i < count; i++) {
+      const size = (big ? 0.08 : 0.05) + Math.random() * 0.1;
+      const material = new THREE.MeshBasicMaterial({
+        color: colors[i % colors.length],
+        transparent: true,
+        opacity: 0.95,
+      });
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(size, 5, 5), material);
+      mesh.position.copy(origin);
+      mesh.position.y += 0.05 + Math.random() * 0.1;
+      this.scene.add(mesh);
+      const angle = Math.random() * Math.PI * 2;
+      const outward = (big ? 1.6 : 0.9) + Math.random() * 1.2;
+      this.effects.push({
+        object: mesh,
+        born: this.now,
+        life: 0.45 + Math.random() * 0.35,
+        materials: [material],
+        driftX: Math.cos(angle) * outward,
+        driftZ: Math.sin(angle) * outward,
+        vy: (big ? 3.8 : 2.2) + Math.random() * 2.5,
+        gravity: 14,
+      });
+    }
+
+    // Expanding surface ring
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0xb8e8ff,
+      transparent: true,
+      opacity: 0.65,
+      side: THREE.DoubleSide,
+    });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.15, 0.35, 16), ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(origin.x, origin.y + 0.02, origin.z);
+    this.scene.add(ring);
+    this.effects.push({
+      object: ring,
+      born: this.now,
+      life: big ? 0.55 : 0.35,
+      materials: [ringMat],
+    });
+  }
+
+  /** Soft wake ripples while swimming. */
+  spawnWaterRipple(origin: THREE.Vector3): void {
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xa8dcff,
+      transparent: true,
+      opacity: 0.5,
+      side: THREE.DoubleSide,
+    });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.1, 0.28, 14), mat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(origin.x, origin.y + 0.04, origin.z);
+    this.scene.add(ring);
+    this.effects.push({
+      object: ring,
+      born: this.now,
+      life: 0.4,
+      materials: [mat],
+    });
+
+    for (let i = 0; i < 3; i++) {
+      const dropMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.85,
+      });
+      const drop = new THREE.Mesh(new THREE.SphereGeometry(0.04, 4, 4), dropMat);
+      drop.position.set(
+        origin.x + (Math.random() - 0.5) * 0.3,
+        origin.y + 0.08,
+        origin.z + (Math.random() - 0.5) * 0.3,
+      );
+      this.scene.add(drop);
+      this.effects.push({
+        object: drop,
+        born: this.now,
+        life: 0.3 + Math.random() * 0.2,
+        materials: [dropMat],
+        vy: 1.2 + Math.random(),
+        gravity: 10,
+        driftX: (Math.random() - 0.5) * 0.6,
+        driftZ: (Math.random() - 0.5) * 0.6,
+      });
+    }
+  }
+
   update(dt: number): void {
     this.now += dt;
     for (let i = this.effects.length - 1; i >= 0; i--) {
@@ -257,8 +354,19 @@ export class ProjectileEffects {
       if (e.bobPhase !== undefined) {
         e.object.position.x += Math.sin(this.now * 3.5 + e.bobPhase) * dt * 0.15;
       }
+      if (e.driftX !== undefined) e.object.position.x += e.driftX * dt;
+      if (e.driftZ !== undefined) e.object.position.z += e.driftZ * dt;
+      if (e.vy !== undefined) {
+        e.object.position.y += e.vy * dt;
+        if (e.gravity !== undefined) e.vy -= e.gravity * dt;
+      }
       if (e.object instanceof THREE.Mesh) {
-        e.object.scale.setScalar(1 + t * 0.6);
+        const isRing = e.object.geometry instanceof THREE.RingGeometry;
+        if (isRing) {
+          e.object.scale.setScalar(1 + t * 2.8);
+        } else {
+          e.object.scale.setScalar(1 + t * 0.6);
+        }
       } else if (e.floatY) {
         const pulse = 1 + Math.sin(t * Math.PI) * 0.15;
         e.object.scale.setScalar(pulse);

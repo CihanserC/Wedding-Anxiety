@@ -73,7 +73,20 @@ export type PropKind =
   | 'wedding-arch'
   | 'wedding-steps'
   | 'balloon-cluster'
-  | 'suzy-cat';
+  | 'suzy-cat'
+  | 'palm-tree'
+  | 'broadleaf-tree'
+  | 'tropical-bush'
+  | 'banana-plant'
+  | 'fern'
+  | 'treasure-chest'
+  | 'boat'
+  | 'king-bed'
+  | 'sofa'
+  | 'plasma-tv'
+  | 'dining-chair'
+  | 'dining-table'
+  | 'lamborghini';
 
 export interface PropSpec {
   kind: PropKind;
@@ -85,11 +98,27 @@ export interface PropSpec {
 }
 
 export interface InteractableSpec {
-  kind: 'cat' | 'piano' | 'altar' | 'cake' | 'suzy-cat' | 'bride-chat' | 'groom-chat';
+  kind:
+    | 'cat'
+    | 'piano'
+    | 'altar'
+    | 'cake'
+    | 'suzy-cat'
+    | 'bride-chat'
+    | 'groom-chat'
+    | 'treasure-chest'
+    | 'lamborghini-drive';
   x: number;
   y: number;
   z: number;
   radius?: number;
+}
+
+export interface TreasureChestSpec {
+  x: number;
+  y: number;
+  z: number;
+  rotationY?: number;
 }
 
 export interface CollisionBox {
@@ -99,6 +128,13 @@ export interface CollisionBox {
   maxX: number;
   maxY: number;
   maxZ: number;
+}
+
+export interface FaunaSpawnSpec {
+  type: 'inek' | 'kertenkele';
+  x: number;
+  y: number;
+  z: number;
 }
 
 export interface GeneratorResult {
@@ -112,4 +148,7 @@ export interface GeneratorResult {
   npcs?: NpcSpec[];
   interactables?: InteractableSpec[];
   collisionBoxes?: CollisionBox[];
+  ambientFauna?: FaunaSpawnSpec[];
+  /** Hidden after Bali clear — spawned in epilogue among rocks. */
+  treasureChest?: TreasureChestSpec;
 }

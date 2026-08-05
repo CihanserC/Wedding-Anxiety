@@ -5,7 +5,13 @@
  */
 
 type Sfx = 'shoot' | 'laser' | 'hit' | 'kill' | 'wave-clear' | 'hurt' | 'win' | 'lose' | 'balloon-pop' | 'meow';
-export type BgmId = 'mozart-allegro' | 'lighthouse-ambient' | 'wedding-hope' | null;
+export type BgmId =
+  | 'mozart-allegro'
+  | 'lighthouse-ambient'
+  | 'wedding-hope'
+  | 'bali-tropical'
+  | 'dubai-luxury'
+  | null;
 
 export class AudioManager {
   private ctx: AudioContext | null = null;
@@ -18,6 +24,8 @@ export class AudioManager {
   private bgmTimer: number | null = null;
   private bgmHtml: HTMLAudioElement | null = null;
   private bgmNoteIndex = 0;
+  private blasterBuffer: AudioBuffer | null = null;
+  private blasterLoadPromise: Promise<void> | null = null;
 
   ensureStarted(): void {
     if (this.ctx) return;
@@ -32,6 +40,7 @@ export class AudioManager {
       this.musicGain = this.ctx.createGain();
       this.musicGain.gain.value = 0.12;
       this.musicGain.connect(this.ctx.destination);
+      void this.loadBlasterSound();
     } catch {
       this.ctx = null;
     }
@@ -120,6 +129,10 @@ export class AudioManager {
       this.startLighthouseAmbient();
     } else if (id === 'wedding-hope') {
       this.startWeddingHope();
+    } else if (id === 'bali-tropical') {
+      this.startBaliTropical();
+    } else if (id === 'dubai-luxury') {
+      this.startDubaiLuxury();
     }
   }
 
@@ -228,6 +241,75 @@ export class AudioManager {
       const note = melody[this.bgmNoteIndex % melody.length];
       this.bgmNoteIndex++;
       if (note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000, 0.55);
+      this.bgmTimer = window.setTimeout(step, note.beats * beatMs);
+    };
+    step();
+  }
+
+  /** Bright pentatonic-ish loop for the Bali honeymoon island. */
+  private startBaliTropical(): void {
+    if (!this.ctx || !this.musicGain || this.bgmId !== 'bali-tropical') return;
+
+    const melody: Array<{ freq: number; beats: number }> = [
+      { freq: 392.0, beats: 1 },
+      { freq: 440.0, beats: 1 },
+      { freq: 493.88, beats: 1 },
+      { freq: 587.33, beats: 2 },
+      { freq: 493.88, beats: 1 },
+      { freq: 440.0, beats: 1 },
+      { freq: 392.0, beats: 2 },
+      { freq: 0, beats: 0.5 },
+      { freq: 349.23, beats: 1 },
+      { freq: 392.0, beats: 1 },
+      { freq: 440.0, beats: 1 },
+      { freq: 523.25, beats: 2 },
+      { freq: 440.0, beats: 1 },
+      { freq: 392.0, beats: 1 },
+      { freq: 329.63, beats: 2 },
+      { freq: 0, beats: 1 },
+    ];
+
+    const beatMs = 340;
+    const step = (): void => {
+      if (this.bgmId !== 'bali-tropical' || !this.ctx || !this.musicGain || this.muted) return;
+      const note = melody[this.bgmNoteIndex % melody.length];
+      this.bgmNoteIndex++;
+      if (note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000, 0.55);
+      this.bgmTimer = window.setTimeout(step, note.beats * beatMs);
+    };
+    step();
+  }
+
+  /** Slow golden ambient for the Dubai luxury villa. */
+  private startDubaiLuxury(): void {
+    if (!this.ctx || !this.musicGain || this.bgmId !== 'dubai-luxury') return;
+
+    const melody: Array<{ freq: number; beats: number }> = [
+      { freq: 196.0, beats: 2 },
+      { freq: 246.94, beats: 2 },
+      { freq: 293.66, beats: 2 },
+      { freq: 392.0, beats: 3 },
+      { freq: 293.66, beats: 2 },
+      { freq: 246.94, beats: 2 },
+      { freq: 220.0, beats: 2 },
+      { freq: 196.0, beats: 3 },
+      { freq: 0, beats: 1 },
+      { freq: 233.08, beats: 2 },
+      { freq: 293.66, beats: 2 },
+      { freq: 349.23, beats: 2 },
+      { freq: 440.0, beats: 3 },
+      { freq: 349.23, beats: 2 },
+      { freq: 293.66, beats: 2 },
+      { freq: 246.94, beats: 4 },
+      { freq: 0, beats: 2 },
+    ];
+
+    const beatMs = 420;
+    const step = (): void => {
+      if (this.bgmId !== 'dubai-luxury' || !this.ctx || !this.musicGain || this.muted) return;
+      const note = melody[this.bgmNoteIndex % melody.length];
+      this.bgmNoteIndex++;
+      if (note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000, 0.5);
       this.bgmTimer = window.setTimeout(step, note.beats * beatMs);
     };
     step();
@@ -348,39 +430,41 @@ export class AudioManager {
     this.noiseBurst(0.06, 2400, 0.15);
   }
 
-  /** Star Wars-style blaster pew — quick descending sweep + snap. */
+  /** Star Wars-style blaster — plays public/blaster-sound.mp3 (Mutluluk Işını). */
   private playLaser(): void {
     if (!this.ctx || !this.masterGain) return;
-    const ctx = this.ctx;
-    const now = ctx.currentTime;
+    if (this.blasterBuffer) {
+      this.playBlasterBuffer();
+      return;
+    }
+    void this.loadBlasterSound();
+  }
 
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(920, now);
-    osc.frequency.exponentialRampToValueAtTime(110, now + 0.11);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.linearRampToValueAtTime(0.42, now + 0.002);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
-    osc.connect(gain);
+  private playBlasterBuffer(): void {
+    if (!this.ctx || !this.masterGain || !this.blasterBuffer) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.blasterBuffer;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0.85;
+    src.connect(gain);
     gain.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.13);
+    src.start();
+  }
 
-    const osc2 = ctx.createOscillator();
-    const gain2 = ctx.createGain();
-    osc2.type = 'square';
-    osc2.frequency.setValueAtTime(1400, now);
-    osc2.frequency.exponentialRampToValueAtTime(200, now + 0.06);
-    gain2.gain.setValueAtTime(0.0001, now);
-    gain2.gain.linearRampToValueAtTime(0.18, now + 0.001);
-    gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
-    osc2.connect(gain2);
-    gain2.connect(this.masterGain);
-    osc2.start(now);
-    osc2.stop(now + 0.08);
-
-    this.noiseBurst(0.028, 2800, 0.2);
+  private loadBlasterSound(): Promise<void> {
+    if (this.blasterBuffer) return Promise.resolve();
+    if (this.blasterLoadPromise) return this.blasterLoadPromise;
+    this.blasterLoadPromise = (async () => {
+      if (!this.ctx) return;
+      const url = `${import.meta.env.BASE_URL}blaster-sound.mp3`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`blaster-sound fetch failed: ${res.status}`);
+      const arr = await res.arrayBuffer();
+      this.blasterBuffer = await this.ctx.decodeAudioData(arr.slice(0));
+    })().catch(() => {
+      this.blasterLoadPromise = null;
+    });
+    return this.blasterLoadPromise;
   }
 
   private playHit(): void {

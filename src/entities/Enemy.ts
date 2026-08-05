@@ -31,6 +31,8 @@ export class Enemy {
   hp: number;
   dead = false;
   dying = false;
+  /** Ambient wildlife — not counted for wave clear. */
+  ambient = false;
   private deathTimer = 0;
   contactAccumulator = 0;
   private vy = 0;
@@ -43,6 +45,7 @@ export class Enemy {
   private readonly armGroups?: THREE.Group[];
   private readonly jitterMeshes?: THREE.Object3D[];
   private readonly floatBody?: THREE.Object3D;
+  private readonly tail?: THREE.Object3D;
   private dashCooldown = 0;
   private dashRemaining = 0;
   private pauseTimer = 0;
@@ -50,6 +53,10 @@ export class Enemy {
   private flashActive = 0;
   private flashTriggered = false;
   private retreatTimer = 0;
+  private wanderDir = new THREE.Vector3(1, 0, 0);
+  private wanderTimer = 1 + Math.random() * 2;
+  private jumpCooldown = 0.5 + Math.random();
+  private hopTimer = 2 + Math.random() * 4;
   private readonly bossPhasesTriggered = new Set<2 | 3>();
   private readonly bossPhasesPending = new Set<2 | 3>();
   private fireballCooldown = 1.5 + Math.random();
@@ -85,7 +92,10 @@ export class Enemy {
     this.armGroups = mesh.armGroups;
     this.jitterMeshes = mesh.jitterMeshes;
     this.floatBody = mesh.floatBody;
+    this.tail = mesh.tail;
     this.root.position.copy(this.position);
+    const angle = Math.random() * Math.PI * 2;
+    this.wanderDir.set(Math.cos(angle), 0, Math.sin(angle));
     for (const mat of this.materials) {
       this.baseMaterialState.push({
         color: mat.color.clone(),
@@ -319,7 +329,30 @@ export class Enemy {
       target.z - this.position.z,
     );
     const distXZ = toTarget.length();
-    if (distXZ > 0.001) {
+
+    let blockedHoriz = false;
+    let moveDirX = 0;
+    let moveDirZ = 0;
+
+    if (this.stats.behavior === 'wander') {
+      this.wanderTimer -= dt;
+      if (this.wanderTimer <= 0) {
+        this.wanderTimer = 3 + Math.random() * 3;
+        const angle = Math.random() * Math.PI * 2;
+        this.wanderDir.set(Math.cos(angle), 0, Math.sin(angle));
+      }
+      const speed = this.stats.speed * this.speedMultiplier;
+      moveDirX = this.wanderDir.x;
+      moveDirZ = this.wanderDir.z;
+      const beforeX = this.position.x;
+      const beforeZ = this.position.z;
+      this.tryMove(moveDirX * speed * dt, 0, moveDirZ * speed * dt);
+      blockedHoriz =
+        Math.abs(this.position.x - beforeX) < 1e-4 &&
+        Math.abs(this.position.z - beforeZ) < 1e-4;
+      if (blockedHoriz) this.wanderTimer = 0;
+      this.root.rotation.y = Math.atan2(this.wanderDir.x, this.wanderDir.z);
+    } else if (distXZ > 0.001) {
       toTarget.divideScalar(distXZ);
 
       let speed = this.stats.speed * this.speedMultiplier;
@@ -397,24 +430,43 @@ export class Enemy {
         }
       }
 
+      moveDirX = moveDir.x;
+      moveDirZ = moveDir.z;
       const step = speed * dt;
       const move = Math.min(step, distXZ);
-      this.tryMove(moveDir.x * move, 0, moveDir.z * move);
+      const beforeX = this.position.x;
+      const beforeZ = this.position.z;
+      this.tryMove(moveDirX * move, 0, moveDirZ * move);
+      blockedHoriz =
+        move > 1e-4 &&
+        Math.abs(this.position.x - beforeX) < 1e-4 &&
+        Math.abs(this.position.z - beforeZ) < 1e-4;
     }
 
     if (this.stats.behavior === 'floater') {
       this.vy = 0;
     } else {
+      this.jumpCooldown = Math.max(0, this.jumpCooldown - dt);
+      const groundedBefore = this.isGrounded();
+      if (groundedBefore && this.canHop()) {
+        this.tryHop(dt, blockedHoriz, target);
+      }
+
       this.vy -= 22 * dt;
       if (this.vy < -30) this.vy = -30;
-      const groundedBefore = this.isGrounded();
       if (groundedBefore && this.vy < 0) this.vy = 0;
       this.tryMove(0, this.vy * dt, 0);
+
+      // Air control: keep pushing over low obstacles while jumping
+      if (!this.isGrounded() && this.canHop() && (moveDirX !== 0 || moveDirZ !== 0)) {
+        const airSpeed = this.stats.speed * this.speedMultiplier * 0.85 * dt;
+        this.tryMove(moveDirX * airSpeed, 0, moveDirZ * airSpeed);
+      }
     }
 
     this.contactAccumulator = Math.max(0, this.contactAccumulator - dt);
 
-    if (distXZ > 0.001) {
+    if (this.stats.behavior !== 'wander' && distXZ > 0.001) {
       const facing = Math.atan2(toTarget.x, toTarget.z);
       this.root.rotation.y = facing;
     }
@@ -585,9 +637,64 @@ export class Enemy {
         baseBob = Math.sin(t * 4 + this.bobPhase) * 0.03;
         break;
       }
+      case 'wander': {
+        if (this.tail) {
+          this.tail.rotation.z = Math.sin(t * 3 + this.bobPhase) * 0.35;
+          this.tail.rotation.x = -0.2 + Math.sin(t * 2.2) * 0.1;
+        }
+        if (this.headGroup) {
+          this.headGroup.rotation.y = Math.sin(t * 1.8) * 0.12;
+        }
+        if (this.armGroups) {
+          this.armGroups[0].rotation.x = Math.sin(t * 5) * 0.25;
+          if (this.armGroups[1]) this.armGroups[1].rotation.x = Math.sin(t * 5 + Math.PI) * 0.25;
+        }
+        baseBob = Math.sin(t * 4 + this.bobPhase) * 0.02;
+        break;
+      }
+    }
+
+    if (this.stats.behavior === 'chase' && this.tail) {
+      this.tail.rotation.z = Math.sin(t * 5 + this.bobPhase) * 0.4;
+      this.tail.rotation.x = -0.35 + Math.sin(t * 3) * 0.15;
     }
 
     this.root.position.set(this.position.x, this.position.y + baseBob, this.position.z);
+  }
+
+  private canHop(): boolean {
+    return this.stats.type === 'maymun' || this.stats.type === 'inek';
+  }
+
+  private tryHop(dt: number, blockedHoriz: boolean, target: THREE.Vector3): void {
+    if (this.jumpCooldown > 0 || this.vy > 0.1) return;
+
+    const jumpSpeed = this.stats.type === 'maymun' ? 8.2 : 6.8;
+
+    if (blockedHoriz) {
+      this.vy = jumpSpeed;
+      this.jumpCooldown = this.stats.type === 'maymun' ? 0.7 : 1.0;
+      return;
+    }
+
+    if (this.stats.type === 'maymun' && target.y > this.position.y + 0.45) {
+      this.vy = jumpSpeed;
+      this.jumpCooldown = 0.85;
+      return;
+    }
+
+    this.hopTimer -= dt;
+    if (this.hopTimer > 0) return;
+
+    if (this.stats.type === 'inek') {
+      this.vy = jumpSpeed * 0.85;
+      this.jumpCooldown = 1.4;
+      this.hopTimer = 3.5 + Math.random() * 5;
+    } else {
+      this.vy = jumpSpeed * 0.75;
+      this.jumpCooldown = 1.1;
+      this.hopTimer = 2.2 + Math.random() * 3.5;
+    }
   }
 
   private tryMove(dx: number, dy: number, dz: number): void {

@@ -3,9 +3,12 @@ export type EnemyType =
   | 'mukemmeliyetci-kuzen'
   | 'zaman-canavari'
   | 'fotograf-flasoru'
-  | 'beklenti-golgesi';
+  | 'beklenti-golgesi'
+  | 'maymun'
+  | 'inek'
+  | 'kertenkele';
 
-export type EnemyBehavior = 'chase' | 'stalker' | 'dasher' | 'floater' | 'flasher';
+export type EnemyBehavior = 'chase' | 'stalker' | 'dasher' | 'floater' | 'flasher' | 'wander';
 
 export interface EnemyStats {
   type: EnemyType;
@@ -100,5 +103,50 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     contactAnxietyPerSecond: 32,
     isBoss: true,
     behavior: 'floater',
+  },
+  maymun: {
+    type: 'maymun',
+    displayName: 'Maymun',
+    hp: 2,
+    speed: 2.0,
+    contactDamage: 5,
+    radius: 0.35,
+    height: 1.1,
+    color: 0x8b5a2b,
+    accentColor: 0xd4a574,
+    scoreValue: 40,
+    anxietyReward: 5,
+    contactAnxietyPerSecond: 16,
+    behavior: 'chase',
+  },
+  inek: {
+    type: 'inek',
+    displayName: 'İnek',
+    hp: 4,
+    speed: 0.6,
+    contactDamage: 0,
+    radius: 0.55,
+    height: 1.35,
+    color: 0xf5f0e6,
+    accentColor: 0x5c3a1e,
+    scoreValue: 25,
+    anxietyReward: 2,
+    contactAnxietyPerSecond: 0,
+    behavior: 'wander',
+  },
+  kertenkele: {
+    type: 'kertenkele',
+    displayName: 'Kertenkele',
+    hp: 1,
+    speed: 1.8,
+    contactDamage: 0,
+    radius: 0.22,
+    height: 0.35,
+    color: 0x4a8f3a,
+    accentColor: 0x8fd96a,
+    scoreValue: 15,
+    anxietyReward: 1,
+    contactAnxietyPerSecond: 0,
+    behavior: 'wander',
   },
 };

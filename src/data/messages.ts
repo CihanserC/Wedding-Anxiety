@@ -24,8 +24,18 @@ export const WIN_MESSAGES = {
   title: 'Kazandın!',
   body: 'Tebrikler Hilal artık sıkıntıların geride kaldı.',
   finaleBody: 'Tebrikler Hilal, oyunu bitirdin! Artık düğün salonunda özgürce dolaşabilirsin.',
+  baliFinaleBody:
+    'Bali balayını tamamladın! Adada dolaşmaya devam et — kayalıkların arasında bir sır gizleniyor olabilir…',
   button: 'Tekrar Oyna',
   continuePlayingButton: 'Oynamaya Devam Et',
+};
+
+export const BALI_TREASURE_MESSAGES = {
+  prompt: 'E - Hazineyi keşfet',
+  title: 'Hazine!',
+  body:
+    "Gizli hazineyi buldun! Kapılar açıldı — artık Dubai'de istediğin özgür hayatı yaşayabilirsin, habibi.",
+  continueLabel: "Dubai'ye Uç",
 };
 
 export const LOSE_MESSAGES = {
@@ -43,6 +53,7 @@ export const HUD_LABELS = {
   enemiesLeft: 'Kalan Düşman',
   reloading: 'Nefes al…',
   bouquet: 'Gelin Buketi',
+  money: 'Nakit Destesi',
 };
 
 export const CAT_FEED_MESSAGES = {
@@ -108,13 +119,48 @@ export const WEDDING_NPC_MESSAGES = {
       a: 'Gerçekten büyülü bir gün oldu. Hilal ile evlenmek hayatımın en güzel kararı.',
       b:
         'Düğün gününde yaşadığımız o küçük stresleri eğlenceli bir şekilde yenip aslında ne kadar önemsiz olduklarını görmeni istedim. Kafamızdaki o anksiyete canavarlarını bu oyuna döktük; onlara silahla vurup gülmek ikimizi de rahatlatır diye düşündüm.',
-      c: 'Sırada balayı, sonra da uzun ve mutlu bir hayat var. Seninle her şey güzel olacak.',
+      c: 'Sırada balayı var, yaşasın! Bali bizi bekliyor.',
     },
     bride: {
       a: 'Çok teşekkür ederim! Bugün her şey hayal ettiğim gibi geçti, sen de buna çok katkı sağladın.',
       b:
         'İyi gidiyor, teşekkürler! Şu ara özellikle bağırsak-beyin ekseninde vagus sinir stimülasyonunun, Bifidobacterium ve Faecalibacterium gibi butirat üreten kommensal türlerin çeşitliliğine bağlı olarak enteroendokrin hücrelerden serotonin salınımını modüle ettiğini inceliyorum.',
-      c: 'Belki biraz dinlenip pasta keseriz? Sonra da yıldızların altında dans ederiz.',
+      c: 'Sırada balayı var, yaşasın! Hadi Bali\'ye uçalım.',
+    },
+  },
+};
+
+export const LAMBO_DRIVE_MESSAGES = {
+  prompt: 'E - Arabayı sür',
+  exitPrompt: 'E - Arabadan in',
+};
+
+export const DUBAI_NPC_MESSAGES = {
+  groomChatPrompt: 'E - Cihanser ile sohbet et',
+  brideChatPrompt: 'E - Hilal ile sohbet et',
+  choiceTitle: 'Ne söylemek istersin?',
+  choices: {
+    groom: {
+      a: 'Bu villa inanılmaz!',
+      b: 'Lamborghini senin mi?',
+      c: 'Burada ne kadar kalacağız?',
+    },
+    bride: {
+      a: 'Havuz muazzam!',
+      b: 'Dubai nasıl, Hilal?',
+      c: 'Şimdi ne yapalım?',
+    },
+  },
+  responses: {
+    groom: {
+      a: 'Değil mi? Mermer, cam, altın… Bali\'den sonra biraz abarttık ama hak ettik.',
+      b: 'Tabii ki! Sarı Lambo — çölde güneş gibi parlıyor. İstersen anahtarı sende.',
+      c: 'Sonsuza kadar. Anksiyete yok, düşman yok — sadece biz ve bu manzara.',
+    },
+    bride: {
+      a: 'Infinity pool\'da yüzmek hayallerimin ötesinde. Gün batımında gel!',
+      b: 'Sıcak, ışıltılı ve biraz fazla lüks… tam ihtiyacımız olan şey. Nefes alıp keyfini çıkarıyorum.',
+      c: 'Salonda takılalım, havuza girelim, Lambo\'yu seyredelim. Artık acele yok, Hilal.',
     },
   },
 };

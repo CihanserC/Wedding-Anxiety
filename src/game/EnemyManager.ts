@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Enemy, type EnemyUpdateEvents } from '../entities/Enemy';
 import { ENEMY_STATS, type EnemyType } from '../data/enemies';
+import type { FaunaSpawnSpec } from './worldGen/types';
 import type { World } from './World';
 
 export interface SpawnRequest {
@@ -66,6 +67,44 @@ export class EnemyManager {
     return enemy;
   }
 
+  spawnAt(type: EnemyType, x: number, y: number, z: number, ambient = false): Enemy {
+    const stats = ENEMY_STATS[type];
+    const resolved =
+      this.world.resolveStandingPoint(x, z, stats.radius, stats.height) ??
+      new THREE.Vector3(x, y, z);
+    const enemy = new Enemy(this.world, type, resolved);
+    enemy.ambient = ambient;
+    this.enemies.push(enemy);
+    this.scene.add(enemy.root);
+    return enemy;
+  }
+
+  spawnAmbientFauna(specs: FaunaSpawnSpec[]): void {
+    this.clearAmbient();
+    for (const spec of specs) {
+      const stats = ENEMY_STATS[spec.type];
+      const resolved = this.world.resolveStandingPoint(
+        spec.x,
+        spec.z,
+        stats.radius,
+        stats.height,
+        10,
+      );
+      if (!resolved) continue;
+      this.spawnAt(spec.type, resolved.x, resolved.y, resolved.z, true);
+    }
+  }
+
+  clearAmbient(): void {
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      const enemy = this.enemies[i];
+      if (!enemy.ambient) continue;
+      this.scene.remove(enemy.root);
+      enemy.dispose();
+      this.enemies.splice(i, 1);
+    }
+  }
+
   spawnBatch(requests: SpawnRequest[], playerPos: THREE.Vector3): void {
     const avoid: THREE.Vector3[] = [playerPos.clone()];
     for (const req of requests) {
@@ -78,7 +117,7 @@ export class EnemyManager {
 
   aliveCount(): number {
     let n = 0;
-    for (const e of this.enemies) if (!e.dead) n++;
+    for (const e of this.enemies) if (!e.dead && !e.ambient) n++;
     return n;
   }
 
@@ -93,6 +132,10 @@ export class EnemyManager {
         continue;
       }
       enemy.update(dt, playerPos, this.enemyUpdateEvents);
+
+      if (enemy.stats.behavior === 'wander' || enemy.stats.contactAnxietyPerSecond <= 0) {
+        continue;
+      }
 
       const playerMinY = playerPos.y;
       const playerMaxY = playerPos.y + PLAYER_CONTACT_HEIGHT;

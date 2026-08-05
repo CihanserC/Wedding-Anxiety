@@ -27,6 +27,8 @@ Toggle kodlar tekrar yazılınca kapanır; durum mesajı konsolda görünür.
 | `dugunvakti` | Düğün vakti | Aktif bölümü atla | Hayır |
 | `konserde` | Konserde | 1. harita (Müzik Salonu), level 1 | Hayır |
 | `denizfeneri` | Deniz feneri | 2. harita (Deniz Feneri), level 1 | Hayır |
+| `bali` | Bali | Bali Adası (balayı), level 1 | Hayır |
+| `dubai` | Dubai | Dubai Lüks Villa (keşif), level 1 | Hayır |
 | `baloncu` | Baloncu | Tüm balonları patlat (varsa) | Hayır |
 | `help` | Yardım | Konsolda kayan mini editörde tüm kod listesini açar / kapatır | Hayır |
 

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BLOCK_WATER } from '../data/blocks';
 import type { InputManager } from '../input/InputManager';
 import type { World } from './World';
 import { PlayerRig } from '../entities/PlayerRig';
@@ -10,7 +11,10 @@ const WALK_SPEED = 4.5;
 const SPRINT_SPEED = 7.5;
 const SPEED_BOOST_MULTIPLIER = 1.45;
 const JUMP_SPEED = 7.5;
+const SWIM_JUMP_SPEED = 5.2;
 const GRAVITY = 22;
+const WATER_GRAVITY = 6;
+const WATER_SPEED_MUL = 0.55;
 const MOUSE_SENSITIVITY_DEFAULT = 0.0022;
 const MAX_PITCH = Math.PI / 2 - 0.05;
 
@@ -27,6 +31,12 @@ export class Player {
   private mouseSensitivity = MOUSE_SENSITIVITY_DEFAULT;
   private fallRespawnY = 0.5;
   private speedBoostRemaining = 0;
+  private inWater = false;
+  private wasInWater = false;
+  private enteredWater = false;
+  private waterMoveAccum = 0;
+  private externalDrive = false;
+  private eyeHeightOverride: number | null = null;
   onFall?: () => void;
 
   applySpeedBoost(seconds: number): void {
@@ -57,11 +67,66 @@ export class Player {
 
   setWorld(world: World): void {
     this.world = world;
-    this.fallRespawnY = world.mapDef.id === 'lighthouse' ? 1.2 : 0.5;
+    // Bali / Dubai allow wading; only respawn if you clip under the seabed.
+    if (world.mapDef.id === 'bali' || world.mapDef.id === 'dubai') this.fallRespawnY = 0.25;
+    else if (world.mapDef.id === 'lighthouse') this.fallRespawnY = 1.2;
+    else this.fallRespawnY = 0.5;
+    this.inWater = false;
+    this.wasInWater = false;
+    this.enteredWater = false;
+  }
+
+  isInWater(): boolean {
+    return this.inWater;
+  }
+
+  /** True once after dry→wet transition; cleared on read. */
+  consumeEnteredWater(): boolean {
+    if (!this.enteredWater) return false;
+    this.enteredWater = false;
+    return true;
+  }
+
+  /** Seconds of continuous water movement since last ripple pulse. */
+  consumeWaterMovePulse(threshold = 0.28): boolean {
+    if (this.waterMoveAccum < threshold) return false;
+    this.waterMoveAccum = 0;
+    return true;
   }
 
   setMouseSensitivity(value: number): void {
     this.mouseSensitivity = value;
+  }
+
+  getMouseSensitivity(): number {
+    return this.mouseSensitivity;
+  }
+
+  setExternalDrive(active: boolean): void {
+    this.externalDrive = active;
+    if (!active) this.eyeHeightOverride = null;
+  }
+
+  isExternalDrive(): boolean {
+    return this.externalDrive;
+  }
+
+  setEyeHeightOverride(height: number | null): void {
+    this.eyeHeightOverride = height;
+  }
+
+  setViewAngles(yaw: number, pitch: number): void {
+    this.yaw = yaw;
+    this.pitch = pitch;
+    this.syncCamera();
+  }
+
+  getYaw(): number {
+    return this.yaw;
+  }
+
+  getPitch(): number {
+    return this.pitch;
   }
 
   respawn(): void {
@@ -88,10 +153,17 @@ export class Player {
   }
 
   getEyePosition(): THREE.Vector3 {
-    return new THREE.Vector3(this.position.x, this.position.y + EYE_HEIGHT, this.position.z);
+    const eyeY = this.position.y + (this.eyeHeightOverride ?? EYE_HEIGHT);
+    return new THREE.Vector3(this.position.x, eyeY, this.position.z);
   }
 
   update(dt: number, active: boolean): void {
+    if (this.externalDrive) {
+      this.syncCamera();
+      this.rig.update(dt, false);
+      return;
+    }
+
     if (active) {
       const { dx, dy } = this.input.consumeMouseDelta();
       this.yaw -= dx * this.mouseSensitivity;
@@ -115,18 +187,37 @@ export class Player {
       this.speedBoostRemaining = Math.max(0, this.speedBoostRemaining - dt);
     }
 
+    this.wasInWater = this.inWater;
+    this.inWater = this.detectBaliWater();
+    if (this.inWater && !this.wasInWater) this.enteredWater = true;
+
     const baseSpeed = active && this.input.isDown('sprint') ? SPRINT_SPEED : WALK_SPEED;
-    const speed = baseSpeed * (this.speedBoostRemaining > 0 ? SPEED_BOOST_MULTIPLIER : 1);
+    const waterMul = this.inWater ? WATER_SPEED_MUL : 1;
+    const speed =
+      baseSpeed * waterMul * (this.speedBoostRemaining > 0 ? SPEED_BOOST_MULTIPLIER : 1);
     this.velocity.x = wish.x * speed;
     this.velocity.z = wish.z * speed;
 
-    if (active && this.input.isDown('jump') && this.onGround) {
-      this.velocity.y = JUMP_SPEED;
-      this.onGround = false;
+    if (this.inWater) {
+      if (active && this.input.isDown('jump')) {
+        this.velocity.y = SWIM_JUMP_SPEED;
+        this.onGround = false;
+      }
+      // Light gravity + buoyancy toward the local water surface
+      this.velocity.y -= WATER_GRAVITY * dt;
+      const buoy = (this.waterSurfaceFeetY() - this.position.y) * 14;
+      this.velocity.y += buoy * dt;
+      this.velocity.y *= Math.max(0, 1 - 3.2 * dt);
+      if (this.velocity.y < -8) this.velocity.y = -8;
+      if (this.velocity.y > 9) this.velocity.y = 9;
+    } else {
+      if (active && this.input.isDown('jump') && this.onGround) {
+        this.velocity.y = JUMP_SPEED;
+        this.onGround = false;
+      }
+      this.velocity.y -= GRAVITY * dt;
+      if (this.velocity.y < -35) this.velocity.y = -35;
     }
-
-    this.velocity.y -= GRAVITY * dt;
-    if (this.velocity.y < -35) this.velocity.y = -35;
 
     this.moveWithCollisions(dt);
     if (this.position.y < this.fallRespawnY) {
@@ -135,8 +226,44 @@ export class Player {
     }
     this.syncCamera();
 
-    const moving = wish.lengthSq() > 0.001 && this.onGround;
+    const moving = wish.lengthSq() > 0.001 && (this.onGround || this.inWater);
+    if (this.inWater && wish.lengthSq() > 0.001) this.waterMoveAccum += dt;
+    else this.waterMoveAccum = 0;
     this.rig.update(dt, moving);
+  }
+
+  private detectBaliWater(): boolean {
+    if (this.world.mapDef.id !== 'bali' && this.world.mapDef.id !== 'dubai') return false;
+    const fx = Math.floor(this.position.x);
+    const fz = Math.floor(this.position.z);
+    // Sample feet → chest
+    for (const oy of [0.1, 0.45, 0.85, 1.2]) {
+      const by = Math.floor(this.position.y + oy);
+      if (this.world.getBlock(fx, by, fz) === BLOCK_WATER) return true;
+    }
+    // Standing on seabed / pool floor under a water column
+    const topWater = this.topWaterY(fx, fz);
+    if (topWater >= 0 && this.position.y < topWater + 1.05 && this.position.y > topWater - 1.2) {
+      return true;
+    }
+    return false;
+  }
+
+  /** Top solid water voxel Y at xz, or -1. */
+  private topWaterY(fx: number, fz: number): number {
+    for (let y = this.world.height - 1; y >= 0; y--) {
+      if (this.world.getBlock(fx, y, fz) === BLOCK_WATER) return y;
+    }
+    return -1;
+  }
+
+  /** Preferred foot height while wading (just below water surface). */
+  private waterSurfaceFeetY(): number {
+    const fx = Math.floor(this.position.x);
+    const fz = Math.floor(this.position.z);
+    const top = this.topWaterY(fx, fz);
+    if (top < 0) return this.position.y;
+    return top + 0.2;
   }
 
   private moveWithCollisions(dt: number): void {

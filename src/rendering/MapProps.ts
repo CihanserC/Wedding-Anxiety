@@ -2,6 +2,23 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { PropSpec } from '../game/worldGen/types';
 import { buildSuzyCat } from './SuzyCat';
+import {
+  buildBananaPlant,
+  buildBroadleafTree,
+  buildFern,
+  buildPalmTree,
+  buildTropicalBush,
+} from './tropicalProps';
+import { buildTreasureChest } from './TreasureChest';
+import { buildLamborghini } from './lamborghini';
+import {
+  buildBoat,
+  buildDiningChair,
+  buildDiningTable,
+  buildKingBed,
+  buildPlasmaTv,
+  buildSofa,
+} from './villaFurniture';
 
 /**
  * Non-voxel decorative props placed by map generators: stage instruments
@@ -48,6 +65,32 @@ function buildProp(spec: PropSpec): THREE.Group {
       return buildBalloonCluster();
     case 'suzy-cat':
       return buildSuzyCat();
+    case 'palm-tree':
+      return buildPalmTree();
+    case 'broadleaf-tree':
+      return buildBroadleafTree();
+    case 'tropical-bush':
+      return buildTropicalBush();
+    case 'banana-plant':
+      return buildBananaPlant();
+    case 'fern':
+      return buildFern();
+    case 'treasure-chest':
+      return buildTreasureChest();
+    case 'boat':
+      return buildBoat();
+    case 'king-bed':
+      return buildKingBed();
+    case 'sofa':
+      return buildSofa();
+    case 'plasma-tv':
+      return buildPlasmaTv();
+    case 'dining-chair':
+      return buildDiningChair();
+    case 'dining-table':
+      return buildDiningTable();
+    case 'lamborghini':
+      return buildLamborghini();
   }
   return new THREE.Group();
 }
