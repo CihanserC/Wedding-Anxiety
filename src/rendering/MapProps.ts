@@ -44,7 +44,7 @@ export function buildProps(specs: PropSpec[]): THREE.Group {
     const mesh = buildProp(spec);
     mesh.position.set(spec.x, spec.y, spec.z);
     if (spec.rotationY) mesh.rotation.y = spec.rotationY;
-    if (!['lighthouse', 'car', 'cake-table', 'wedding-bride-obj'].includes(spec.kind) && spec.scale) {
+    if (!['lighthouse', 'car', 'cake-table', 'wedding-bride-obj', 'wedding-groom-obj'].includes(spec.kind) && spec.scale) {
       mesh.scale.setScalar(spec.scale);
     }
     group.add(mesh);
@@ -132,6 +132,8 @@ function buildProp(spec: PropSpec): THREE.Group {
       return buildWallPainting(spec.paintingId ?? 'mona-lisa');
     case 'wedding-bride-obj':
       return buildWeddingBrideObj(spec.scale ?? 1);
+    case 'wedding-groom-obj':
+      return buildWeddingGroomObj(spec.scale ?? 1);
   }
   return new THREE.Group();
 }
@@ -621,6 +623,11 @@ const LIGHTHOUSE_TARGET_HEIGHT = 16;
 /** Target world height for the wedding bride OBJ (~human scale). */
 const WEDDING_BRIDE_TARGET_HEIGHT = 1.7;
 
+/** Target world height for the wedding groom OBJ (~human scale). */
+const WEDDING_GROOM_TARGET_HEIGHT = 1.75;
+
+const WEDDING_GROOM_OBJ_BASENAME = 'tripo_convert_2176e026-2d0e-4c6d-84e6-ce5f9fcb660e';
+
 /** Preserve GLB textures — do not replace with flat colours. */
 function prepareGlbMeshes(object: THREE.Object3D): void {
   object.traverse((child) => {
@@ -755,6 +762,49 @@ function buildWeddingBrideObj(extraScale: number): THREE.Group {
     },
     undefined,
     () => addWeddingBrideStub(g),
+  );
+
+  return g;
+}
+
+function addWeddingGroomStub(parent: THREE.Group): void {
+  const navy = new THREE.MeshLambertMaterial({ color: 0x1a2840 });
+  const skin = new THREE.MeshLambertMaterial({ color: 0xe8c8a8 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 1.1, 10), navy);
+  body.position.y = 0.55;
+  parent.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 10), skin);
+  head.position.y = 1.28;
+  parent.add(head);
+}
+
+function buildWeddingGroomObj(extraScale: number): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'wedding-groom-obj';
+
+  const base = `${import.meta.env.BASE_URL}damat_model/`;
+  const mtlLoader = new MTLLoader();
+  mtlLoader.setPath(base);
+  mtlLoader.load(
+    `${WEDDING_GROOM_OBJ_BASENAME}.mtl`,
+    (materials) => {
+      materials.preload();
+      const objLoader = new OBJLoader();
+      objLoader.setMaterials(materials);
+      objLoader.setPath(base);
+      objLoader.load(
+        `${WEDDING_GROOM_OBJ_BASENAME}.obj`,
+        (model) => {
+          fitModelToHeight(model, WEDDING_GROOM_TARGET_HEIGHT, extraScale);
+          prepareGlbMeshes(model);
+          g.add(model);
+        },
+        undefined,
+        () => addWeddingGroomStub(g),
+      );
+    },
+    undefined,
+    () => addWeddingGroomStub(g),
   );
 
   return g;

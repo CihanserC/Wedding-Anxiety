@@ -202,8 +202,8 @@ export const MAPS: MapDefinition[] = [
         batchInterval: 4,
         batches: [
           { type: 'merakli-teyze', count: 3 },
+          { type: 'fotograf-flasoru', count: 2 },
           { type: 'merakli-teyze', count: 3 },
-          { type: 'merakli-teyze', count: 2 },
         ],
       },
       {
@@ -215,11 +215,11 @@ export const MAPS: MapDefinition[] = [
         batchInterval: 3.5,
         batches: [
           { type: 'merakli-teyze', count: 2 },
-          { type: 'mukemmeliyetci-kuzen', count: 3 },
-          { type: 'fotograf-flasoru', count: 2 },
+          { type: 'mukemmeliyetci-kuzen', count: 2 },
+          { type: 'fotograf-flasoru', count: 4 },
           { type: 'mukemmeliyetci-kuzen', count: 2 },
           { type: 'zaman-canavari', count: 2 },
-          { type: 'mukemmeliyetci-kuzen', count: 3 },
+          { type: 'mukemmeliyetci-kuzen', count: 2 },
         ],
       },
       {
@@ -231,10 +231,10 @@ export const MAPS: MapDefinition[] = [
         totalEnemies: 15,
         batchInterval: 3,
         batches: [
-          { type: 'zaman-canavari', count: 3 },
-          { type: 'fotograf-flasoru', count: 2 },
+          { type: 'zaman-canavari', count: 2 },
+          { type: 'fotograf-flasoru', count: 4 },
           { type: 'mukemmeliyetci-kuzen', count: 3 },
-          { type: 'zaman-canavari', count: 3 },
+          { type: 'zaman-canavari', count: 2 },
           { type: 'merakli-teyze', count: 3 },
           { type: 'beklenti-golgesi', count: 1 },
         ],

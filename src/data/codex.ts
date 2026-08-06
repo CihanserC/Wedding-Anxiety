@@ -86,10 +86,10 @@ export const CODEX_ENEMIES: CodexEntry[] = [
   },
   {
     id: 'fotograf-flasoru',
-    name: 'Fotoğraf Flaşörü',
+    name: 'Flaşör Babaanne',
     role: 'Flaş · Körlük',
     blurb:
-      'Her anı ölümsüzleştirmek ister, özellikle seni. Flaş patladığında görüşün bulanıklaşır; kalkanla karşı koy veya mesafe bırak.',
+      'Pembe hırkalı babaanne her kareyi ölümsüzleştirmek ister — özellikle seni. Deklanşör ve flaş patladığında görüşün beyaza boğulur; kalkanla karşı koy veya mesafe bırak.',
     tags: ['Deniz Feneri', 'Düğün'],
   },
   {

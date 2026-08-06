@@ -141,7 +141,7 @@ export class PlayerRig {
     this.swingPhase = 1;
   }
 
-  update(dt: number, moving: boolean, driveSpeed = 0): void {
+  update(dt: number, moving: boolean, driveSpeed = 0, turboBlend = 0): void {
     this.time += dt;
     if (moving) {
       this.swayPhase += dt * 8;
@@ -150,7 +150,7 @@ export class PlayerRig {
     }
 
     if (this.driving) {
-      this.bobCarInterior(driveSpeed);
+      this.bobCarInterior(driveSpeed, turboBlend);
       return;
     }
 
@@ -237,16 +237,26 @@ export class PlayerRig {
     active.position.z = -0.04 * Math.sin(t * Math.PI) * (1 - recoverEase);
   }
 
-  private bobCarInterior(driveSpeed: number): void {
+  private bobCarInterior(driveSpeed: number, turboBlend = 0): void {
     const speedFactor = Math.min(1, Math.abs(driveSpeed) / 10);
-    const bobAmp = 0.008 + speedFactor * 0.018;
-    const bobX = Math.cos(this.swayPhase * 1.4) * bobAmp;
-    const bobY = Math.sin(this.swayPhase * 2.2) * bobAmp * 0.7;
+    const turboShake = turboBlend * 0.022;
+    const bobAmp = 0.008 + speedFactor * 0.018 + turboShake;
+    const bobX = Math.cos(this.swayPhase * 1.4) * bobAmp + Math.sin(this.time * 38) * turboShake * 0.5;
+    const bobY = Math.sin(this.swayPhase * 2.2) * bobAmp * 0.7 + Math.cos(this.time * 44) * turboShake * 0.35;
     this.carInteriorGroup.position.set(bobX, -0.48 + bobY, -0.28);
 
     const wheel = this.carInteriorGroup.getObjectByName('steering-wheel');
     if (wheel) {
-      wheel.rotation.z = Math.sin(this.swayPhase * 0.6) * speedFactor * 0.08;
+      wheel.rotation.z =
+        Math.sin(this.swayPhase * 0.6) * speedFactor * 0.08 + Math.sin(this.time * 32) * turboBlend * 0.06;
+    }
+
+    const turboFill = this.carInteriorGroup.getObjectByName('turbo-gauge-fill');
+    if (turboFill instanceof THREE.Mesh) {
+      const mat = turboFill.material as THREE.MeshLambertMaterial;
+      mat.emissiveIntensity = 0.15 + turboBlend * 1.6;
+      turboFill.scale.x = 0.6 + turboBlend * 0.5;
+      turboFill.scale.y = 0.6 + turboBlend * 0.4;
     }
   }
 

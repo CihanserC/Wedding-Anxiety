@@ -42,7 +42,7 @@ export class DubaiInteractions {
     if (this.car.isDriving()) {
       this.host.hud.setSubtitle([]);
       this.host.hud.setInteractPrompt(
-        `${LAMBO_DRIVE_MESSAGES.exitPrompt}  ·  ${LAMBO_DRIVE_MESSAGES.cameraToggle}`,
+        `${LAMBO_DRIVE_MESSAGES.exitPrompt}  ·  ${LAMBO_DRIVE_MESSAGES.turbo}  ·  ${LAMBO_DRIVE_MESSAGES.cameraToggle}`,
       );
       if (this.host.input.consumeInteract()) this.car.exitDrive();
       return;

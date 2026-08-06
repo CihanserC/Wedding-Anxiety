@@ -27,7 +27,7 @@ Stack: **Three.js + TypeScript (strict) + Vite**. Harici asset yok; sesler Web A
 
 ### Faz B - yapılanlar (4 Ağustos 2026)
 
-- **Fotoğraf Flaşörü**: yeni düşman tipi; mesafede flaş atar (+12 anksiyete). Map 3 Level 2-3'te.
+- **Flaşör Babaanne**: yeni düşman tipi; mesafede flaş atar (+12 anksiyete). Map 3 Level 2-3'te.
 - **Boss fazları**: Beklenti Gölgesi %60 HP'de 2 teyze çağırır, %30'da hızlanır.
 - **Nikâh masası etkileşimi**: Map 3'te E ile nefes molası (−15 anksiyete, level başına 1 kez).
 

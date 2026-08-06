@@ -4,7 +4,19 @@
  * (public-domain melody) when no external mp3 is present.
  */
 
-type Sfx = 'shoot' | 'laser' | 'hit' | 'kill' | 'wave-clear' | 'hurt' | 'win' | 'lose' | 'balloon-pop' | 'meow' | 'ui-click';
+type Sfx =
+  | 'shoot'
+  | 'laser'
+  | 'hit'
+  | 'kill'
+  | 'wave-clear'
+  | 'hurt'
+  | 'win'
+  | 'lose'
+  | 'balloon-pop'
+  | 'meow'
+  | 'ui-click'
+  | 'camera-shutter';
 export type BgmId =
   | 'menu-peace'
   | 'mozart-allegro'
@@ -46,6 +58,7 @@ export class AudioManager {
   private carEngineNoise: AudioBufferSourceNode | null = null;
   private carEngineFilter: BiquadFilterNode | null = null;
   private carEngineSpeed = 0;
+  private carEngineTurbo = 0;
 
   ensureStarted(): void {
     if (this.ctx) return;
@@ -122,7 +135,7 @@ export class AudioManager {
       this.lightsaberHoldGain.gain.value = this.muted ? 0 : this.lightsaberHoldPeak;
     }
     if (this.carEngineGain && this.carEngineWanted) {
-      this.carEngineGain.gain.value = this.muted ? 0 : this.carEngineTargetGain(this.carEngineSpeed);
+      this.carEngineGain.gain.value = this.muted ? 0 : this.carEngineTargetGain(this.carEngineSpeed, this.carEngineTurbo);
     }
   }
 
@@ -161,6 +174,9 @@ export class AudioManager {
         break;
       case 'ui-click':
         this.playUiClick();
+        break;
+      case 'camera-shutter':
+        this.playCameraShutter();
         break;
     }
   }
@@ -915,40 +931,45 @@ export class AudioManager {
   stopCarEngine(): void {
     this.carEngineWanted = false;
     this.carEngineSpeed = 0;
+    this.carEngineTurbo = 0;
     this.endCarEngineLoop();
   }
 
   /** @param normalizedSpeed 0..1 relative to top speed */
-  updateCarEngine(normalizedSpeed: number): void {
+  /** @param turboBlend 0..1 turbo intensity */
+  updateCarEngine(normalizedSpeed: number, turboBlend = 0): void {
     if (!this.carEngineWanted) return;
     const t = Math.max(0, Math.min(1, normalizedSpeed));
+    const turbo = Math.max(0, Math.min(1, turboBlend));
     this.carEngineSpeed = t;
+    this.carEngineTurbo = turbo;
     if (!this.carEngineGain) {
       this.beginCarEngineLoop();
       return;
     }
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
+    const effective = Math.min(1, t + turbo * 0.3);
     const idleHz = 58;
-    const topHz = 145;
-    const lowHz = idleHz + (topHz - idleHz) * t;
+    const topHz = 145 + turbo * 65;
+    const lowHz = idleHz + (topHz - idleHz) * effective;
     if (this.carEngineOscLow) {
-      this.carEngineOscLow.frequency.setTargetAtTime(lowHz, now, 0.06);
+      this.carEngineOscLow.frequency.setTargetAtTime(lowHz, now, 0.05);
     }
     if (this.carEngineOscHigh) {
-      this.carEngineOscHigh.frequency.setTargetAtTime(lowHz * (2.05 + t * 0.35), now, 0.06);
+      this.carEngineOscHigh.frequency.setTargetAtTime(lowHz * (2.05 + effective * 0.35 + turbo * 0.4), now, 0.05);
     }
     if (this.carEngineFilter) {
-      this.carEngineFilter.frequency.setTargetAtTime(380 + t * 2200, now, 0.08);
-      this.carEngineFilter.Q.setTargetAtTime(0.7 + t * 1.8, now, 0.1);
+      this.carEngineFilter.frequency.setTargetAtTime(380 + effective * 2200 + turbo * 1400, now, 0.07);
+      this.carEngineFilter.Q.setTargetAtTime(0.7 + effective * 1.8 + turbo * 2.2, now, 0.08);
     }
     if (!this.muted) {
-      this.carEngineGain.gain.setTargetAtTime(this.carEngineTargetGain(t), now, 0.06);
+      this.carEngineGain.gain.setTargetAtTime(this.carEngineTargetGain(effective, turbo), now, 0.05);
     }
   }
 
-  private carEngineTargetGain(normalizedSpeed: number): number {
-    return 0.04 + normalizedSpeed * 0.12;
+  private carEngineTargetGain(normalizedSpeed: number, turbo = 0): number {
+    return 0.04 + normalizedSpeed * 0.12 + turbo * 0.08;
   }
 
   private beginCarEngineLoop(): void {
@@ -957,7 +978,7 @@ export class AudioManager {
 
     const ctx = this.ctx;
     const gain = ctx.createGain();
-    gain.gain.value = this.muted ? 0 : this.carEngineTargetGain(this.carEngineSpeed);
+    gain.gain.value = this.muted ? 0 : this.carEngineTargetGain(this.carEngineSpeed, this.carEngineTurbo);
 
     const oscLow = ctx.createOscillator();
     oscLow.type = 'sawtooth';
@@ -1089,6 +1110,37 @@ export class AudioManager {
   }
 
   /** Kısa, tatlı miyav — Suzy Çıtçıt. */
+  /** Mechanical camera shutter: sharp click + short noise slap. */
+  private playCameraShutter(): void {
+    if (!this.ctx || !this.masterGain) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+
+    this.beep(2200, 'square', 0.001, 0.04, 0.28, 900);
+    this.beep(1400, 'triangle', 0.001, 0.055, 0.18, 400);
+
+    const noiseDur = 0.09;
+    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * noiseDur), ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 1800;
+    filter.Q.value = 1.2;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.22, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + noiseDur);
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain);
+    src.start(now);
+    src.stop(now + noiseDur);
+  }
+
   private playMeow(): void {
     if (!this.ctx || !this.masterGain) return;
     const ctx = this.ctx;

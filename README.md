@@ -13,7 +13,7 @@ Hilal, beş farklı mekânda toplam 13 aşamalık bir yolculuğa çıkar. Ana hi
 - **Meraklı Teyze** - "Ne zaman evleneceksiniz?" sorularıyla doğrudan yaklaşır (chase)
 - **Mükemmeliyetçi Kuzen** - Karşılaştırma baskısı; dur-kalk yaparak sinsice yaklaşır (stalker)
 - **Zaman Canavarı** - Geri sayım stresi; ani hız patlamalarıyla saldırır (dasher)
-- **Fotoğraf Flaşörü** - Ani flaşlarla anksiyete sıçratır; mesafede durup parlar (flasher)
+- **Flaşör Babaanne** - Ani flaşlarla anksiyete sıçratır; mesafede durup parlar (flasher)
 - **Beklenti Gölgesi (boss)** - Herkesin beklentisinden doğan büyük gölge; fazlarla güçlenir (floater)
 
 Anksiyete metresi %100'e ulaşırsa kaybedersin; düşmanları vurdukça metre azalır.

@@ -30,6 +30,7 @@ export class HUD {
   private readonly enemiesStat: HTMLDivElement;
   private readonly reloadRing: HTMLDivElement;
   private readonly damageFlash: HTMLDivElement;
+  private readonly cameraFlash: HTMLDivElement;
   private readonly weaponLabel: HTMLDivElement;
   private readonly interactPrompt: HTMLDivElement;
   private readonly subtitle: HTMLDivElement;
@@ -81,6 +82,7 @@ export class HUD {
       </div>
       <div class="wa-reload-ring"></div>
       <div class="wa-damage-flash"></div>
+      <div class="wa-camera-flash"></div>
       <div class="wa-weapon"></div>
       <div class="wa-interact-prompt"></div>
       <div class="wa-subtitle"></div>
@@ -101,6 +103,7 @@ export class HUD {
     this.enemiesStat = this.root.querySelector('.wa-enemies') as HTMLDivElement;
     this.reloadRing = this.root.querySelector('.wa-reload-ring') as HTMLDivElement;
     this.damageFlash = this.root.querySelector('.wa-damage-flash') as HTMLDivElement;
+    this.cameraFlash = this.root.querySelector('.wa-camera-flash') as HTMLDivElement;
     this.weaponLabel = this.root.querySelector('.wa-weapon') as HTMLDivElement;
     this.interactPrompt = this.root.querySelector('.wa-interact-prompt') as HTMLDivElement;
     this.subtitle = this.root.querySelector('.wa-subtitle') as HTMLDivElement;
@@ -169,6 +172,13 @@ export class HUD {
     this.damageFlash.classList.remove('wa-flash-active');
     void this.damageFlash.offsetWidth;
     this.damageFlash.classList.add('wa-flash-active');
+  }
+
+  /** White camera-bulb flash (paparazzi / Flaşör Babaanne). */
+  flashCamera(): void {
+    this.cameraFlash.classList.remove('wa-camera-flash-active');
+    void this.cameraFlash.offsetWidth;
+    this.cameraFlash.classList.add('wa-camera-flash-active');
   }
 
   setCrosshairVisible(visible: boolean): void {
@@ -502,9 +512,25 @@ export class HUD {
       .wa-damage-flash.wa-flash-active {
         animation: wa-flash 0.35s ease-out;
       }
+      .wa-camera-flash {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at center, rgba(255, 255, 240, 0.92) 0%, rgba(255, 250, 220, 0.55) 35%, rgba(255, 255, 240, 0) 70%);
+        opacity: 0;
+        pointer-events: none;
+        z-index: 6;
+      }
+      .wa-camera-flash.wa-camera-flash-active {
+        animation: wa-camera-flash 0.28s ease-out;
+      }
       @keyframes wa-flash {
         0% { opacity: 0; }
         30% { opacity: 1; }
+        100% { opacity: 0; }
+      }
+      @keyframes wa-camera-flash {
+        0% { opacity: 0; }
+        12% { opacity: 1; }
         100% { opacity: 0; }
       }
       @keyframes wa-anxiety-pulse {

@@ -52,6 +52,21 @@ export function buildCarInteriorViewmodel(): THREE.Group {
   goldTrim.position.set(0, -0.2, -0.37);
   g.add(goldTrim);
 
+  // Turbo gauge — glows orange when Shift is held
+  const turboGauge = box(0.14, 0.06, 0.03, lambert(0x2a1810));
+  turboGauge.name = 'turbo-gauge-bg';
+  turboGauge.position.set(0.22, -0.32, -0.37);
+  g.add(turboGauge);
+
+  const turboFill = box(0.1, 0.04, 0.02, lambert(0xff6600, { emissive: 0xff4400, emissiveIntensity: 0.2 }));
+  turboFill.name = 'turbo-gauge-fill';
+  turboFill.position.set(0.22, -0.32, -0.355);
+  g.add(turboFill);
+
+  const turboLabel = box(0.08, 0.02, 0.01, gold);
+  turboLabel.position.set(0.22, -0.26, -0.36);
+  g.add(turboLabel);
+
   // Steering column
   const column = box(0.07, 0.07, 0.32, chrome);
   column.position.set(0, -0.42, -0.48);

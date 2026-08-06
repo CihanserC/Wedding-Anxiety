@@ -30,6 +30,7 @@ export function buildLamborghini(): THREE.Group {
 
   // Main wedge body (long along Z, nose toward -Z) — stays visible in FPS
   const chassis = box(1.85, 0.28, 4.2, gold);
+  chassis.name = 'lambo-chassis';
   chassis.position.set(0, 0.42, 0);
   g.add(chassis);
 
@@ -89,6 +90,7 @@ export function buildLamborghini(): THREE.Group {
 
   for (const side of [-1, 1]) {
     const rl = box(0.4, 0.08, 0.08, rearLight);
+    rl.name = 'lambo-tail-light';
     rl.position.set(side * 0.55, 0.48, 2.12);
     g.add(rl);
   }
@@ -96,6 +98,7 @@ export function buildLamborghini(): THREE.Group {
   // Rear wing
   const wing = box(1.7, 0.06, 0.35, black);
   wing.name = LAMBORGHINI_CABIN_HIDE;
+  wing.userData.lamboWing = true;
   wing.position.set(0, 0.95, 1.55);
   g.add(wing);
   for (const side of [-1, 1]) {
@@ -131,6 +134,7 @@ export function buildLamborghini(): THREE.Group {
   // Exhaust tips
   for (const side of [-1, 1]) {
     const ex = box(0.12, 0.1, 0.18, chrome);
+    ex.name = 'lambo-exhaust';
     ex.position.set(side * 0.35, 0.22, 2.2);
     g.add(ex);
   }

@@ -43,6 +43,7 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
   const stageFrontZ = hallZ0 + hallDepth - 12;
   const altarWorldZ = hallZ0 + hallDepth - 7;
   const coupleZ = stageFrontZ + 1.5;
+  const brideZ = coupleZ + 0.5;
   const cakeTableX = centerX + 5.5;
 
   const guestNpcs = placeGuestTables(
@@ -96,20 +97,18 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
       },
     },
     collisionBoxes: buildWeddingStairCollisionBoxes(stairsOrigin),
-    npcs: [
-      {
-        type: 'groom',
-        x: centerX + 0.55,
-        y: 2.01,
-        z: coupleZ,
-        rotationY: Math.PI,
-      },
-      ...guestNpcs,
-    ],
+    npcs: [...guestNpcs],
     props: [
       {
         kind: 'wedding-bride-obj',
         x: centerX - 0.55,
+        y: 2.01,
+        z: brideZ,
+        rotationY: Math.PI,
+      },
+      {
+        kind: 'wedding-groom-obj',
+        x: centerX + 0.55,
         y: 2.01,
         z: coupleZ,
         rotationY: Math.PI,
@@ -189,7 +188,7 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
         kind: 'bride-chat',
         x: centerX - 0.55,
         y: 2.01,
-        z: coupleZ,
+        z: brideZ,
         radius: 2.4,
       },
       {
@@ -377,9 +376,9 @@ function generateHall(w: WorldWriter, x0: number, z0: number, HW: number, HD: nu
     }
   }
 
-  // Carpet aisle
+  // Carpet aisle — plain deep red runner
   for (let z = southWallLocal; z < stageFrontLocal; z++) {
-    for (let dx = -2; dx < 2; dx++) {
+    for (let dx = -5; dx <= 4; dx++) {
       w.setBlock(x0 + centerX + dx, 0, z0 + z, BLOCK_CARPET);
     }
   }

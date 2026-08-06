@@ -107,7 +107,8 @@ export type PropKind =
   | 'coastal-tree'
   | 'garden-flower'
   | 'wall-painting'
-  | 'wedding-bride-obj';
+  | 'wedding-bride-obj'
+  | 'wedding-groom-obj';
 
 export type FamousPaintingId =
   | 'mona-lisa'

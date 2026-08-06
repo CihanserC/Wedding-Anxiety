@@ -225,6 +225,7 @@ export const LAMBO_DRIVE_MESSAGES = {
   prompt: 'E - Arabayı sür',
   exitPrompt: 'E - Arabadan in',
   cameraToggle: 'V - Kamera değiştir',
+  turbo: 'Shift - Turbo',
 };
 
 export const TV_MESSAGES = {

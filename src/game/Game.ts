@@ -47,14 +47,18 @@ import { getCheatHelpEditorText, resolveCheat, type CheatId } from './CheatCodes
 import type { CommandSubmitResult } from '../ui/CommandConsole';
 import { BaliInteractions } from './interactions/BaliInteractions';
 import { DubaiInteractions, type DubaiCarHost } from './interactions/DubaiInteractions';
+import { CarTurboEffects } from './CarTurboEffects';
 import { MapSkipInteractions } from './interactions/MapSkipInteractions';
 import { WeddingInteractions } from './interactions/WeddingInteractions';
 import type { InteractionGameState, InteractionHost } from './interactions/types';
 
 const CAR_MAX_SPEED = 14;
+const CAR_TURBO_MAX_SPEED = 23;
 const CAR_REVERSE_MAX = 5;
 const CAR_ACCEL = 26;
+const CAR_TURBO_ACCEL_MUL = 2.1;
 const CAR_DRAG = 2.4;
+const CAR_TURBO_DRAG = 1.1;
 const CAR_TURN_RATE = 2.35;
 const CAR_HALF_W = 0.95;
 const CAR_HALF_L = 2.05;
@@ -142,6 +146,7 @@ export class Game {
   private plasmaTvMesh: THREE.Group | null = null;
   private plasmaTvOn = false;
   private tvSlideshow = new TvSlideshow();
+  private readonly carTurbo: CarTurboEffects;
 
   private readonly interactionHost: InteractionHost;
   private readonly mapSkip: MapSkipInteractions;
@@ -213,6 +218,9 @@ export class Game {
 
     this.player = new Player(this.world, this.input, container.clientWidth / container.clientHeight);
     this.scene.add(this.player.camera);
+
+    this.carTurbo = new CarTurboEffects(container);
+    this.carTurbo.setBaseFov(this.player.camera.fov);
 
     this.effects = new ProjectileEffects(this.scene);
     this.enemyProjectiles = new EnemyProjectileManager(this.scene);
@@ -1067,7 +1075,7 @@ export class Game {
   }
 
   private drivingInteractPrompt(): string {
-    return `${LAMBO_DRIVE_MESSAGES.exitPrompt}  ·  ${LAMBO_DRIVE_MESSAGES.cameraToggle}`;
+    return `${LAMBO_DRIVE_MESSAGES.exitPrompt}  ·  ${LAMBO_DRIVE_MESSAGES.turbo}  ·  ${LAMBO_DRIVE_MESSAGES.cameraToggle}`;
   }
 
   private applyCarCameraMode(): void {
@@ -1087,11 +1095,14 @@ export class Game {
   }
 
   private updateChaseCamera(dt: number): void {
+    const turboBlend = this.carTurbo.getBlend();
+    const chaseDist = CHASE_DISTANCE + turboBlend * 1.8;
+    const chaseHeight = CHASE_HEIGHT + turboBlend * 0.35;
     // Forward is (-sin(yaw), 0, -cos(yaw)); camera sits behind + above the car.
     this.chaseIdealPos.set(
-      this.carX + Math.sin(this.carYaw) * CHASE_DISTANCE,
-      this.carY + CHASE_HEIGHT,
-      this.carZ + Math.cos(this.carYaw) * CHASE_DISTANCE,
+      this.carX + Math.sin(this.carYaw) * chaseDist,
+      this.carY + chaseHeight,
+      this.carZ + Math.cos(this.carYaw) * chaseDist,
     );
 
     if (!this.chaseCamInitialized) {
@@ -1127,6 +1138,7 @@ export class Game {
     this.hud.setInteractPrompt(this.drivingInteractPrompt());
     this.audio.ensureStarted();
     this.audio.startCarEngine();
+    if (this.lamborghiniMesh) this.carTurbo.attach(this.lamborghiniMesh);
   }
 
   private exitCarDrive(): void {
@@ -1134,6 +1146,9 @@ export class Game {
     this.carSpeed = 0;
     this.carCameraChase = true;
     this.chaseCamInitialized = false;
+    this.carTurbo.detach();
+    this.player.camera.fov = 75;
+    this.player.camera.updateProjectionMatrix();
     this.audio.stopCarEngine();
     this.player.setExternalDrive(false);
     this.player.setEyeHeightOverride(null);
@@ -1181,14 +1196,19 @@ export class Game {
       const wishForward = this.input.isDown('forward') ? 1 : 0;
       const wishBack = this.input.isDown('back') ? 1 : 0;
       const throttle = wishForward - wishBack;
+      const turboWanted =
+        this.input.isDown('sprint') && throttle > 0 && this.carSpeed > 0.2;
+      const maxSpeed = turboWanted ? CAR_TURBO_MAX_SPEED : CAR_MAX_SPEED;
+      const drag = turboWanted ? CAR_TURBO_DRAG : CAR_DRAG;
 
       if (throttle !== 0) {
-        this.carSpeed += throttle * CAR_ACCEL * dt;
+        const accel = CAR_ACCEL * (turboWanted ? CAR_TURBO_ACCEL_MUL : 1);
+        this.carSpeed += throttle * accel * dt;
       } else {
-        this.carSpeed *= Math.max(0, 1 - CAR_DRAG * dt);
+        this.carSpeed *= Math.max(0, 1 - drag * dt);
       }
 
-      if (this.carSpeed > CAR_MAX_SPEED) this.carSpeed = CAR_MAX_SPEED;
+      if (this.carSpeed > maxSpeed) this.carSpeed = maxSpeed;
       if (this.carSpeed < -CAR_REVERSE_MAX) this.carSpeed = -CAR_REVERSE_MAX;
 
       if (Math.abs(this.carSpeed) > 0.35) {
@@ -1213,8 +1233,26 @@ export class Game {
       this.player.setViewAngles(this.carYaw, this.carPitch);
     }
     this.syncLamborghiniMesh();
-    this.player.rig.update(dt, Math.abs(this.carSpeed) > 0.5, this.carSpeed);
-    this.audio.updateCarEngine(Math.abs(this.carSpeed) / CAR_MAX_SPEED);
+
+    const turboActive =
+      active &&
+      this.input.isDown('sprint') &&
+      this.carSpeed > 0.5 &&
+      this.input.isDown('forward');
+    this.carTurbo.update(
+      dt,
+      this.player.camera,
+      turboActive,
+      this.carSpeed,
+      this.scene,
+    );
+    const turboBlend = this.carTurbo.getBlend();
+
+    this.player.rig.update(dt, Math.abs(this.carSpeed) > 0.5, this.carSpeed, turboBlend);
+    this.audio.updateCarEngine(
+      Math.abs(this.carSpeed) / CAR_TURBO_MAX_SPEED,
+      turboBlend,
+    );
   }
 
   /** Keep wheels on the top solid surface (sand, asphalt, pad, etc.). */
@@ -1500,11 +1538,12 @@ export class Game {
     }
   }
 
-  private handleEnemyFlash(_enemy: Enemy): void {
+  private handleEnemyFlash(enemy: Enemy): void {
+    this.effects.spawnCameraFlash(enemy.getFlashLensWorldPosition());
+    this.hud.flashCamera();
+    this.audio.play('camera-shutter');
     if (this.cheatGodMode) return;
     this.anxiety.add(12);
-    this.hud.flashDamage();
-    this.audio.play('hurt');
     this.flashWarningTimer = 1.2;
     this.hud.setSubtitle(['Flaş!']);
   }

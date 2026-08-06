@@ -222,6 +222,66 @@ export class ProjectileEffects {
     });
   }
 
+  /** Bright camera flash burst at the paparazzi lens + confetti cubes. */
+  spawnCameraFlash(position: THREE.Vector3): void {
+    const group = new THREE.Group();
+    group.position.copy(position);
+
+    const coreMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 1,
+    });
+    const glowMat = new THREE.MeshBasicMaterial({
+      color: 0xfff0a0,
+      transparent: true,
+      opacity: 0.75,
+    });
+
+    group.add(new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), coreMat));
+    group.add(new THREE.Mesh(new THREE.SphereGeometry(0.55, 8, 8), glowMat));
+    this.scene.add(group);
+    this.effects.push({ object: group, born: this.now, life: 0.2, materials: [coreMat, glowMat] });
+
+    const confettiColors = [0xff6ab0, 0x6ac8ff, 0xfff0a0, 0xff88cc, 0x88ddff, 0xffffff];
+    for (let i = 0; i < 6; i++) {
+      const cMat = new THREE.MeshBasicMaterial({
+        color: confettiColors[i % confettiColors.length],
+        transparent: true,
+        opacity: 0.95,
+      });
+      const cube = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), cMat);
+      const ang = (i / 6) * Math.PI * 2 + Math.random() * 0.3;
+      cube.position.set(
+        position.x + Math.cos(ang) * 0.2,
+        position.y + 0.08 + Math.random() * 0.15,
+        position.z + Math.sin(ang) * 0.2,
+      );
+      this.scene.add(cube);
+      this.effects.push({
+        object: cube,
+        born: this.now,
+        life: 0.28 + Math.random() * 0.12,
+        materials: [cMat],
+        floatY: 0.8 + Math.random() * 0.6,
+        driftX: Math.cos(ang) * (1.2 + Math.random()),
+        driftZ: Math.sin(ang) * (1.2 + Math.random()),
+      });
+    }
+
+    const lightRig = new THREE.Group();
+    lightRig.position.copy(position);
+    const light = new THREE.PointLight(0xfff4c0, 3.2, 8);
+    lightRig.add(light);
+    this.scene.add(lightRig);
+    this.effects.push({
+      object: lightRig,
+      born: this.now,
+      life: 0.22,
+      materials: [],
+    });
+  }
+
   spawnMuzzleFlash(
     position: THREE.Vector3,
     direction: THREE.Vector3,

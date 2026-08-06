@@ -243,6 +243,16 @@ export class Enemy {
     }
   }
 
+  /** World-space position of the camera flash lens (falls back to chest height). */
+  getFlashLensWorldPosition(target = new THREE.Vector3()): THREE.Vector3 {
+    const lens = this.root.getObjectByName('flash-lens');
+    if (lens) {
+      lens.getWorldPosition(target);
+      return target;
+    }
+    return target.set(this.position.x, this.position.y + 1.15, this.position.z);
+  }
+
   applyHit(damage: number): boolean {
     if (this.dying) return false;
     this.hp -= damage;
@@ -931,10 +941,26 @@ export class Enemy {
         break;
       }
       case 'flasher': {
+        const flashing = this.flashActive > 0;
+        const flashPulse = flashing ? 1 : 0;
         if (this.jitterMeshes) {
-          const flashPulse = this.flashActive > 0 ? 1 : 0;
           for (const m of this.jitterMeshes) {
-            m.scale.setScalar(1 + flashPulse * 0.35);
+            m.scale.setScalar(1 + flashPulse * 0.55);
+            if (m instanceof THREE.Mesh && m.material instanceof THREE.MeshLambertMaterial) {
+              m.material.emissiveIntensity = flashing
+                ? 1.8 + Math.sin(t * 40) * 0.6
+                : 0.85;
+            }
+          }
+        }
+        if (this.armGroups) {
+          const raise = flashing ? -0.95 : -0.15;
+          const side = flashing ? 0.2 : 0.08;
+          this.armGroups[0].rotation.x = raise + Math.sin(t * 3) * 0.04;
+          this.armGroups[0].rotation.z = side;
+          if (this.armGroups[1]) {
+            this.armGroups[1].rotation.x = raise + Math.sin(t * 3 + 0.4) * 0.04;
+            this.armGroups[1].rotation.z = -side;
           }
         }
         if (this.headGroup) this.headGroup.rotation.y = Math.sin(t * 5) * 0.12;
