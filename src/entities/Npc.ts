@@ -32,13 +32,14 @@ export class Npc {
     pose: 'standing' | 'sitting' = 'standing',
     wander = false,
     wanderRadius = 6,
+    variant = 0,
   ) {
     this.stats = NPC_STATS[type];
     this.position = position.clone();
     this.home.copy(position);
     this.wander = wander;
     this.wanderRadius = wanderRadius;
-    this.root = buildNpcMesh(type, pose);
+    this.root = buildNpcMesh(type, pose, variant);
     this.root.position.copy(this.position);
     this.root.rotation.y = rotationY;
     this.wanderDir.set(Math.sin(rotationY), 0, Math.cos(rotationY));

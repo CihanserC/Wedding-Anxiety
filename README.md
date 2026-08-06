@@ -6,7 +6,9 @@
 
 ## Konsept
 
-Hilal, üç farklı mekânda toplam 9 aşamalık bir yolculuğa çıkar. Her mekânda anksiyete kaynaklarını temsil eden düşmanlarla savaşır:
+Hilal, beş farklı mekânda toplam 13 aşamalık bir yolculuğa çıkar. Ana hikâye üç haritada (9 aşama) tamamlanır; Bali balayı ve Dubai keşif modu bonus içeriktir.
+
+### Düşmanlar
 
 - **Meraklı Teyze** - "Ne zaman evleneceksiniz?" sorularıyla doğrudan yaklaşır (chase)
 - **Mükemmeliyetçi Kuzen** - Karşılaştırma baskısı; dur-kalk yaparak sinsice yaklaşır (stalker)
@@ -18,15 +20,15 @@ Anksiyete metresi %100'e ulaşırsa kaybedersin; düşmanları vurdukça metre a
 
 ## Haritalar
 
-Yolculuk üç haritadan oluşur, her haritada 3 level vardır:
+| # | Harita | Aşama | Tema |
+|---|--------|-------|------|
+| 1 | **Klasik Müzik Salonu** | 3 level | Krem mermer, kırmızı perde, sahne, avize |
+| 2 | **Deniz Feneri** | 3 level | Gün batımı, deniz, beyaz fener kulesi |
+| 3 | **Düğün Salonu** | 3 level + boss | Bahçe, kırmızı halı, "Hilal & Cihanser" pankartı |
+| 4 | **Bali Adası** *(bonus)* | 3 level | Tropik ada, maymunlar, gizli hazine |
+| 5 | **Dubai · Lüks Villa** *(özel)* | Keşif | Villa, Lamborghini, gün batımı finali |
 
-| # | Harita | Tema | Ağırlıklı düşman |
-|---|--------|------|------------------|
-| 1 | **Klasik Müzik Salonu** | Krem mermer, kırmızı perde, sahne, sütunlar, avize, koltuk sıraları | Mükemmeliyetçi Kuzen ("eleştiri") |
-| 2 | **Deniz Feneri** | Gün batımı, deniz, kayalık ada, beyaz fener kulesi, bekçi evi | Zaman Canavarı ("zaman geçişi") |
-| 3 | **Düğün Salonu** | Bahçe, çeşme, kırmızı halı, altın kemer, "Hilal & Cihanser" pankartı | Hepsi + Boss (Level 3) |
-
-Her harita kendi ışıklandırma ve atmosferine sahiptir (deniz fenerinde turuncu gün batımı gibi). Level'lar arası kısa bir nefes molası ve Hilal'e özel bir cesaret mesajı vardır.
+Her harita kendi ışıklandırma ve atmosferine sahiptir. Level'lar arası nefes molası ve Hilal'e özel cesaret mesajları vardır.
 
 ## Silahlar
 
@@ -35,6 +37,7 @@ Her harita kendi ışıklandırma ve atmosferine sahiptir (deniz fenerinde turun
 | `1` | Gülümseme Tabancası | Dengeli hasar, orta hız |
 | `2` | Sabır Tüfeği | Saçma etkili (pellet + spread), yakın mesafede güçlü |
 | `3` | Enerji Kalkanı | Hızlı atış, kısa menzil |
+| `4` | Mutluluk Işını | Uzaktaki düşmanlara ulaşan enerji topu |
 
 Silahlar ekranda elinde görünür; fare tekerleği ile de silahlar arasında geçiş yapılabilir.
 
@@ -45,13 +48,14 @@ Silahlar ekranda elinde görünür; fare tekerleği ile de silahlar arasında ge
 | `W` `A` `S` `D` | Hareket |
 | `Fare` | Bakış (pointer lock) |
 | `Sol Tık` | Ateş |
-| `1` `2` `3` | Silah değiştir |
+| `1` `2` `3` `4` | Silah değiştir |
 | `Fare Tekerleği` | Silahlar arası geçiş |
 | `E` | Etkileşim |
 | `Space` | Zıpla |
 | `Shift` | Koş |
 | `Esc` | Duraklat |
 | `M` | Sessiz / ses aç |
+| `"` | Hile konsolu |
 
 ## Kurulum ve Çalıştırma
 
@@ -70,77 +74,30 @@ Tarayıcıda `http://localhost:5173/Wedding-Anxiety/` açılır.
 npm run build
 ```
 
-Derleme çıktısı `dist/` klasörüne yazılır. Yerelde önizlemek için:
-
-```bash
-npm run preview
-```
-
-## Deploy
-
-### Netlify (aktif)
-
-Repo Netlify'a bağlıdır; `main` branch'ine her push otomatik deploy tetikler.
-
-- Build command: `npm run build`
-- Publish directory: `dist`
-- `vite.config.ts` içinde `base` yolu Netlify ortamında `/` olarak ayarlanır (`process.env.NETLIFY` kontrolü ile), GitHub Pages için `/Wedding-Anxiety/` kalır.
-
-### GitHub Pages (alternatif)
-
-`npm run build` sonrası `dist/` içeriğini `gh-pages` branch'ine kopyalayıp GitHub → Settings → Pages üzerinden yayınlayabilirsin.
-
 ## Teknoloji
 
 - [Three.js](https://threejs.org/) r160+ - WebGL render
 - [Vite](https://vitejs.dev/) - Dev server + build
 - TypeScript (strict mode)
-- Web Audio API - prosedürel ses efektleri (harici asset yok)
-- Voxel InstancedMesh rendering (blok tipi başına tek instanced mesh)
+- Web Audio API - prosedürel ses efektleri + harita BGM
+- Voxel InstancedMesh rendering
 - Özel AABB çarpışma + DDA raycast
 
 ## Proje Yapısı
 
 ```
 src/
-├── main.ts                      # Giriş noktası
 ├── game/
-│   ├── Game.ts                  # Ana oyun döngüsü, map/level progression, state machine
-│   ├── World.ts                 # Voxel grid, MapDefinition'a göre dünya kurulumu, AABB spawn
-│   ├── worldGen/
-│   │   ├── types.ts             # WorldWriter, GeneratorResult, BannerSpec tipleri
-│   │   ├── concertHall.ts       # Map 1: Klasik Müzik Salonu generator
-│   │   ├── lighthouse.ts        # Map 2: Deniz Feneri generator
-│   │   └── weddingHall.ts       # Map 3: Bahçe + Düğün Salonu generator
-│   ├── Player.ts                # FPS controller + AABB collision
-│   ├── WeaponSystem.ts          # Çoklu silah raycast + cooldown + pellet/spread
-│   ├── EnemyManager.ts          # Spawn (radius/height duyarlı), güncelleme, temas
-│   ├── AnxietyMeter.ts          # Stres metre
-│   ├── WaveManager.ts           # LevelState yönetimi
-│   └── AudioManager.ts          # Prosedürel Web Audio SFX
-├── entities/
-│   ├── Enemy.ts                 # Düşman AI (stalker/dasher/floater), ölüm animasyonu
-│   ├── enemyMeshes/index.ts     # Tip bazlı düşman mesh factory
-│   ├── PlayerRig.ts             # Elde görünen silah viewmodel (bob + recoil)
-│   └── Projectile.ts            # Tracer / muzzle flash / hit spark efektleri
-├── rendering/
-│   ├── VoxelMesh.ts             # InstancedMesh builder
-│   ├── Lighting.ts              # Per-map atmosfer (ambient/sun/fog/sky)
-│   └── WallSign.ts              # Canvas dokulu duvar yazısı ("Hilal & Cihanser")
-├── input/
-│   └── InputManager.ts          # Klavye + pointer lock + silah seçimi
-├── ui/
-│   ├── HUD.ts                   # Anksiyete barı, harita/level, skor, silah, crosshair
-│   ├── MenuScreen.ts            # Başlangıç / kazanç / kayıp ekranları
-│   └── DialogueBox.ts           # Level arası ve harita geçişi mesajları
-└── data/
-    ├── blocks.ts                # 17 blok tipi tanımı
-    ├── maps.ts                  # 3 harita × 3 level tanımı + atmosfer ayarları
-    ├── enemies.ts               # Düşman stats + davranış tipleri
-    ├── weapons.ts               # 3 silah tanımı
-    └── messages.ts              # Türkçe metinler, Hilal'e özel mesajlar
+│   ├── Game.ts                  # Ana oyun döngüsü
+│   ├── interactions/            # Harita etkileşim modülleri
+│   ├── worldGen/                # Harita generator'ları (5 harita)
+│   └── ...
+├── data/                        # maps, enemies, weapons, messages
+├── entities/                    # Düşman, silah viewmodel
+├── rendering/                   # Voxel, ışık, props
+└── ui/                          # HUD, menü, diyalog
 ```
 
 ## Not
 
-Bu oyun Hilal için, düğün öncesi anksiyeteyi bir gülümsemeyle karşılamasına bir hediye olarak yapıldı. İyi eğlenceler ve iyi bir düğün! 💐
+Bu oyun Hilal için, düğün öncesi anksiyeteyi bir gülümsemeyle karşılamasına bir hediye olarak yapıldı. İyi eğlenceler ve iyi bir düğün!

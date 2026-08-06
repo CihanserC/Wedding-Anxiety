@@ -4,8 +4,9 @@
  * (public-domain melody) when no external mp3 is present.
  */
 
-type Sfx = 'shoot' | 'laser' | 'hit' | 'kill' | 'wave-clear' | 'hurt' | 'win' | 'lose' | 'balloon-pop' | 'meow';
+type Sfx = 'shoot' | 'laser' | 'hit' | 'kill' | 'wave-clear' | 'hurt' | 'win' | 'lose' | 'balloon-pop' | 'meow' | 'ui-click';
 export type BgmId =
+  | 'menu-peace'
   | 'mozart-allegro'
   | 'lighthouse-ambient'
   | 'wedding-hope'
@@ -62,11 +63,17 @@ export class AudioManager {
     } catch {
       this.ctx = null;
     }
+    if (this.ctx?.state === 'suspended') {
+      void this.ctx.resume();
+    }
   }
 
   setMuted(muted: boolean): void {
     this.muted = muted;
     this.applyVolumes();
+    if (!muted) {
+      this.ensureBgmLoopAlive();
+    }
   }
 
   setSfxVolume(volume: number): void {
@@ -86,6 +93,18 @@ export class AudioManager {
   toggleMuted(): boolean {
     this.setMuted(!this.muted);
     return this.muted;
+  }
+
+  /** Restart procedural BGM if the loop died while muted (e.g. legacy sessions). */
+  private ensureBgmLoopAlive(): void {
+    const id = this.bgmId;
+    if (!id) return;
+    if (this.bgmHtml) {
+      void this.bgmHtml.play().catch(() => {});
+      return;
+    }
+    if (this.bgmTimer !== null) return;
+    this.startBgmImmediate(id);
   }
 
   private applyVolumes(): void {
@@ -137,17 +156,116 @@ export class AudioManager {
       case 'meow':
         this.playMeow();
         break;
+      case 'ui-click':
+        this.playUiClick();
+        break;
     }
   }
 
-  /** Start / swap / stop map background music. */
+  /**
+   * Deep, unsettling enemy growl. `pitch` scales base frequency
+   * (lower = thicker; e.g. merakli-teyze ~0.75, maymun ~1.15).
+   */
+  playEnemyGrowl(pitch = 1): void {
+    if (!this.ctx || !this.masterGain || this.muted) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const p = Math.max(0.4, Math.min(2.2, pitch));
+    const base = (72 + Math.random() * 18) * p;
+    const duration = 0.38 + Math.random() * 0.12;
+
+    const osc = ctx.createOscillator();
+    const oscGain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(base, now);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(28, base * 0.55), now + duration);
+    oscGain.gain.setValueAtTime(0.0001, now);
+    oscGain.gain.linearRampToValueAtTime(0.38, now + 0.02);
+    oscGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(420 * p, now);
+    filter.frequency.exponentialRampToValueAtTime(180 * p, now + duration);
+    osc.connect(filter);
+    filter.connect(oscGain);
+    oscGain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + duration + 0.05);
+
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'square';
+    osc2.frequency.setValueAtTime(base * 0.5, now);
+    osc2.frequency.exponentialRampToValueAtTime(Math.max(22, base * 0.28), now + duration * 0.9);
+    gain2.gain.setValueAtTime(0.0001, now);
+    gain2.gain.linearRampToValueAtTime(0.16, now + 0.015);
+    gain2.gain.exponentialRampToValueAtTime(0.0001, now + duration * 0.95);
+    osc2.connect(gain2);
+    gain2.connect(this.masterGain);
+    osc2.start(now);
+    osc2.stop(now + duration + 0.05);
+
+    this.noiseBurst(duration * 0.85, 380 * p, 0.14);
+  }
+
+  /** Short piano note for map-skip interaction. */
+  playPianoNote(): void {
+    if (!this.ctx || !this.masterGain || this.muted) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    const t = this.ctx.currentTime;
+    osc.frequency.setValueAtTime(392, t);
+    osc.frequency.exponentialRampToValueAtTime(330, t + 0.35);
+    gain.gain.setValueAtTime(0.12, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 0.55);
+  }
+
+  /** Start / swap / stop map background music with a short crossfade. */
   setBgm(id: BgmId): void {
-    this.stopBgm();
+    if (id === this.bgmId) return;
+    this.crossfadeToBgm(id);
+  }
+
+  private crossfadeToBgm(id: BgmId): void {
+    if (!this.ctx || !this.musicGain) {
+      this.stopBgm();
+      if (id && !this.muted) this.startBgmImmediate(id);
+      return;
+    }
+
+    const gain = this.musicGain.gain;
+    const now = this.ctx.currentTime;
+    const fadeOut = 0.35;
+    const fadeIn = 0.45;
+    gain.cancelScheduledValues(now);
+    gain.setValueAtTime(gain.value, now);
+    gain.linearRampToValueAtTime(0, now + fadeOut);
+
+    window.setTimeout(() => {
+      this.stopBgm();
+      if (!id || this.muted) return;
+      this.startBgmImmediate(id);
+      if (!this.ctx || !this.musicGain) return;
+      const t = this.ctx.currentTime;
+      this.musicGain.gain.cancelScheduledValues(t);
+      this.musicGain.gain.setValueAtTime(0, t);
+      this.musicGain.gain.linearRampToValueAtTime(this.musicVolume, t + fadeIn);
+    }, Math.ceil(fadeOut * 1000) + 20);
+  }
+
+  private startBgmImmediate(id: BgmId): void {
     if (!id || this.muted) return;
     this.ensureStarted();
     this.bgmId = id;
 
-    if (id === 'mozart-allegro') {
+    if (id === 'menu-peace') {
+      this.startMenuPeace();
+    } else if (id === 'mozart-allegro') {
       this.tryExternalMozart().catch(() => this.startMozartLoop());
     } else if (id === 'lighthouse-ambient') {
       this.startLighthouseAmbient();
@@ -234,10 +352,52 @@ export class AudioManager {
 
     const beatMs = 220;
     const step = (): void => {
-      if (this.bgmId !== 'mozart-allegro' || !this.ctx || !this.musicGain || this.muted) return;
+      if (this.bgmId !== 'mozart-allegro' || !this.ctx || !this.musicGain) return;
       const note = melody[this.bgmNoteIndex % melody.length];
       this.bgmNoteIndex++;
-      if (note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000);
+      if (!this.muted && note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000);
+      this.bgmTimer = window.setTimeout(step, note.beats * beatMs);
+    };
+    step();
+  }
+
+  /** Calm, spacious arpeggios for the main menu. */
+  private startMenuPeace(): void {
+    if (!this.ctx || !this.musicGain || this.bgmId !== 'menu-peace') return;
+
+    const melody: Array<{ freq: number; beats: number }> = [
+      { freq: 261.63, beats: 3 },
+      { freq: 329.63, beats: 3 },
+      { freq: 392.0, beats: 3 },
+      { freq: 493.88, beats: 4 },
+      { freq: 392.0, beats: 3 },
+      { freq: 329.63, beats: 3 },
+      { freq: 261.63, beats: 5 },
+      { freq: 0, beats: 2 },
+      { freq: 293.66, beats: 3 },
+      { freq: 369.99, beats: 3 },
+      { freq: 440.0, beats: 3 },
+      { freq: 523.25, beats: 4 },
+      { freq: 440.0, beats: 3 },
+      { freq: 369.99, beats: 3 },
+      { freq: 293.66, beats: 5 },
+      { freq: 0, beats: 3 },
+      { freq: 246.94, beats: 4 },
+      { freq: 311.13, beats: 4 },
+      { freq: 369.99, beats: 4 },
+      { freq: 466.16, beats: 5 },
+      { freq: 369.99, beats: 4 },
+      { freq: 311.13, beats: 4 },
+      { freq: 246.94, beats: 6 },
+      { freq: 0, beats: 4 },
+    ];
+
+    const beatMs = 540;
+    const step = (): void => {
+      if (this.bgmId !== 'menu-peace' || !this.ctx || !this.musicGain) return;
+      const note = melody[this.bgmNoteIndex % melody.length];
+      this.bgmNoteIndex++;
+      if (!this.muted && note.freq > 0) this.playSoftMusicNote(note.freq, (note.beats * beatMs) / 1000);
       this.bgmTimer = window.setTimeout(step, note.beats * beatMs);
     };
     step();
@@ -263,10 +423,10 @@ export class AudioManager {
 
     const beatMs = 480;
     const step = (): void => {
-      if (this.bgmId !== 'lighthouse-ambient' || !this.ctx || !this.musicGain || this.muted) return;
+      if (this.bgmId !== 'lighthouse-ambient' || !this.ctx || !this.musicGain) return;
       const note = melody[this.bgmNoteIndex % melody.length];
       this.bgmNoteIndex++;
-      if (note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000, 0.55);
+      if (!this.muted && note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000, 0.55);
       this.bgmTimer = window.setTimeout(step, note.beats * beatMs);
     };
     step();
@@ -297,10 +457,10 @@ export class AudioManager {
 
     const beatMs = 340;
     const step = (): void => {
-      if (this.bgmId !== 'bali-tropical' || !this.ctx || !this.musicGain || this.muted) return;
+      if (this.bgmId !== 'bali-tropical' || !this.ctx || !this.musicGain) return;
       const note = melody[this.bgmNoteIndex % melody.length];
       this.bgmNoteIndex++;
-      if (note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000, 0.55);
+      if (!this.muted && note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000, 0.55);
       this.bgmTimer = window.setTimeout(step, note.beats * beatMs);
     };
     step();
@@ -332,10 +492,10 @@ export class AudioManager {
 
     const beatMs = 420;
     const step = (): void => {
-      if (this.bgmId !== 'dubai-luxury' || !this.ctx || !this.musicGain || this.muted) return;
+      if (this.bgmId !== 'dubai-luxury' || !this.ctx || !this.musicGain) return;
       const note = melody[this.bgmNoteIndex % melody.length];
       this.bgmNoteIndex++;
-      if (note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000, 0.5);
+      if (!this.muted && note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000, 0.5);
       this.bgmTimer = window.setTimeout(step, note.beats * beatMs);
     };
     step();
@@ -367,10 +527,10 @@ export class AudioManager {
 
     const beatMs = 300;
     const step = (): void => {
-      if (this.bgmId !== 'wedding-hope' || !this.ctx || !this.musicGain || this.muted) return;
+      if (this.bgmId !== 'wedding-hope' || !this.ctx || !this.musicGain) return;
       const note = melody[this.bgmNoteIndex % melody.length];
       this.bgmNoteIndex++;
-      if (note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000, 0.7);
+      if (!this.muted && note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000, 0.7);
       this.bgmTimer = window.setTimeout(step, note.beats * beatMs);
     };
     step();
@@ -403,10 +563,10 @@ export class AudioManager {
 
     const beatMs = 360;
     const step = (): void => {
-      if (this.bgmId !== 'wedding-celebration' || !this.ctx || !this.musicGain || this.muted) return;
+      if (this.bgmId !== 'wedding-celebration' || !this.ctx || !this.musicGain) return;
       const note = melody[this.bgmNoteIndex % melody.length];
       this.bgmNoteIndex++;
-      if (note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000, 0.75);
+      if (!this.muted && note.freq > 0) this.playMusicNote(note.freq, (note.beats * beatMs) / 1000, 0.75);
       this.bgmTimer = window.setTimeout(step, note.beats * beatMs);
     };
     step();
@@ -438,6 +598,36 @@ export class AudioManager {
     osc2.start(now);
     osc.stop(now + duration + 0.05);
     osc2.stop(now + duration + 0.05);
+  }
+
+  private playSoftMusicNote(freq: number, duration: number, peak = 0.38): void {
+    if (!this.ctx || !this.musicGain) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, now);
+
+    const osc2 = this.ctx.createOscillator();
+    const gain2 = this.ctx.createGain();
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(freq * 0.5, now);
+    gain2.gain.value = 0.18;
+
+    const attack = Math.min(0.35, duration * 0.25);
+    const release = Math.max(duration * 0.85, 0.2);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(peak, now + attack);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + release);
+
+    osc.connect(gain);
+    gain.connect(this.musicGain);
+    osc2.connect(gain2);
+    gain2.connect(gain);
+    osc.start(now);
+    osc2.start(now);
+    osc.stop(now + duration + 0.1);
+    osc2.stop(now + duration + 0.1);
   }
 
   private envelope(gain: GainNode, attack: number, decay: number, peak = 1): void {
@@ -677,13 +867,14 @@ export class AudioManager {
     const topHz = 145;
     const lowHz = idleHz + (topHz - idleHz) * t;
     if (this.carEngineOscLow) {
-      this.carEngineOscLow.frequency.setTargetAtTime(lowHz, now, 0.08);
+      this.carEngineOscLow.frequency.setTargetAtTime(lowHz, now, 0.06);
     }
     if (this.carEngineOscHigh) {
-      this.carEngineOscHigh.frequency.setTargetAtTime(lowHz * 2.05, now, 0.08);
+      this.carEngineOscHigh.frequency.setTargetAtTime(lowHz * (2.05 + t * 0.35), now, 0.06);
     }
     if (this.carEngineFilter) {
-      this.carEngineFilter.frequency.setTargetAtTime(420 + t * 1600, now, 0.1);
+      this.carEngineFilter.frequency.setTargetAtTime(380 + t * 2200, now, 0.08);
+      this.carEngineFilter.Q.setTargetAtTime(0.7 + t * 1.8, now, 0.1);
     }
     if (!this.muted) {
       this.carEngineGain.gain.setTargetAtTime(this.carEngineTargetGain(t), now, 0.06);
@@ -823,6 +1014,12 @@ export class AudioManager {
   private playBalloonPop(): void {
     this.beep(160 + Math.random() * 100, 'sine', 0.001, 0.07, 0.5, 55);
     this.noiseBurst(0.045, 2000, 0.28);
+  }
+
+  /** Soft menu / UI button tap. */
+  private playUiClick(): void {
+    this.beep(880, 'sine', 0.002, 0.04, 0.2, 1400);
+    this.beep(660, 'triangle', 0.001, 0.028, 0.1, 900);
   }
 
   /** Kısa, tatlı miyav — Suzy Çıtçıt. */

@@ -1,6 +1,7 @@
 import { HUD_LABELS } from '../data/messages';
 
 export interface HUDState {
+  mode?: 'combat' | 'explore';
   anxietyPercent: number;
   mapName: string;
   mapIndex: number;
@@ -14,24 +15,28 @@ export interface HUDState {
   reloadRatio: number;
   weaponName: string;
   bossHpRatio?: number | null;
+  bossLabel?: string;
 }
 
 export class HUD {
   private readonly root: HTMLDivElement;
   private readonly crosshair: HTMLDivElement;
   private readonly anxietyFill: HTMLDivElement;
-  private readonly anxietyLabel: HTMLDivElement;
+  private readonly anxietyPct: HTMLDivElement;
+  private readonly anxietyBlock: HTMLDivElement;
   private readonly mapLabel: HTMLDivElement;
-  private readonly levelLabel: HTMLDivElement;
-  private readonly scoreLabel: HTMLDivElement;
-  private readonly enemiesLabel: HTMLDivElement;
+  private readonly scoreValue: HTMLDivElement;
+  private readonly enemiesValue: HTMLDivElement;
+  private readonly enemiesStat: HTMLDivElement;
   private readonly reloadRing: HTMLDivElement;
   private readonly damageFlash: HTMLDivElement;
   private readonly weaponLabel: HTMLDivElement;
   private readonly interactPrompt: HTMLDivElement;
   private readonly subtitle: HTMLDivElement;
   private readonly bossHealth: HTMLDivElement;
+  private readonly bossHealthLabel: HTMLDivElement;
   private readonly bossHealthFill: HTMLDivElement;
+  private readonly muteIndicator: HTMLDivElement;
 
   constructor(container: HTMLElement) {
     this.root = document.createElement('div');
@@ -39,18 +44,36 @@ export class HUD {
     this.root.innerHTML = `
       <div class="wa-hud-topbar">
         <div class="wa-boss-health">
-          <div class="wa-boss-health-label">Altın Canavar</div>
+          <div class="wa-boss-health-label">Altın Canavarı</div>
           <div class="wa-boss-health-bar"><div class="wa-boss-health-fill"></div></div>
         </div>
-        <div class="wa-anxiety">
-          <div class="wa-anxiety-label"></div>
-          <div class="wa-anxiety-bar"><div class="wa-anxiety-fill"></div></div>
+        <div class="wa-anxiety" aria-label="${HUD_LABELS.anxiety}">
+          <div class="wa-anxiety-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+              <path d="M12 21s-6.7-4.35-9.33-8.1C.8 10.4 1.4 6.9 4.2 5.4 6.1 4.4 8.3 5 12 8.1c3.7-3.1 5.9-3.7 7.8-2.7 2.8 1.5 3.4 5 1.53 7.5C18.7 16.65 12 21 12 21z"/>
+            </svg>
+          </div>
+          <div class="wa-anxiety-meter">
+            <div class="wa-anxiety-bar">
+              <div class="wa-anxiety-fill"></div>
+              <div class="wa-anxiety-segments" aria-hidden="true"></div>
+            </div>
+            <div class="wa-anxiety-pct">0%</div>
+          </div>
         </div>
-        <div class="wa-stats">
-          <div class="wa-stat wa-map"></div>
-          <div class="wa-stat wa-level"></div>
-          <div class="wa-stat wa-score"></div>
-          <div class="wa-stat wa-enemies"></div>
+        <div class="wa-stats-panel">
+          <div class="wa-stats-map"></div>
+          <div class="wa-stats-divider"></div>
+          <div class="wa-stats-row">
+            <div class="wa-stat-cell wa-score">
+              <div class="wa-stat-value">0</div>
+              <div class="wa-stat-label">${HUD_LABELS.score}</div>
+            </div>
+            <div class="wa-stat-cell wa-enemies">
+              <div class="wa-stat-value">0</div>
+              <div class="wa-stat-label">${HUD_LABELS.enemiesLeft}</div>
+            </div>
+          </div>
         </div>
       </div>
       <div class="wa-crosshair">
@@ -61,22 +84,30 @@ export class HUD {
       <div class="wa-weapon"></div>
       <div class="wa-interact-prompt"></div>
       <div class="wa-subtitle"></div>
+      <div class="wa-mute-indicator" hidden aria-label="Ses kapalı">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
+          <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.11c2.89.86 5 3.54 5 6.66zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4 9.91 6.09 12 8.18V4z"/>
+        </svg>
+      </div>
     `;
     container.appendChild(this.root);
     this.crosshair = this.root.querySelector('.wa-crosshair') as HTMLDivElement;
     this.anxietyFill = this.root.querySelector('.wa-anxiety-fill') as HTMLDivElement;
-    this.anxietyLabel = this.root.querySelector('.wa-anxiety-label') as HTMLDivElement;
-    this.mapLabel = this.root.querySelector('.wa-map') as HTMLDivElement;
-    this.levelLabel = this.root.querySelector('.wa-level') as HTMLDivElement;
-    this.scoreLabel = this.root.querySelector('.wa-score') as HTMLDivElement;
-    this.enemiesLabel = this.root.querySelector('.wa-enemies') as HTMLDivElement;
+    this.anxietyPct = this.root.querySelector('.wa-anxiety-pct') as HTMLDivElement;
+    this.anxietyBlock = this.root.querySelector('.wa-anxiety') as HTMLDivElement;
+    this.mapLabel = this.root.querySelector('.wa-stats-map') as HTMLDivElement;
+    this.scoreValue = this.root.querySelector('.wa-score .wa-stat-value') as HTMLDivElement;
+    this.enemiesValue = this.root.querySelector('.wa-enemies .wa-stat-value') as HTMLDivElement;
+    this.enemiesStat = this.root.querySelector('.wa-enemies') as HTMLDivElement;
     this.reloadRing = this.root.querySelector('.wa-reload-ring') as HTMLDivElement;
     this.damageFlash = this.root.querySelector('.wa-damage-flash') as HTMLDivElement;
     this.weaponLabel = this.root.querySelector('.wa-weapon') as HTMLDivElement;
     this.interactPrompt = this.root.querySelector('.wa-interact-prompt') as HTMLDivElement;
     this.subtitle = this.root.querySelector('.wa-subtitle') as HTMLDivElement;
     this.bossHealth = this.root.querySelector('.wa-boss-health') as HTMLDivElement;
+    this.bossHealthLabel = this.root.querySelector('.wa-boss-health-label') as HTMLDivElement;
     this.bossHealthFill = this.root.querySelector('.wa-boss-health-fill') as HTMLDivElement;
+    this.muteIndicator = this.root.querySelector('.wa-mute-indicator') as HTMLDivElement;
 
     HUD.ensureStyles();
     this.hide();
@@ -91,24 +122,38 @@ export class HUD {
   }
 
   update(state: HUDState): void {
-    const pct = Math.max(0, Math.min(100, state.anxietyPercent));
+    const explore = state.mode === 'explore';
+    const pct = explore ? 0 : Math.max(0, Math.min(100, state.anxietyPercent));
+
+    this.anxietyBlock.style.display = explore ? 'none' : 'flex';
+    this.enemiesStat.style.display = explore ? 'none' : 'flex';
+    this.weaponLabel.style.display = explore ? 'none' : 'block';
+    this.crosshair.style.display = explore ? 'none' : 'block';
+
     this.anxietyFill.style.width = `${pct.toFixed(1)}%`;
     const hue = 110 - pct * 1.1;
     this.anxietyFill.style.background = `linear-gradient(90deg, hsl(${hue}, 75%, 55%), hsl(${Math.max(0, hue - 20)}, 80%, 45%))`;
-    this.anxietyLabel.textContent = `${HUD_LABELS.anxiety}: %${pct.toFixed(0)}`;
-    this.mapLabel.textContent = `${HUD_LABELS.map} ${state.mapIndex}/${state.totalMaps} · ${state.mapName}`;
-    this.levelLabel.textContent = `${HUD_LABELS.level} ${state.level}/${state.totalLevels}  (${state.overallStage}/${state.totalStages})`;
-    this.scoreLabel.textContent = `${HUD_LABELS.score}: ${state.score}`;
-    this.enemiesLabel.textContent = `${HUD_LABELS.enemiesLeft}: ${state.enemiesLeft}`;
+    this.anxietyPct.textContent = `${pct.toFixed(0)}%`;
+    this.anxietyBlock.classList.toggle('wa-anxiety--critical', pct > 75);
 
-    if (state.reloadRatio > 0) {
+    this.mapLabel.textContent = state.mapName;
+    this.scoreValue.textContent = String(state.score);
+    this.enemiesValue.textContent = String(state.enemiesLeft);
+
+    if (!explore && state.reloadRatio > 0) {
       this.reloadRing.style.opacity = '1';
       this.reloadRing.style.background = `conic-gradient(rgba(255,220,120,0.9) ${(1 - state.reloadRatio) * 360}deg, rgba(255,255,255,0.15) 0deg)`;
     } else {
       this.reloadRing.style.opacity = '0';
     }
 
-    this.weaponLabel.textContent = state.weaponName;
+    if (!explore) {
+      this.weaponLabel.textContent = state.weaponName;
+    }
+
+    if (state.bossLabel) {
+      this.bossHealthLabel.textContent = state.bossLabel;
+    }
 
     if (state.bossHpRatio != null && state.bossHpRatio >= 0) {
       const bossPct = Math.max(0, Math.min(100, state.bossHpRatio * 100));
@@ -148,6 +193,10 @@ export class HUD {
     }
     this.subtitle.innerHTML = lines.map((line) => `<p>${line}</p>`).join('');
     this.subtitle.style.display = 'block';
+  }
+
+  setMuted(muted: boolean): void {
+    this.muteIndicator.hidden = !muted;
   }
 
   private static stylesInjected = false;
@@ -207,43 +256,121 @@ export class HUD {
         transition: width 0.12s ease;
       }
       .wa-anxiety {
-        min-width: 260px;
-        max-width: 360px;
-        background: rgba(20, 10, 40, 0.55);
-        padding: 10px 14px;
-        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 240px;
+        max-width: 340px;
+        background: rgba(20, 10, 40, 0.6);
+        padding: 10px 12px;
+        border-radius: 12px;
         backdrop-filter: blur(6px);
         border: 1px solid rgba(255,255,255,0.1);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+        transition: box-shadow 0.25s ease, border-color 0.25s ease;
       }
-      .wa-anxiety-label {
-        font-size: 13px;
-        letter-spacing: 0.5px;
-        opacity: 0.9;
-        margin-bottom: 6px;
+      .wa-anxiety--critical {
+        border-color: rgba(255, 80, 100, 0.55);
+        box-shadow: 0 0 18px rgba(255, 60, 90, 0.35);
+        animation: wa-anxiety-pulse 1.1s ease-in-out infinite;
+      }
+      .wa-anxiety-icon {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.08);
+        color: #ff8a9a;
+      }
+      .wa-anxiety-meter {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
       }
       .wa-anxiety-bar {
-        height: 12px;
+        position: relative;
+        flex: 1;
+        height: 18px;
         background: rgba(255,255,255,0.12);
-        border-radius: 999px;
+        border-radius: 6px;
         overflow: hidden;
       }
       .wa-anxiety-fill {
         height: 100%;
         width: 0;
+        border-radius: 6px;
         transition: width 0.15s ease, background 0.3s ease;
       }
-      .wa-stats {
+      .wa-anxiety-segments {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          linear-gradient(to right, transparent calc(25% - 0.5px), rgba(0, 0, 0, 0.3) calc(25% - 0.5px), rgba(0, 0, 0, 0.3) calc(25% + 0.5px), transparent calc(25% + 0.5px)),
+          linear-gradient(to right, transparent calc(50% - 0.5px), rgba(0, 0, 0, 0.3) calc(50% - 0.5px), rgba(0, 0, 0, 0.3) calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+          linear-gradient(to right, transparent calc(75% - 0.5px), rgba(0, 0, 0, 0.3) calc(75% - 0.5px), rgba(0, 0, 0, 0.3) calc(75% + 0.5px), transparent calc(75% + 0.5px));
+      }
+      .wa-anxiety-pct {
+        flex: 0 0 auto;
+        min-width: 34px;
+        text-align: right;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+        color: rgba(244, 236, 255, 0.85);
+        font-variant-numeric: tabular-nums;
+      }
+      .wa-stats-panel {
+        min-width: 150px;
+        background: rgba(20, 10, 40, 0.6);
+        padding: 10px 14px 12px;
+        border-radius: 12px;
+        backdrop-filter: blur(6px);
+        border: 1px solid rgba(255,255,255,0.1);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+        text-align: center;
+      }
+      .wa-stats-map {
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        color: #fff;
+        line-height: 1.3;
+      }
+      .wa-stats-divider {
+        height: 1px;
+        margin: 8px 0 10px;
+        background: rgba(255, 255, 255, 0.12);
+      }
+      .wa-stats-row {
+        display: flex;
+        justify-content: center;
+        gap: 18px;
+      }
+      .wa-stat-cell {
         display: flex;
         flex-direction: column;
-        gap: 6px;
-        align-items: flex-end;
+        align-items: center;
+        gap: 2px;
+        min-width: 48px;
       }
-      .wa-stat {
-        background: rgba(20, 10, 40, 0.55);
-        padding: 6px 12px;
-        border-radius: 8px;
-        font-size: 14px;
-        border: 1px solid rgba(255,255,255,0.08);
+      .wa-stat-value {
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1.1;
+        color: #fff;
+        font-variant-numeric: tabular-nums;
+      }
+      .wa-stat-label {
+        font-size: 10px;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+        color: rgba(244, 236, 255, 0.55);
       }
       .wa-crosshair {
         position: absolute;
@@ -346,6 +473,25 @@ export class HUD {
       .wa-subtitle p:last-child {
         margin-bottom: 0;
       }
+      .wa-mute-indicator {
+        position: absolute;
+        left: 24px;
+        bottom: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        background: rgba(20, 10, 40, 0.65);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: #f4ecff;
+        backdrop-filter: blur(6px);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+      }
+      .wa-mute-indicator[hidden] {
+        display: none !important;
+      }
       .wa-damage-flash {
         position: absolute;
         inset: 0;
@@ -360,6 +506,10 @@ export class HUD {
         0% { opacity: 0; }
         30% { opacity: 1; }
         100% { opacity: 0; }
+      }
+      @keyframes wa-anxiety-pulse {
+        0%, 100% { box-shadow: 0 0 12px rgba(255, 60, 90, 0.25); }
+        50% { box-shadow: 0 0 22px rgba(255, 60, 90, 0.5); }
       }
     `;
     const style = document.createElement('style');

@@ -117,72 +117,124 @@ function buildMerakliTeyze(stats: EnemyStats): EnemyMeshResult {
   return { root: group, materials, headGroup, armGroups: [armLGroup, armRGroup] };
 }
 
-/** Tall thin figure with cracked mirror face and multiple small eyes. */
+/** Wedding-planner critic cousin: sharp dark suit, red judgment eyes, clipboard. */
 function buildMukemmeliyetciKuzen(stats: EnemyStats): EnemyMeshResult {
   const group = new THREE.Group();
   const materials: THREE.MeshLambertMaterial[] = [];
 
   const suitMat = makeMat(stats.color);
-  const mirrorMat = makeMat(stats.accentColor, { emissive: 0x223344, emissiveIntensity: 0.4 });
-  const eyeMat = makeMat(0xffe0a0, { emissive: 0xff8800, emissiveIntensity: 0.6 });
-  materials.push(suitMat, mirrorMat, eyeMat);
+  const shirtMat = makeMat(0xd8dce8);
+  const tieMat = makeMat(stats.accentColor);
+  const skinMat = makeMat(0xc4a882);
+  const eyeMat = makeMat(0xff2040, { emissive: 0xff1028, emissiveIntensity: 0.85 });
+  const clipboardMat = makeMat(0xf2f2f0);
+  const markMat = makeMat(0xc01020);
+  materials.push(suitMat, shirtMat, tieMat, skinMat, eyeMat, clipboardMat, markMat);
 
   const legH = 0.55;
-  const legGeo = new THREE.BoxGeometry(0.18, legH, 0.18);
+  const legGeo = new THREE.BoxGeometry(0.2, legH, 0.2);
   const legL = new THREE.Mesh(legGeo, suitMat);
   const legR = new THREE.Mesh(legGeo, suitMat);
-  legL.position.set(-0.15, legH * 0.5, 0);
-  legR.position.set(0.15, legH * 0.5, 0);
+  legL.position.set(-0.16, legH * 0.5, 0);
+  legR.position.set(0.16, legH * 0.5, 0);
   group.add(legL, legR);
 
-  const torsoH = 0.9;
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, torsoH, 0.4), suitMat);
+  const torsoH = 0.95;
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.58, torsoH, 0.38), suitMat);
   torso.position.y = legH + torsoH * 0.5;
   group.add(torso);
 
-  const shoulderGeo = new THREE.BoxGeometry(0.9, 0.15, 0.35);
-  const shoulders = new THREE.Mesh(shoulderGeo, suitMat);
+  // Broad, sharp shoulders
+  const shoulders = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.18, 0.36), suitMat);
   shoulders.position.y = legH + torsoH;
   group.add(shoulders);
 
-  const armGeo = new THREE.BoxGeometry(0.14, 0.85, 0.14);
-  const armL = new THREE.Mesh(armGeo, suitMat);
-  const armR = new THREE.Mesh(armGeo, suitMat);
-  armL.position.set(-0.4, legH + torsoH * 0.55, 0);
-  armR.position.set(0.4, legH + torsoH * 0.55, 0);
-  group.add(armL, armR);
+  // Shirt collar strip
+  const collar = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 0.06), shirtMat);
+  collar.position.set(0, legH + torsoH - 0.05, 0.2);
+  group.add(collar);
 
+  // Dark red tie
+  const tie = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.42, 0.04), tieMat);
+  tie.position.set(0, legH + torsoH - 0.32, 0.21);
+  group.add(tie);
+
+  // Left arm — pointing finger pose
+  const armLGroup = new THREE.Group();
+  armLGroup.position.set(-0.48, legH + torsoH - 0.05, 0.05);
+  const armL = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.8, 0.13), suitMat);
+  armL.position.y = -0.4;
+  armLGroup.add(armL);
+  const handL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.14), skinMat);
+  handL.position.set(0, -0.85, 0);
+  armLGroup.add(handL);
+  const finger = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.22), skinMat);
+  finger.position.set(0, -0.85, 0.16);
+  armLGroup.add(finger);
+  group.add(armLGroup);
+
+  // Right arm — clipboard
+  const armRGroup = new THREE.Group();
+  armRGroup.position.set(0.48, legH + torsoH - 0.05, 0.05);
+  const armR = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.8, 0.13), suitMat);
+  armR.position.y = -0.4;
+  armRGroup.add(armR);
+  const handR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.14), skinMat);
+  handR.position.set(0, -0.85, 0);
+  armRGroup.add(handR);
+
+  const clipboard = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.36, 0.04), clipboardMat);
+  clipboard.position.set(0.08, -0.9, 0.14);
+  clipboard.rotation.x = -0.35;
+  armRGroup.add(clipboard);
+  const clipTop = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.05, 0.06), makeMat(0x3a3a42));
+  clipTop.position.set(0.08, -0.72, 0.16);
+  clipTop.rotation.x = -0.35;
+  armRGroup.add(clipTop);
+  materials.push(clipTop.material as THREE.MeshLambertMaterial);
+
+  // Red X mark on clipboard
+  const x1 = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.03, 0.02), markMat);
+  x1.position.set(0.08, -0.9, 0.17);
+  x1.rotation.set(-0.35, 0, 0.7);
+  armRGroup.add(x1);
+  const x2 = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.03, 0.02), markMat);
+  x2.position.set(0.08, -0.9, 0.17);
+  x2.rotation.set(-0.35, 0, -0.7);
+  armRGroup.add(x2);
+
+  group.add(armRGroup);
+
+  // Narrow long-jaw head with a single pair of red judgment eyes
   const headGroup = new THREE.Group();
-  headGroup.position.set(0, legH + torsoH + 0.4, 0);
-  const headSize = 0.55;
-  const head = new THREE.Mesh(new THREE.BoxGeometry(headSize, headSize, headSize * 0.7), mirrorMat);
+  headGroup.position.set(0, legH + torsoH + 0.38, 0);
+  const headW = 0.42;
+  const headH = 0.55;
+  const headD = 0.4;
+  const head = new THREE.Mesh(new THREE.BoxGeometry(headW, headH, headD), skinMat);
   headGroup.add(head);
 
-  const eyeGeo = new THREE.BoxGeometry(0.06, 0.06, 0.04);
-  const eyePositions: Array<[number, number]> = [
-    [-0.14, 0.08],
-    [0.14, 0.08],
-    [-0.08, -0.05],
-    [0.08, -0.05],
-    [0, 0.15],
-    [-0.16, -0.12],
-    [0.16, -0.12],
-  ];
-  for (const [ex, ey] of eyePositions) {
-    const e = new THREE.Mesh(eyeGeo, eyeMat);
-    e.position.set(ex, ey, headSize * 0.36);
-    headGroup.add(e);
-  }
+  const hair = new THREE.Mesh(new THREE.BoxGeometry(headW * 1.05, 0.12, headD * 1.05), makeMat(0x1a1a22));
+  hair.position.y = headH * 0.5;
+  headGroup.add(hair);
+  materials.push(hair.material as THREE.MeshLambertMaterial);
 
-  const crack = new THREE.Mesh(new THREE.BoxGeometry(0.05, headSize * 0.9, 0.02), makeMat(0x0a0a12));
-  crack.position.set(0.05, 0, headSize * 0.36);
-  crack.rotation.z = 0.3;
-  headGroup.add(crack);
-  materials.push(crack.material as THREE.MeshLambertMaterial);
+  const eyeSize = 0.1;
+  const eyeGeo = new THREE.BoxGeometry(eyeSize, eyeSize * 0.7, 0.04);
+  const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+  const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+  eyeL.position.set(-0.1, 0.06, headD * 0.5);
+  eyeR.position.set(0.1, 0.06, headD * 0.5);
+  headGroup.add(eyeL, eyeR);
+
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 0.03), makeMat(0x3a2030));
+  mouth.position.set(0, -0.16, headD * 0.5);
+  headGroup.add(mouth);
+  materials.push(mouth.material as THREE.MeshLambertMaterial);
 
   group.add(headGroup);
 
-  return { root: group, materials, headGroup };
+  return { root: group, materials, headGroup, armGroups: [armLGroup, armRGroup] };
 }
 
 /** Skeletal fast enemy with a clock-face head and glowing orange eyes. */

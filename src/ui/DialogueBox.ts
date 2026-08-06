@@ -143,15 +143,22 @@ export class DialogueBox {
         cursor: pointer;
         font-size: 15px;
         font-weight: 600;
-        padding: 10px 24px;
-        border-radius: 999px;
-        border: none;
-        background: linear-gradient(135deg, #7dd3ff, #a879ff);
-        color: white;
-        box-shadow: 0 8px 18px rgba(120, 180, 255, 0.35);
-        transition: transform 0.15s ease;
+        padding: 12px 28px;
+        border-radius: 6px;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        background: #6b3fad;
+        color: #ffffff;
+        box-shadow: 0 4px 0 #4a2878;
+        transition: transform 0.12s ease, background 0.12s ease;
       }
-      .wa-dialogue-button:hover { transform: translateY(-2px); }
+      .wa-dialogue-button:hover {
+        background: #7d52c4;
+        transform: translateY(-1px);
+      }
+      .wa-dialogue-button:active {
+        transform: translateY(2px);
+        box-shadow: 0 2px 0 #4a2878;
+      }
       .wa-dialogue-choices {
         display: flex;
         flex-direction: column;

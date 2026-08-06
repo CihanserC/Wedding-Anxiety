@@ -80,10 +80,14 @@ export class PlayerRig {
     }
   }
 
-  /** First-person cabin view while driving — hides weapons / held items. */
-  setDrivingMode(enabled: boolean): void {
+  /**
+   * Driving viewmodel mode.
+   * - fps: cabin interior (wheel/dash) visible
+   * - chase: third-person; hide cabin viewmodel and weapons
+   */
+  setDrivingMode(enabled: boolean, mode: 'fps' | 'chase' = 'fps'): void {
     this.driving = enabled;
-    this.carInteriorGroup.visible = enabled;
+    this.carInteriorGroup.visible = enabled && mode === 'fps';
     this.root.visible = !enabled;
     if (enabled) {
       this.bouquetGroup.visible = false;
@@ -113,6 +117,16 @@ export class PlayerRig {
 
   getHeldItem(): HeldItem {
     return this.heldItem;
+  }
+
+  /** World-space tip of the active weapon barrel (falls back to weapon root). */
+  getMuzzleWorldPosition(target = new THREE.Vector3()): THREE.Vector3 {
+    const active = this.weapons.get(this.activeId);
+    if (!active) return target;
+    const point = active.getObjectByName('muzzle-point');
+    if (point) point.getWorldPosition(target);
+    else active.getWorldPosition(target);
+    return target;
   }
 
   onFire(recoil: number): void {
@@ -256,6 +270,14 @@ function makeMat(color: number, opts: THREE.MeshLambertMaterialParameters = {}):
   return new THREE.MeshLambertMaterial({ color, ...opts });
 }
 
+/** Invisible anchor at the barrel tip for muzzle VFX. */
+function addMuzzlePoint(group: THREE.Group, x: number, y: number, z: number): void {
+  const point = new THREE.Object3D();
+  point.name = 'muzzle-point';
+  point.position.set(x, y, z);
+  group.add(point);
+}
+
 function buildPistol(): THREE.Group {
   const g = new THREE.Group();
   const bodyMat = makeMat(0x2a2a30);
@@ -283,6 +305,7 @@ function buildPistol(): THREE.Group {
   trigger.position.set(0, -0.05, 0.04);
   g.add(trigger);
 
+  addMuzzlePoint(g, 0, 0.02, -0.55);
   return g;
 }
 
@@ -322,6 +345,7 @@ function buildRifle(): THREE.Group {
   mag.position.set(0, -0.2, -0.05);
   g.add(mag);
 
+  addMuzzlePoint(g, 0, 0.03, -1.11);
   return g;
 }
 
@@ -363,6 +387,7 @@ function buildShield(): THREE.Group {
     g.add(ray);
   }
 
+  addMuzzlePoint(g, 0, 0.1, -0.39);
   return g;
 }
 
@@ -442,6 +467,7 @@ function buildHappinessBlaster(): THREE.Group {
   loop.position.set(0, 0.02, 0.34);
   g.add(loop);
 
+  addMuzzlePoint(g, 0, 0.02, -0.88);
   return g;
 }
 

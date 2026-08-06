@@ -1,4 +1,15 @@
-export type NpcType = 'bride' | 'groom' | 'camel' | 'arab-man' | 'arab-woman';
+export type NpcType =
+  | 'bride'
+  | 'groom'
+  | 'camel'
+  | 'arab-man'
+  | 'arab-woman'
+  | 'conductor'
+  | 'pianist'
+  | 'cellist'
+  | 'violinist'
+  | 'guest-man'
+  | 'guest-woman';
 
 export interface NpcStats {
   type: NpcType;
@@ -37,5 +48,41 @@ export const NPC_STATS: Record<NpcType, NpcStats> = {
     displayName: 'Fatima',
     height: 1.68,
     radius: 0.3,
+  },
+  conductor: {
+    type: 'conductor',
+    displayName: 'Şef',
+    height: 1.78,
+    radius: 0.3,
+  },
+  pianist: {
+    type: 'pianist',
+    displayName: 'Piyanist',
+    height: 1.45,
+    radius: 0.3,
+  },
+  cellist: {
+    type: 'cellist',
+    displayName: 'Çellist',
+    height: 1.5,
+    radius: 0.32,
+  },
+  violinist: {
+    type: 'violinist',
+    displayName: 'Kemancı',
+    height: 1.68,
+    radius: 0.28,
+  },
+  'guest-man': {
+    type: 'guest-man',
+    displayName: 'Davetli',
+    height: 1.68,
+    radius: 0.28,
+  },
+  'guest-woman': {
+    type: 'guest-woman',
+    displayName: 'Davetli',
+    height: 1.62,
+    radius: 0.28,
   },
 };

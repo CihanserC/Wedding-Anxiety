@@ -72,6 +72,13 @@ export function generateDubai(w: WorldWriter): GeneratorResult {
   placeSkyline(w, cx);
   placeVillaEntranceStepFloor(w, villaX, villaZ);
   flattenLamborghiniPad(w, villaX, villaZ);
+  buildInfinityPool(w, villaX, villaZ);
+
+  // Secret UFO landing pad — west dunes, off the highway
+  const ufoX = Math.max(8, villaX - 22);
+  const ufoZ = villaZ + 38;
+  flattenUfoPad(w, ufoX, ufoZ);
+  const ufoY = 3.01;
 
   const stairsOrigin = {
     x: villaX + 10.5,
@@ -111,6 +118,14 @@ export function generateDubai(w: WorldWriter): GeneratorResult {
       y: lamboY,
       z: lamboZ,
       rotationY: lamboRotation,
+      scale: 1,
+    },
+    {
+      kind: 'ufo',
+      x: ufoX + 0.5,
+      y: ufoY,
+      z: ufoZ + 0.5,
+      rotationY: 0.35,
       scale: 1,
     },
   ];
@@ -165,6 +180,20 @@ export function generateDubai(w: WorldWriter): GeneratorResult {
       y: 3.01,
       z: villaZ + 6.5,
       radius: 4.5,
+    },
+    {
+      kind: 'ufo-board',
+      x: ufoX + 0.5,
+      y: ufoY,
+      z: ufoZ + 0.5,
+      radius: 4.2,
+    },
+    {
+      kind: 'sunset-point',
+      x: roadCenterX - 18,
+      y: 2.01,
+      z: roadSouthZ - 8,
+      radius: 5.5,
     },
     ...locals.interactables,
   ];
@@ -302,30 +331,39 @@ function buildLuxuryVilla(w: WorldWriter, ox: number, oz: number): void {
     }
   }
 
-  // Infinity pool on south terrace (front of villa) — set back so entrance stairs fit in front
-  const poolX0 = ox + 5;
-  const poolZ0 = oz + vd + 4;
-  for (let z = 0; z < 7; z++) {
-    for (let x = 0; x < 12; x++) {
-      const px = poolX0 + x;
-      const pz = poolZ0 + z;
-      if (px < 1 || px >= w.width - 1 || pz < 1 || pz >= w.depth - 1) continue;
-      if (x === 0 || x === 11 || z === 0 || z === 6) {
-        w.setBlock(px, 1, pz, BLOCK_MARBLE);
-        w.setBlock(px, 2, pz, BLOCK_MARBLE);
-      } else {
-        w.setBlock(px, 1, pz, BLOCK_ROCK);
-        w.setBlock(px, 2, pz, BLOCK_WATER);
-        w.setBlock(px, 3, pz, BLOCK_AIR);
-      }
-    }
-  }
-
   // Stairs / steps from south terrace down toward approach
   for (let s = 0; s < 3; s++) {
     for (let dx = 9; dx <= 12; dx++) {
       w.setBlock(ox + dx, 2, oz + vd + 8 + s, BLOCK_MARBLE);
       if (s >= 1) w.setBlock(ox + dx, 1, oz + vd + 8 + s, BLOCK_PATH);
+    }
+  }
+}
+
+/** Rectangular infinity pool on the south terrace — applied last so roads/pads do not carve into it. */
+function buildInfinityPool(w: WorldWriter, ox: number, oz: number): void {
+  const vd = VILLA_DEPTH;
+  const poolX0 = ox + 4;
+  const poolZ0 = oz + vd + 3;
+  const poolW = 14;
+  const poolD = 7;
+
+  for (let z = 0; z < poolD; z++) {
+    for (let x = 0; x < poolW; x++) {
+      const px = poolX0 + x;
+      const pz = poolZ0 + z;
+      if (px < 1 || px >= w.width - 1 || pz < 1 || pz >= w.depth - 1) continue;
+
+      const isRim = x === 0 || x === poolW - 1 || z === 0 || z === poolD - 1;
+      if (isRim) {
+        w.setBlock(px, 1, pz, BLOCK_MARBLE);
+        w.setBlock(px, 2, pz, BLOCK_MARBLE);
+        w.setBlock(px, 3, pz, BLOCK_AIR);
+      } else {
+        w.setBlock(px, 1, pz, BLOCK_ROCK);
+        w.setBlock(px, 2, pz, BLOCK_WATER);
+        w.setBlock(px, 3, pz, BLOCK_AIR);
+      }
     }
   }
 }
@@ -378,12 +416,12 @@ function buildVillaEntranceStairCollisionBoxes(origin: {
   return boxes;
 }
 
-/** Flat parking slab behind the infinity pool — no dunes or dips. */
+/** Flat parking slab south of the infinity pool — no dunes or dips. */
 function flattenLamborghiniPad(w: WorldWriter, ox: number, oz: number): void {
   const padMinX = ox + 6;
   const padMaxX = ox + 14;
-  const padMinZ = oz + VILLA_DEPTH + 10;
-  const padMaxZ = oz + VILLA_DEPTH + 15;
+  const padMinZ = oz + VILLA_DEPTH + 12;
+  const padMaxZ = oz + VILLA_DEPTH + 17;
 
   for (let z = padMinZ; z <= padMaxZ; z++) {
     for (let x = padMinX; x <= padMaxX; x++) {
@@ -401,6 +439,23 @@ function flattenLamborghiniPad(w: WorldWriter, ox: number, oz: number): void {
   for (let x = padMinX; x <= padMaxX; x++) {
     w.setBlock(x, 2, padMinZ - 1, BLOCK_GOLD);
     w.setBlock(x, 2, padMaxZ + 1, BLOCK_GOLD);
+  }
+}
+
+/** Flat scorched sand circle under the secret UFO. */
+function flattenUfoPad(w: WorldWriter, cx: number, cz: number): void {
+  const r = 4;
+  for (let z = cz - r; z <= cz + r; z++) {
+    for (let x = cx - r; x <= cx + r; x++) {
+      if (x < 1 || x >= w.width - 1 || z < 1 || z >= w.depth - 1) continue;
+      const dx = x - cx;
+      const dz = z - cz;
+      if (dx * dx + dz * dz > r * r) continue;
+      w.setBlock(x, 3, z, BLOCK_AIR);
+      w.setBlock(x, 4, z, BLOCK_AIR);
+      w.setBlock(x, 2, z, BLOCK_PATH);
+      w.setBlock(x, 1, z, BLOCK_STONE);
+    }
   }
 }
 
@@ -423,10 +478,10 @@ function isNearHighway(
   ) {
     return true;
   }
-  // Villa bypass / parking apron (south of house, outside walls)
+  // Villa bypass / parking apron (south of pool, outside terrace water)
   if (
-    z >= villaZ + VILLA_DEPTH + 9 &&
-    z <= villaZ + VILLA_DEPTH + 17 &&
+    z >= villaZ + VILLA_DEPTH + 12 &&
+    z <= villaZ + VILLA_DEPTH + 19 &&
     x >= villaX + 4 &&
     x <= roadCenterX + roadHalfW + 3
   ) {
@@ -476,9 +531,9 @@ function buildAsphaltHighway(
     w.setBlock(x1 + 1, 1, z, BLOCK_STONE);
   }
 
-  // East–west bypass: Lamborghini pad → highway, along the south outside the villa
-  const bypassZ0 = villaZ + VILLA_DEPTH + 10;
-  const bypassZ1 = villaZ + VILLA_DEPTH + 16;
+  // East–west bypass: Lamborghini pad → highway, south of the pool
+  const bypassZ0 = villaZ + VILLA_DEPTH + 12;
+  const bypassZ1 = villaZ + VILLA_DEPTH + 18;
   const bypassX0 = villaX + 5;
   for (let z = bypassZ0; z <= bypassZ1; z++) {
     for (let x = bypassX0; x <= x1; x++) {
@@ -492,9 +547,10 @@ function buildAsphaltHighway(
     w.setBlock(x, 2, bypassZ1 + 1, BLOCK_GOLD);
   }
 
-  // Short north link from pad up to the bypass (east side of pool / pad)
-  const linkX = villaX + 14;
-  for (let z = villaZ + VILLA_DEPTH + 6; z < bypassZ0; z++) {
+  // North link from pad up to the bypass — east of the pool, not through it
+  const linkX = villaX + 18;
+  const poolSouthZ = villaZ + VILLA_DEPTH + 10;
+  for (let z = poolSouthZ + 1; z < bypassZ0; z++) {
     paint(linkX, z, false);
     paint(linkX + 1, z, false);
     w.setBlock(linkX - 1, 2, z, BLOCK_GOLD);

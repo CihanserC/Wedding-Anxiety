@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import {
   BLOCK_CARPET,
   BLOCK_CURTAIN,
-  BLOCK_FLOWER,
   BLOCK_GLASS,
   BLOCK_GOLD,
   BLOCK_GRASS,
@@ -13,7 +12,8 @@ import {
   BLOCK_SEAT,
   BLOCK_WOOD,
 } from '../../data/blocks';
-import type { WorldWriter, GeneratorResult, CollisionBox } from './types';
+import type { WorldWriter, GeneratorResult, CollisionBox, NpcSpec, PropSpec } from './types';
+import type { NpcType } from '../../data/npcs';
 
 /**
  * Grand luxury wedding hall: south garden approach, marble palace with dome,
@@ -39,10 +39,20 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
 
   const northWallZ = hallZ0 + hallDepth - 3;
   const centerX = hallX0 + hallWidth / 2;
+  const hallCenterLocal = Math.floor(hallWidth / 2);
   const stageFrontZ = hallZ0 + hallDepth - 12;
   const altarWorldZ = hallZ0 + hallDepth - 7;
   const coupleZ = stageFrontZ + 1.5;
   const cakeTableX = centerX + 5.5;
+
+  const guestNpcs = placeGuestTables(
+    w,
+    hallX0,
+    hallZ0,
+    hallWidth,
+    hallCenterLocal,
+    hallDepth - 12,
+  );
 
   const spawn = new THREE.Vector3(
     W * 0.5,
@@ -51,6 +61,7 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
   );
   const spawnFacing = Math.PI;
   const stairsOrigin = { x: centerX, y: 1.01, z: stageFrontZ - 0.15 };
+  const gardenFlowerProps = buildGardenFlowerProps(w, hallX0, hallZ0, hallWidth);
 
   return {
     playerSpawn: spawn,
@@ -99,6 +110,7 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
         z: coupleZ,
         rotationY: Math.PI,
       },
+      ...guestNpcs,
     ],
     props: [
       {
@@ -160,6 +172,7 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
         z: hallZ0 - 6,
         rotationY: 0.2,
       },
+      ...gardenFlowerProps,
     ],
     interactables: [
       {
@@ -229,33 +242,88 @@ function generateGarden(w: WorldWriter, hallX0: number, hallZ0: number, hallWidt
       w.setBlock(w.width - 3, 2, z, BLOCK_HEDGE);
     }
   }
+}
 
-  // Flower clusters flanking the path
-  const flowerSpots: Array<[number, number]> = [
-    [centerX - 6, 4],
-    [centerX + 6, 4],
-    [centerX - 8, 8],
-    [centerX + 8, 8],
-    [centerX - 7, 12],
-    [centerX + 7, 12],
-    [centerX - 9, 16],
-    [centerX + 9, 16],
-    [centerX - 5, hallZ0 - 6],
-    [centerX + 5, hallZ0 - 6],
-  ];
-  for (const [fx, fz] of flowerSpots) {
-    if (fz < 0 || fz > gardenZMax) continue;
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dz = -1; dz <= 1; dz++) {
-        if (Math.abs(dx) + Math.abs(dz) > 1) continue;
-        const x = fx + dx;
-        const z = fz + dz;
-        if (x < 1 || x >= w.width - 1) continue;
-        if (w.getBlock(x, 0, z) === BLOCK_PATH) continue;
-        w.setBlock(x, 1, z, BLOCK_FLOWER);
+function isGardenFlowerCell(
+  w: WorldWriter,
+  x: number,
+  z: number,
+  centerX: number,
+  hallX0: number,
+  hallZ0: number,
+  hallCenterLocal: number,
+): boolean {
+  const ground = w.getBlock(x, 0, z);
+  if (ground !== BLOCK_GRASS) return false;
+  if (w.getBlock(x, 1, z) === BLOCK_HEDGE) return false;
+  if (Math.abs(x - centerX) <= 2) return false;
+  for (let dz = -6; dz <= 0; dz++) {
+    for (let dx = -6; dx <= 6; dx++) {
+      if (x === hallX0 + hallCenterLocal + dx && z === hallZ0 + dz) return false;
+    }
+  }
+  return true;
+}
+
+function buildGardenFlowerProps(
+  w: WorldWriter,
+  hallX0: number,
+  hallZ0: number,
+  hallWidth: number,
+): PropSpec[] {
+  const gardenZMax = hallZ0 - 1;
+  const centerX = Math.floor(w.width / 2);
+  const hallCenterLocal = Math.floor(hallWidth / 2);
+  const props: PropSpec[] = [];
+
+  for (let z = 2; z <= gardenZMax - 1; z++) {
+    for (let side of [-1, 1]) {
+      for (const offset of [4, 5, 6, 7, 8, 9, 10, 11]) {
+        const x = centerX + side * offset;
+        if (!isGardenFlowerCell(w, x, z, centerX, hallX0, hallZ0, hallCenterLocal)) continue;
+        const hash = (x * 31 + z * 17) % 9;
+        if (hash > 5) continue;
+        props.push({
+          kind: 'garden-flower',
+          x: x + 0.5,
+          y: 1.01,
+          z: z + 0.5,
+          rotationY: hash * 0.72,
+          scale: 0.8 + (hash % 4) * 0.12,
+        });
       }
     }
   }
+
+  // Corner accent patches near the entrance plaza
+  for (const [lx, lz] of [
+    [hallX0 + 4, hallZ0 - 8],
+    [hallX0 + hallWidth - 5, hallZ0 - 8],
+    [hallX0 + 6, hallZ0 - 12],
+    [hallX0 + hallWidth - 7, hallZ0 - 12],
+    [3, hallZ0 - 14],
+    [w.width - 4, hallZ0 - 14],
+  ] as Array<[number, number]>) {
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const x = lx + dx;
+        const z = lz + dz;
+        if (!isGardenFlowerCell(w, x, z, centerX, hallX0, hallZ0, hallCenterLocal)) continue;
+        const hash = (x * 23 + z * 19 + dx) % 7;
+        if (hash > 4) continue;
+        props.push({
+          kind: 'garden-flower',
+          x: x + 0.5,
+          y: 1.01,
+          z: z + 0.5,
+          rotationY: hash * 0.85,
+          scale: 0.9 + (hash % 3) * 0.1,
+        });
+      }
+    }
+  }
+
+  return props;
 }
 
 function generateHall(w: WorldWriter, x0: number, z0: number, HW: number, HD: number): void {
@@ -336,9 +404,6 @@ function generateHall(w: WorldWriter, x0: number, z0: number, HW: number, HD: nu
       w.setBlock(x0 + cx, wallHeight, z0 + z, BLOCK_GOLD);
     }
   }
-
-  // Guest tables and chairs on both sides of the aisle
-  placeGuestTables(w, x0, z0, HW, centerX, stageFrontLocal);
 
   // Raised marble stage with gold border
   for (let z = stageFrontLocal; z < northWallLocal; z++) {
@@ -445,25 +510,31 @@ function placeGuestTables(
   x0: number,
   z0: number,
   HW: number,
-  centerX: number,
+  centerLocalX: number,
   stageFrontLocal: number,
-): void {
+): NpcSpec[] {
   const aisleClear = 6;
   const tableCenters: Array<[number, number]> = [];
+  const guests: NpcSpec[] = [];
+  let guestIndex = 0;
 
-  // Left and right table clusters — spaced for a spacious luxury feel
-  for (let z = 8; z < stageFrontLocal - 4; z += 6) {
-    tableCenters.push([centerX - 12, z]);
-    tableCenters.push([centerX + 11, z]);
-    if (z + 3 < stageFrontLocal - 4) {
-      tableCenters.push([centerX - 18, z + 3]);
-      tableCenters.push([centerX + 17, z + 3]);
-    }
+  const westCols = [centerLocalX - 18, centerLocalX - 13, centerLocalX - 9];
+  const eastCols = [centerLocalX + 8, centerLocalX + 13, centerLocalX + 17];
+
+  for (let z = 8; z < stageFrontLocal - 4; z += 5) {
+    for (const tx of westCols) tableCenters.push([tx, z]);
+    for (const tx of eastCols) tableCenters.push([tx, z]);
+  }
+
+  // Sparse staggered inner row (~40% fewer tables than the dense layout)
+  for (let z = 10; z < stageFrontLocal - 4; z += 5) {
+    tableCenters.push([centerLocalX - 12, z]);
+    tableCenters.push([centerLocalX + 12, z]);
   }
 
   for (const [tx, tz] of tableCenters) {
     if (tx < 5 || tx >= HW - 6) continue;
-    if (Math.abs(tx - centerX) < aisleClear) continue;
+    if (Math.abs(tx - centerLocalX) < aisleClear) continue;
 
     // 2×2 wood table top
     for (let dx = 0; dx < 2; dx++) {
@@ -486,11 +557,57 @@ function placeGuestTables(
     ];
     for (const [sx, sz] of seats) {
       if (sx < 4 || sx >= HW - 4) continue;
-      if (Math.abs(sx - centerX) < aisleClear - 1) continue;
+      if (Math.abs(sx - centerLocalX) < aisleClear - 1) continue;
       if (sz < 4 || sz >= stageFrontLocal - 1) continue;
       w.setBlock(x0 + sx, 1, z0 + sz, BLOCK_SEAT);
+
+      // Leave more seats open (~40% empty)
+      if (guestIndex % 3 === 2) {
+        guestIndex += 1;
+        continue;
+      }
+
+      const type: NpcType = guestIndex % 2 === 0 ? 'guest-woman' : 'guest-man';
+      // Face the stage (north / +Z)
+      guests.push({
+        type,
+        x: x0 + sx + 0.5,
+        y: 1.55,
+        z: z0 + sz + 0.5,
+        rotationY: 0,
+        pose: 'sitting',
+        variant: guestIndex,
+      });
+      guestIndex += 1;
     }
   }
+
+  // Standing guests along both side walls
+  const standingSpots: Array<[number, number, number]> = [
+    [centerLocalX - 20, 10, Math.PI * 0.15],
+    [centerLocalX + 19, 10, -Math.PI * 0.15],
+    [centerLocalX - 20, 22, Math.PI * 0.05],
+    [centerLocalX + 19, 22, -Math.PI * 0.05],
+    [centerLocalX - 17, 16, Math.PI * 0.1],
+    [centerLocalX + 16, 16, -Math.PI * 0.1],
+  ];
+  for (const [lx, lz, rot] of standingSpots) {
+    if (lx < 5 || lx >= HW - 5) continue;
+    if (lz < 5 || lz >= stageFrontLocal - 2) continue;
+    const type: NpcType = guestIndex % 2 === 0 ? 'guest-man' : 'guest-woman';
+    guests.push({
+      type,
+      x: x0 + lx + 0.5,
+      y: 1.01,
+      z: z0 + lz + 0.5,
+      rotationY: rot,
+      pose: 'standing',
+      variant: guestIndex + 3,
+    });
+    guestIndex += 1;
+  }
+
+  return guests;
 }
 
 /** Hollow stepped spherical ceiling — concave voxel dome visible from inside. */

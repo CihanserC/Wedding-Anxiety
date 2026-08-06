@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {
   BLOCK_AIR,
   BLOCK_CURTAIN,
+  BLOCK_FLOWER,
   BLOCK_GLASS,
   BLOCK_GRASS,
   BLOCK_MARBLE,
@@ -76,7 +77,7 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
 
   const spawnPlazaZ = towerZ - 5;
   for (let z = spawnPlazaZ; z <= towerZ - 3; z++) {
-    for (let dx = -4; dx <= 4; dx++) {
+    for (let dx = -4; dx <= 8; dx++) {
       w.setBlock(towerX + dx, 1, z, BLOCK_PATH);
     }
   }
@@ -209,6 +210,39 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
   const lighthouseHeight = 16;
   const carX = centerX + 5;
   const carZ = spawnPlazaZ + 0.5;
+
+  // Parking pad under the car — no water pits around the wheels
+  for (let z = Math.floor(carZ) - 3; z <= Math.floor(carZ) + 3; z++) {
+    for (let x = Math.floor(carX) - 4; x <= Math.floor(carX) + 4; x++) {
+      if (x < 1 || x >= W - 1 || z < 1 || z >= D - 1) continue;
+      w.setBlock(x, 2, z, BLOCK_AIR);
+      w.setBlock(x, 3, z, BLOCK_AIR);
+      w.setBlock(x, 1, z, BLOCK_SAND);
+      w.setBlock(x, 0, z, BLOCK_ROCK);
+    }
+  }
+
+  // Grassy picnic lawn south of the lighthouse (replaces grey rock plaza)
+  layPicnicLawn(w, {
+    minX: towerX - 8,
+    maxX: towerX + 11,
+    minZ: spawnPlazaZ - 1,
+    maxZ: towerZ + 5,
+    towerX,
+    towerZ,
+    centerX,
+    carX: Math.floor(carX),
+    carZ: Math.floor(carZ),
+    cottageX,
+    cottageZ,
+    cottageW,
+    cottageD,
+  });
+  scatterPicnicFlowers(w, towerX - 5, spawnPlazaZ + 2);
+
+  const picnicX = towerX - 5;
+  const picnicZ = spawnPlazaZ + 2.5;
+
   return {
     playerSpawn: spawn,
     playerFacing: Math.PI,
@@ -236,6 +270,13 @@ export function generateLighthouse(w: WorldWriter): GeneratorResult {
       // public/car.glb — parked on sand beside the approach path
       { kind: 'car', x: carX, y: 2, z: carZ, rotationY: -Math.PI / 2, scale: 1 },
       { kind: 'cat', x: catX, y: 2, z: catZ, rotationY: Math.PI },
+      // Picnic lawn west of the approach path (away from the parked car)
+      { kind: 'coastal-picnic', x: picnicX, y: 2, z: picnicZ, rotationY: 0 },
+      { kind: 'coastal-pine', x: towerX - 7, y: 2, z: spawnPlazaZ + 1 },
+      { kind: 'coastal-pine', x: towerX + 9, y: 2, z: spawnPlazaZ, scale: 0.9 },
+      { kind: 'coastal-pine', x: towerX + 2, y: 2, z: towerZ + 4, scale: 0.85 },
+      { kind: 'coastal-tree', x: towerX + 8, y: 2, z: towerZ + 2 },
+      { kind: 'coastal-tree', x: towerX - 3, y: 2, z: spawnPlazaZ + 4, scale: 0.9 },
     ],
     interactables: [{ kind: 'cat', x: catX, y: 2, z: catZ, radius: 2.8 }],
   };
@@ -270,5 +311,78 @@ function scatterGrass(
     w.setBlock(gx, 1, gz, BLOCK_GRASS);
     w.setBlock(gx + 1, 1, gz, BLOCK_GRASS);
     w.setBlock(gx, 1, gz + 1, BLOCK_GRASS);
+  }
+}
+
+function layPicnicLawn(
+  w: WorldWriter,
+  opts: {
+    minX: number;
+    maxX: number;
+    minZ: number;
+    maxZ: number;
+    towerX: number;
+    towerZ: number;
+    centerX: number;
+    carX: number;
+    carZ: number;
+    cottageX: number;
+    cottageZ: number;
+    cottageW: number;
+    cottageD: number;
+  },
+): void {
+  const {
+    minX,
+    maxX,
+    minZ,
+    maxZ,
+    towerX,
+    towerZ,
+    centerX,
+    carX,
+    carZ,
+    cottageX,
+    cottageZ,
+    cottageW,
+    cottageD,
+  } = opts;
+
+  for (let z = minZ; z <= maxZ; z++) {
+    for (let x = minX; x <= maxX; x++) {
+      if (Math.abs(x - towerX) <= 3 && Math.abs(z - towerZ) <= 3) continue;
+      if (Math.abs(x - centerX) <= 1) continue;
+      if (Math.abs(x - carX) <= 4 && Math.abs(z - carZ) <= 3) continue;
+      if (x >= cottageX && x < cottageX + cottageW && z >= cottageZ && z < cottageZ + cottageD) continue;
+
+      const cell = w.getBlock(x, 1, z);
+      if (cell === BLOCK_WATER || cell === BLOCK_WOOD) continue;
+      if (
+        cell === BLOCK_ROCK ||
+        cell === BLOCK_PATH ||
+        cell === BLOCK_SAND ||
+        cell === BLOCK_GRASS
+      ) {
+        w.setBlock(x, 1, z, BLOCK_GRASS);
+        w.setBlock(x, 2, z, BLOCK_AIR);
+      }
+    }
+  }
+}
+
+function scatterPicnicFlowers(w: WorldWriter, picnicX: number, picnicZ: number): void {
+  const spots: Array<[number, number]> = [
+    [picnicX + 3, picnicZ + 3],
+    [picnicX + 7, picnicZ + 1],
+    [picnicX + 5, picnicZ + 4],
+    [picnicX - 4, picnicZ + 2],
+    [picnicX + 9, picnicZ + 3],
+    [picnicX + 2, picnicZ + 5],
+    [picnicX - 2, picnicZ + 4],
+    [picnicX + 8, picnicZ + 5],
+  ];
+  for (const [fx, fz] of spots) {
+    if (w.getBlock(fx, 1, fz) !== BLOCK_GRASS) continue;
+    w.setBlock(fx, 2, fz, BLOCK_FLOWER);
   }
 }

@@ -16,7 +16,6 @@ Toggle kodlar tekrar yazılınca kapanır; durum mesajı konsolda görünür.
 
 | Kod | Anlam | Efekt | Toggle |
 |-----|--------|--------|--------|
-| `happilymarried` | Mutlu evlilik | Düğün epiloguna ışınlan | Hayır |
 | `nefesal` | Nefes al | Anksiyeteyi %0’a indir | Hayır |
 | `sakinol` | Sakin ol | Anksiyete artmaz; kaybetme devre dışı | Hayır |
 | `iddqd` | Klasik Doom god mode | `sakinol` + temas / flaş / düşme hasarı yok | Hayır |
@@ -27,6 +26,7 @@ Toggle kodlar tekrar yazılınca kapanır; durum mesajı konsolda görünür.
 | `dugunvakti` | Düğün vakti | Aktif bölümü atla | Hayır |
 | `konserde` | Konserde | 1. harita (Müzik Salonu), level 1 | Hayır |
 | `denizfeneri` | Deniz feneri | 2. harita (Deniz Feneri), level 1 | Hayır |
+| `dugunsalonu` | Düğün salonu | 3. harita (Düğün Salonu), level 1 | Hayır |
 | `bali` | Bali | Bali Adası (balayı), level 1 | Hayır |
 | `dubai` | Dubai | Dubai Lüks Villa (keşif), level 1 | Hayır |
 | `baloncu` | Baloncu | Tüm balonları patlat (varsa) | Hayır |

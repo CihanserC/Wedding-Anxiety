@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
   BLOCK_AIR,
+  BLOCK_SEAT,
   BLOCK_STONE,
   BLOCKS,
   isSolidBlock,
@@ -25,6 +26,7 @@ import type {
   CollisionBox,
   FaunaSpawnSpec,
   TreasureChestSpec,
+  TheaterSeatSpec,
 } from './worldGen/types';
 
 export interface WorldBounds {
@@ -56,6 +58,7 @@ export class World {
   readonly collisionBoxes: CollisionBox[];
   readonly ambientFauna: FaunaSpawnSpec[];
   readonly treasureChest: TreasureChestSpec | null;
+  readonly theaterSeats: TheaterSeatSpec[];
   private readonly cells: Uint8Array;
   private group: THREE.Group | null = null;
   private meshes: THREE.InstancedMesh[] = [];
@@ -89,6 +92,7 @@ export class World {
     this.collisionBoxes = result.collisionBoxes ?? [];
     this.ambientFauna = result.ambientFauna ?? [];
     this.treasureChest = result.treasureChest ?? null;
+    this.theaterSeats = result.theaterSeats ?? [];
   }
 
   private runGenerator(mapDef: MapDefinition, writer: WorldWriter): GeneratorResult {
@@ -362,6 +366,7 @@ export class World {
         for (let x = 0; x < this.width; x++) {
           const id = this.cells[this.idx(x, y, z)] as BlockId;
           if (id === BLOCK_AIR) continue;
+          if (this.mapDef.id === 'concert-hall' && id === BLOCK_SEAT) continue;
           if (!this.isExposed(x, y, z)) continue;
           let arr = buckets.get(id);
           if (!arr) {

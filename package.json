@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Hilal için düğün anksiyetesini yenme temalı 3D voxel FPS oyunu",
+  "description": "Hilal için düğün anksiyetesini yenme temalı 3D voxel FPS — 5 harita, 13 aşama, Bali ve Dubai bonusu",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

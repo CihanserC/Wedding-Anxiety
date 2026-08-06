@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import { ENEMY_STATS, type EnemyStats, type EnemyType } from '../data/enemies';
 import type { World } from '../game/World';
+import {
+  createNameTag,
+  createSpeechBubble,
+  disposeNameTag,
+  updateSpeechBubble,
+} from '../rendering/EntityNameTag';
 import { buildEnemyMesh } from './enemyMeshes';
 
 let __enemyId = 0;
@@ -21,7 +27,7 @@ export type EnemyUpdateEvents = {
 /**
  * Voxel-style enemy. Silhouette and animation are type-specific (built via
  * enemyMeshes factory); AI is chase-based with light behavior variations
- * per stats.behavior (stalker pauses, dasher bursts, floater bobs high).
+ * per stats.behavior (stalker pauses, critic lunges/critiques, dasher bursts, floater bobs high).
  */
 export class Enemy {
   readonly id: number;
@@ -33,6 +39,12 @@ export class Enemy {
   dying = false;
   /** Ambient wildlife — not counted for wave clear. */
   ambient = false;
+  /** Red name label above combat enemies (null for ambient fauna). */
+  nameTag: THREE.Sprite | null = null;
+  speechBubble: THREE.Sprite | null = null;
+  speechBubbleTimer = 0;
+  growlCooldown = 2 + Math.random() * 4;
+  tauntCooldown = 5 + Math.random() * 5;
   private deathTimer = 0;
   contactAccumulator = 0;
   private vy = 0;
@@ -49,6 +61,12 @@ export class Enemy {
   private dashCooldown = 0;
   private dashRemaining = 0;
   private pauseTimer = 0;
+  private critiqueCooldown = 2 + Math.random() * 2;
+  private critiqueWindup = 0;
+  private pendingCritique = false;
+  private lungeCooldown = 1.5 + Math.random();
+  private lungeWindup = 0;
+  private lungeRemaining = 0;
   private flashCooldown = 1.5;
   private flashActive = 0;
   private flashTriggered = false;
@@ -103,6 +121,37 @@ export class Enemy {
         emissiveIntensity: mat.emissiveIntensity,
       });
     }
+  }
+
+  /** Attach red name tag — call after spawn when enemy is a combat unit. */
+  enableCombatPresentation(): void {
+    if (this.nameTag || this.ambient) return;
+    this.nameTag = createNameTag(this.stats.displayName);
+    const tagLift = this.stats.type === 'mukemmeliyetci-kuzen' ? 0.38 : 0.12;
+    this.nameTag.position.set(0, this.stats.height + tagLift, 0);
+    this.root.add(this.nameTag);
+  }
+
+  showTaunt(text: string, duration = 3.5): void {
+    if (this.ambient || this.dead || this.dying) return;
+    if (this.speechBubble) {
+      updateSpeechBubble(this.speechBubble, text);
+      this.speechBubble.visible = true;
+    } else {
+      this.speechBubble = createSpeechBubble(text);
+      this.root.add(this.speechBubble);
+    }
+    const bubbleLift = this.stats.type === 'mukemmeliyetci-kuzen' ? 0.88 : 0.62;
+    this.speechBubble.position.set(0, this.stats.height + bubbleLift, 0);
+    this.speechBubbleTimer = duration;
+  }
+
+  clearSpeechBubble(): void {
+    if (!this.speechBubble) return;
+    this.root.remove(this.speechBubble);
+    disposeNameTag(this.speechBubble);
+    this.speechBubble = null;
+    this.speechBubbleTimer = 0;
   }
 
   startRageTransition(level: 1 | 2): void {
@@ -282,6 +331,7 @@ export class Enemy {
   update(dt: number, target: THREE.Vector3, events?: EnemyUpdateEvents): void {
     this.time += dt;
     this.deathEvents = events;
+    this.tickSpeechBubble(dt);
 
     if (this.combatFrozen) {
       if (this.stats.isBoss && this.rageAnim >= 0 && this.rageAnim < 1) {
@@ -368,6 +418,47 @@ export class Enemy {
           this.pauseTimer = distXZ < 6 ? -1.2 : 1.5 + Math.random() * 1.2;
         }
         if (this.pauseTimer > 0) speed *= 0.15;
+      } else if (this.stats.behavior === 'critic') {
+        this.critiqueCooldown -= dt;
+        this.lungeCooldown -= dt;
+        this.lungeRemaining -= dt;
+        this.throwAnim = Math.max(0, this.throwAnim - dt);
+
+        if (this.critiqueWindup > 0) {
+          this.critiqueWindup -= dt;
+          speed = 0;
+          if (this.critiqueWindup <= 0 && this.pendingCritique) {
+            this.pendingCritique = false;
+            this.throwAnim = 0.45;
+            this.shootFireball(target, events, 5.5, 5, { color: 0xc8e8ff });
+          }
+        } else if (this.lungeWindup > 0) {
+          this.lungeWindup -= dt;
+          speed = 0;
+          if (this.lungeWindup <= 0) {
+            this.lungeRemaining = 0.35;
+          }
+        } else if (
+          this.lungeCooldown <= 0 &&
+          distXZ < 7 &&
+          this.critiqueWindup <= 0
+        ) {
+          this.lungeCooldown = 3.2;
+          this.lungeWindup = 0.35;
+          speed = 0;
+        } else if (
+          this.critiqueCooldown <= 0 &&
+          distXZ >= 8 &&
+          distXZ <= 14 &&
+          events?.onShootFireball
+        ) {
+          this.critiqueCooldown = 5.5;
+          this.critiqueWindup = 0.45;
+          this.pendingCritique = true;
+          speed = 0;
+        }
+
+        if (this.lungeRemaining > 0) speed *= 1.55;
       } else if (this.stats.behavior === 'dasher') {
         this.dashCooldown -= dt;
         this.dashRemaining -= dt;
@@ -449,7 +540,7 @@ export class Enemy {
       this.jumpCooldown = Math.max(0, this.jumpCooldown - dt);
       const groundedBefore = this.isGrounded();
       if (groundedBefore && this.canHop()) {
-        this.tryHop(dt, blockedHoriz, target);
+        this.tryHop(dt, blockedHoriz, target, distXZ);
       }
 
       this.vy -= 22 * dt;
@@ -587,6 +678,38 @@ export class Enemy {
         baseBob = Math.sin(t * 2 + this.bobPhase) * 0.02;
         break;
       }
+      case 'critic': {
+        if (this.headGroup) {
+          this.headGroup.rotation.z = 0.12 + Math.sin(t * 2.2) * 0.06;
+          this.headGroup.rotation.x = -0.08 + Math.sin(t * 1.8) * 0.04;
+        }
+        if (this.armGroups) {
+          const throwT = this.throwAnim > 0 ? 1 - this.throwAnim / 0.45 : 0;
+          const windup = this.critiqueWindup > 0 || this.lungeWindup > 0;
+          const lunging = this.lungeRemaining > 0;
+          // Right arm = clipboard: windup reach, then throw swing
+          if (this.armGroups[1]) {
+            if (throwT > 0) {
+              this.armGroups[1].rotation.x = Math.sin(throwT * Math.PI) * -1.6;
+            } else if (windup) {
+              this.armGroups[1].rotation.x = -1.1;
+            } else if (lunging) {
+              this.armGroups[1].rotation.x = Math.sin(t * 14) * 0.55 - 0.35;
+            } else {
+              this.armGroups[1].rotation.x = Math.sin(t * 5) * 0.25 - 0.15;
+            }
+          }
+          // Left arm = pointing finger
+          if (this.armGroups[0]) {
+            this.armGroups[0].rotation.x = lunging
+              ? Math.sin(t * 14 + Math.PI) * 0.5 - 0.2
+              : -0.55 + Math.sin(t * 3) * 0.08;
+            this.armGroups[0].rotation.z = 0.35;
+          }
+        }
+        baseBob = Math.sin(t * 8 + this.bobPhase) * 0.055;
+        break;
+      }
       case 'dasher': {
         const jitterAmt = this.dashRemaining > 0 ? 0.08 : 0.03;
         if (this.jitterMeshes) {
@@ -663,11 +786,38 @@ export class Enemy {
   }
 
   private canHop(): boolean {
-    return this.stats.type === 'maymun' || this.stats.type === 'inek';
+    return (
+      this.stats.type === 'maymun' ||
+      this.stats.type === 'inek' ||
+      this.stats.type === 'merakli-teyze' ||
+      this.stats.type === 'mukemmeliyetci-kuzen'
+    );
   }
 
-  private tryHop(dt: number, blockedHoriz: boolean, target: THREE.Vector3): void {
+  private tryHop(
+    dt: number,
+    blockedHoriz: boolean,
+    target: THREE.Vector3,
+    distXZ: number,
+  ): void {
     if (this.jumpCooldown > 0 || this.vy > 0.1) return;
+
+    if (this.stats.type === 'merakli-teyze') {
+      const encounterDist = 0.9 + this.stats.radius;
+      if (blockedHoriz || distXZ <= encounterDist) {
+        this.vy = 7.4;
+        this.jumpCooldown = 2.0;
+      }
+      return;
+    }
+
+    if (this.stats.type === 'mukemmeliyetci-kuzen') {
+      if (blockedHoriz) {
+        this.vy = 7.8;
+        this.jumpCooldown = 0.85;
+      }
+      return;
+    }
 
     const jumpSpeed = this.stats.type === 'maymun' ? 8.2 : 6.8;
 
@@ -756,7 +906,19 @@ export class Enemy {
     );
   }
 
+  private tickSpeechBubble(dt: number): void {
+    if (this.speechBubbleTimer <= 0) return;
+    this.speechBubbleTimer -= dt;
+    if (this.speechBubbleTimer <= 0) this.clearSpeechBubble();
+  }
+
   dispose(): void {
+    this.clearSpeechBubble();
+    if (this.nameTag) {
+      this.root.remove(this.nameTag);
+      disposeNameTag(this.nameTag);
+      this.nameTag = null;
+    }
     this.root.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
         obj.geometry.dispose();

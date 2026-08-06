@@ -85,17 +85,69 @@ export class ProjectileEffects {
     });
   }
 
-  spawnMuzzleFlash(position: THREE.Vector3, color = 0xfff2b0, size = 0.08): void {
-    const geometry = new THREE.SphereGeometry(size, 8, 8);
-    const material = new THREE.MeshBasicMaterial({
-      color,
+  spawnMuzzleFlash(
+    position: THREE.Vector3,
+    direction: THREE.Vector3,
+    color = 0xfff2b0,
+    size = 0.08,
+  ): void {
+    const group = new THREE.Group();
+    const materials: THREE.Material[] = [];
+
+    const coreMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
       transparent: true,
       opacity: 1,
     });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.copy(position);
-    this.scene.add(mesh);
-    this.effects.push({ object: mesh, born: this.now, life: 0.08, materials: [material] });
+    const glowMat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.45,
+    });
+    const starMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.95,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    materials.push(coreMat, glowMat, starMat);
+
+    const core = new THREE.Mesh(new THREE.SphereGeometry(size * 0.7, 8, 8), coreMat);
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(size * 2.2, 8, 8), glowMat);
+    group.add(core, glow);
+
+    // Crossed planes — 4-point star burst matching the voxel style
+    const starA = new THREE.Mesh(new THREE.PlaneGeometry(size * 0.35, size * 4.2), starMat);
+    const starB = new THREE.Mesh(new THREE.PlaneGeometry(size * 4.2, size * 0.35), starMat);
+    group.add(starA, starB);
+
+    const sparkColors = [color, 0xffaa44, 0xffffff];
+    for (let i = 0; i < 4; i++) {
+      const sparkMat = new THREE.MeshBasicMaterial({
+        color: sparkColors[i % sparkColors.length],
+        transparent: true,
+        opacity: 0.9,
+      });
+      materials.push(sparkMat);
+      const spark = new THREE.Mesh(
+        new THREE.SphereGeometry(size * (0.18 + Math.random() * 0.15), 5, 5),
+        sparkMat,
+      );
+      spark.position.set(
+        (Math.random() - 0.5) * size * 1.6,
+        (Math.random() - 0.5) * size * 1.6,
+        (Math.random() - 0.5) * size * 0.8 - size * 0.3,
+      );
+      group.add(spark);
+    }
+
+    group.position.copy(position);
+    const dir = direction.lengthSq() > 1e-8 ? direction.clone().normalize() : new THREE.Vector3(0, 0, -1);
+    group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
+
+    this.scene.add(group);
+    this.effects.push({ object: group, born: this.now, life: 0.1, materials });
   }
 
   spawnHitSpark(position: THREE.Vector3, color = 0xffd8ff): void {
@@ -367,6 +419,9 @@ export class ProjectileEffects {
         } else {
           e.object.scale.setScalar(1 + t * 0.6);
         }
+      } else if (e.object instanceof THREE.Group && !e.floatY) {
+        // Muzzle flash burst — expand quickly then fade
+        e.object.scale.setScalar(1 + t * 1.4);
       } else if (e.floatY) {
         const pulse = 1 + Math.sin(t * Math.PI) * 0.15;
         e.object.scale.setScalar(pulse);

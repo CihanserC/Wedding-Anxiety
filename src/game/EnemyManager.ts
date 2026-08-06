@@ -62,6 +62,7 @@ export class EnemyManager {
       stats.height,
     );
     const enemy = new Enemy(this.world, type, pos);
+    enemy.enableCombatPresentation();
     this.enemies.push(enemy);
     this.scene.add(enemy.root);
     return enemy;
@@ -74,6 +75,7 @@ export class EnemyManager {
       new THREE.Vector3(x, y, z);
     const enemy = new Enemy(this.world, type, resolved);
     enemy.ambient = ambient;
+    if (!ambient) enemy.enableCombatPresentation();
     this.enemies.push(enemy);
     this.scene.add(enemy.root);
     return enemy;

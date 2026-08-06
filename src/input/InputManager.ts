@@ -30,6 +30,7 @@ export class InputManager {
   private interactPressed = false;
   private pausePressed = false;
   private mutePressed = false;
+  private cameraTogglePressed = false;
   private pointerLocked = false;
   private readonly target: HTMLElement;
   private readonly listeners = new Set<() => void>();
@@ -69,6 +70,7 @@ export class InputManager {
     this.interactPressed = false;
     this.pausePressed = false;
     this.mutePressed = false;
+    this.cameraTogglePressed = false;
   };
 
   private onKeyDown = (event: KeyboardEvent): void => {
@@ -89,6 +91,8 @@ export class InputManager {
       this.pausePressed = true;
     } else if (event.code === 'KeyM') {
       this.mutePressed = true;
+    } else if (event.code === 'KeyV') {
+      this.cameraTogglePressed = true;
     }
   };
 
@@ -200,6 +204,12 @@ export class InputManager {
   consumeMute(): boolean {
     const pressed = this.mutePressed;
     this.mutePressed = false;
+    return pressed;
+  }
+
+  consumeCameraToggle(): boolean {
+    const pressed = this.cameraTogglePressed;
+    this.cameraTogglePressed = false;
     return pressed;
   }
 }

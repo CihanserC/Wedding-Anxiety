@@ -64,6 +64,7 @@ export class WeaponSystem {
     weaponId: WeaponId,
     origin: THREE.Vector3,
     direction: THREE.Vector3,
+    muzzleWorld: THREE.Vector3,
     enemies: Enemy[],
     enemyEvents?: EnemyUpdateEvents,
   ): FireResult | null {
@@ -88,16 +89,21 @@ export class WeaponSystem {
         pelletDir.addScaledVector(right, angleX).addScaledVector(up, angleY).normalize();
       }
 
-      const end = this.fireOneRay(weapon, origin, pelletDir, enemies, enemyEvents);
+      const end = this.fireOneRay(weapon, origin, pelletDir, muzzleWorld, enemies, enemyEvents);
       if (end.balloonEntry) balloonHits.push(end.balloonEntry);
       if (end.hitEnemy && !bestHitEnemy) bestHitEnemy = end.hitEnemy;
       if (end.killedEnemy && !killed) killed = end.killedEnemy;
       if (p === 0) hitPoint = end.point;
     }
 
-    const muzzle = origin.clone().addScaledVector(direction, 0.6);
-    muzzle.y -= 0.15;
-    this.effects.spawnMuzzleFlash(muzzle, weapon.muzzleColor, weapon.muzzleSize);
+    if (weaponId !== 'lightsaber') {
+      this.effects.spawnMuzzleFlash(
+        muzzleWorld,
+        direction,
+        weapon.muzzleColor,
+        weapon.muzzleSize,
+      );
+    }
 
     return {
       hitEnemy: bestHitEnemy,
@@ -112,6 +118,7 @@ export class WeaponSystem {
     weapon: WeaponDefinition,
     origin: THREE.Vector3,
     direction: THREE.Vector3,
+    muzzleWorld: THREE.Vector3,
     enemies: Enemy[],
     enemyEvents?: EnemyUpdateEvents,
   ): {
@@ -157,12 +164,10 @@ export class WeaponSystem {
       end = origin.clone().addScaledVector(direction, weapon.range);
     }
 
-    const muzzle = origin.clone().addScaledVector(direction, 0.6);
-    muzzle.y -= 0.15;
     if (weapon.boltStyle) {
-      this.effects.spawnLaserBolt(muzzle, end, weapon.tracerColor);
+      this.effects.spawnLaserBolt(muzzleWorld, end, weapon.tracerColor);
     } else {
-      this.effects.spawnTracer(muzzle, end, weapon.tracerColor);
+      this.effects.spawnTracer(muzzleWorld, end, weapon.tracerColor);
     }
 
     return { point: end, hitEnemy, killedEnemy, balloonEntry };

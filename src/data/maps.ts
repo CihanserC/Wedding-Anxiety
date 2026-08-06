@@ -30,6 +30,8 @@ export interface AtmosphereConfig {
 export interface MapDefinition {
   id: MapId;
   displayName: string;
+  /** Short label for in-game HUD. */
+  shortName: string;
   description: string;
   worldSize: { width: number; depth: number; height: number };
   atmosphere: AtmosphereConfig;
@@ -44,6 +46,7 @@ export const MAPS: MapDefinition[] = [
   {
     id: 'concert-hall',
     displayName: 'Klasik Müzik Salonu',
+    shortName: 'Müzik Salonu',
     description:
       'Krem sütunların, kırmızı perdenin ve altın avizenin altında geçmişin eleştirileri seni bekliyor. Nefes al ve odaklan.',
     worldSize: { width: 48, depth: 56, height: 12 },
@@ -107,6 +110,7 @@ export const MAPS: MapDefinition[] = [
   {
     id: 'lighthouse',
     displayName: 'Deniz Feneri',
+    shortName: 'Deniz Feneri',
     description:
       'Gün batımında bir sahil. Fenerin ışığı zamanın geçtiğini fısıldıyor. Ama zaman düşman değil, sadece bir rüzgâr.',
     worldSize: { width: 56, depth: 56, height: 20 },
@@ -170,6 +174,7 @@ export const MAPS: MapDefinition[] = [
   {
     id: 'wedding-hall',
     displayName: 'Düğün Salonu',
+    shortName: 'Düğün Salonu',
     description:
       'Kubbeli, görkemli salona giriyorsun. Sarı neonlar "Hilal ❤️ Cihanser" diyor; nikâh sahnesi seni bekliyor. Bu gün, senin günün.',
     worldSize: { width: 64, depth: 72, height: 18 },
@@ -219,7 +224,7 @@ export const MAPS: MapDefinition[] = [
       },
       {
         index: 3,
-        title: 'Beklenti Gölgesi',
+        title: 'Altın Canavarı',
         intro:
           'Son dalga. Herkesin beklentisinden doğan büyük gölge geliyor. Ama bu gün, senin günün.',
         clearMessage: 'Onu bloklara ayırdın, Hilal. Şimdi dans zamanı.',
@@ -240,6 +245,7 @@ export const MAPS: MapDefinition[] = [
   {
     id: 'bali',
     displayName: 'Bali Adası',
+    shortName: 'Bali Adası',
     description:
       'Balayı başladı. Turkuaz deniz, akan nehir, tropik orman ve villanız sizi bekliyor. Dikkat: meraklı maymunlar saldırgan olabilir.',
     worldSize: { width: 96, depth: 96, height: 22 },
@@ -287,7 +293,7 @@ export const MAPS: MapDefinition[] = [
         index: 3,
         title: 'Villa Kuşatması',
         intro: 'Maymunlar villayı sardı! Infinity pool kenarında son savunma.',
-        clearMessage: 'Bali senin. Balayı resmen başladı — yaşasın!',
+        clearMessage: 'Bali senin. Balayı resmen başladı, yaşasın!',
         totalEnemies: 18,
         batchInterval: 3,
         batches: [
@@ -302,8 +308,9 @@ export const MAPS: MapDefinition[] = [
   {
     id: 'dubai',
     displayName: 'Dubai · Lüks Villa',
+    shortName: 'Dubai Villa',
     description:
-      'Çöl güneşi, beyaz mermer, sonsuzluk havuzu ve kilometrelerce asfalt. Lamborghini kapıda — savaş bitti, sadece sür.',
+      'Çöl güneşi, beyaz mermer, sonsuzluk havuzu ve kilometrelerce asfalt. Lamborghini kapıda, savaş bitti, sadece sür. Batı kumlarında parlayan bir şey daha var…',
     worldSize: { width: 128, depth: 240, height: 20 },
     bgm: 'dubai-luxury',
     explorationOnly: true,
@@ -316,8 +323,8 @@ export const MAPS: MapDefinition[] = [
       fillColor: 0x80c0ff,
       fillIntensity: 0.3,
       fogColor: 0xe8d0a8,
-      fogNear: 55,
-      fogFar: 200,
+      fogNear: 45,
+      fogFar: 140,
       skyColor: 0x87b8e8,
     },
     levels: [
@@ -325,7 +332,7 @@ export const MAPS: MapDefinition[] = [
         index: 1,
         title: 'Altın Şehir',
         intro:
-          'Çöl güneşi, beyaz mermer ve sonsuzluk havuzu. Uzun asfalt seni bekliyor — Lambo\'ya bin, keşfet.',
+          'Çöl güneşi, beyaz mermer ve sonsuzluk havuzu. Uzun asfalt seni bekliyor, Lambo\'ya bin, keşfet.',
         clearMessage: 'Dubai senin. Keyfini çıkar.',
         totalEnemies: 0,
         batchInterval: 999,

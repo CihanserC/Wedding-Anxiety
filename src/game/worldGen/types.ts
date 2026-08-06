@@ -56,6 +56,8 @@ export interface NpcSpec {
   z: number;
   rotationY: number;
   pose?: NpcPose;
+  /** Visual color/outfit seed for guest NPCs. */
+  variant?: number;
   /** Slow idle wander near spawn (Dubai locals). */
   wander?: boolean;
   wanderRadius?: number;
@@ -92,7 +94,25 @@ export type PropKind =
   | 'plasma-tv'
   | 'dining-chair'
   | 'dining-table'
-  | 'lamborghini';
+  | 'lamborghini'
+  | 'ufo'
+  | 'conductor-podium'
+  | 'stage-spotlight'
+  | 'stage-footlights'
+  | 'stage-side-drape'
+  | 'coastal-picnic'
+  | 'coastal-pine'
+  | 'coastal-tree'
+  | 'garden-flower'
+  | 'wall-painting';
+
+export type FamousPaintingId =
+  | 'mona-lisa'
+  | 'starry-night'
+  | 'girl-pearl'
+  | 'great-wave'
+  | 'birth-of-venus'
+  | 'the-scream';
 
 export interface PropSpec {
   kind: PropKind;
@@ -101,6 +121,7 @@ export interface PropSpec {
   z: number;
   rotationY?: number;
   scale?: number;
+  paintingId?: FamousPaintingId;
 }
 
 export interface InteractableSpec {
@@ -116,7 +137,9 @@ export interface InteractableSpec {
     | 'arab-chat'
     | 'treasure-chest'
     | 'lamborghini-drive'
-    | 'plasma-tv';
+    | 'plasma-tv'
+    | 'ufo-board'
+    | 'sunset-point';
   x: number;
   y: number;
   z: number;
@@ -148,6 +171,13 @@ export interface FaunaSpawnSpec {
   z: number;
 }
 
+export interface TheaterSeatSpec {
+  x: number;
+  z: number;
+  y?: number;
+  rotationY?: number;
+}
+
 export interface GeneratorResult {
   playerSpawn: THREE.Vector3;
   playerFacing: number;
@@ -162,4 +192,6 @@ export interface GeneratorResult {
   ambientFauna?: FaunaSpawnSpec[];
   /** Hidden after Bali clear — spawned in epilogue among rocks. */
   treasureChest?: TreasureChestSpec;
+  /** Detailed audience seats (concert hall); BLOCK_SEAT voxels stay for collision. */
+  theaterSeats?: TheaterSeatSpec[];
 }

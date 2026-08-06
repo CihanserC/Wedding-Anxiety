@@ -21,6 +21,7 @@ export class NpcManager {
         spec.pose ?? 'standing',
         spec.wander ?? false,
         spec.wanderRadius ?? 6,
+        spec.variant ?? 0,
       );
       if (world && npc.wander) {
         // Prefer a clear nearby pad if the spawn tile is jammed in floor/wall

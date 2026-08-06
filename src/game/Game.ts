@@ -5,23 +5,18 @@ import { HUD } from '../ui/HUD';
 import { MenuScreen } from '../ui/MenuScreen';
 import { DialogueBox } from '../ui/DialogueBox';
 import {
-  ALTAR_MESSAGES,
-  BALI_TREASURE_MESSAGES,
-  CAKE_MESSAGES,
-  CAT_FEED_MESSAGES,
-  DUBAI_LOCAL_MESSAGES,
-  DUBAI_NPC_MESSAGES,
+  BOSS_PHASE_MESSAGES,
   HUD_LABELS,
   LAMBO_DRIVE_MESSAGES,
-  PIANO_PLAY_MESSAGES,
-  SUZY_CAT_MESSAGES,
-  TV_MESSAGES,
-  WEDDING_NPC_MESSAGES,
+  LEVEL_BREATHER_MESSAGES,
+  MAP_BRIDGE_MESSAGES,
+  WAVE_TRANSITION_LABELS,
   WIN_MESSAGES,
 } from '../data/messages';
 import { AnxietyMeter } from './AnxietyMeter';
 import { AudioManager } from './AudioManager';
 import { BalloonManager } from './BalloonManager';
+import { EnemyAmbience } from './EnemyAmbience';
 import { EnemyManager } from './EnemyManager';
 import { NpcManager } from './NpcManager';
 import { Player } from './Player';
@@ -35,8 +30,8 @@ import { createNeonWallSign, createWallSign } from '../rendering/WallSign';
 import { buildHallDecorations } from '../rendering/WeddingDecorations';
 import { LAMBORGHINI_CABIN_HIDE } from '../rendering/lamborghini';
 import { TvSlideshow } from '../rendering/TvSlideshow';
-import { buildProps, updateEatingCat } from '../rendering/MapProps';
-import { updateSuzyCatIdle } from '../rendering/SuzyCat';
+import { buildProps } from '../rendering/MapProps';
+import { buildTheaterSeats } from '../rendering/concertSeats';
 import { buildTreasureChest } from '../rendering/TreasureChest';
 import { PauseScreen } from '../ui/PauseScreen';
 import { CommandConsole } from '../ui/CommandConsole';
@@ -45,12 +40,15 @@ import { ConfettiOverlay } from '../ui/ConfettiOverlay';
 import { EnemyProjectileManager } from './EnemyProjectiles';
 import { loadSettings, saveSettings, type GameSettings } from './GameSettings';
 
+import { ENEMY_STATS } from '../data/enemies';
 import { MAPS, totalLevelCount, type MapId } from '../data/maps';
-import { NPC_STATS } from '../data/npcs';
 import { getCheatHelpEditorText, resolveCheat, type CheatId } from './CheatCodes';
 import type { CommandSubmitResult } from '../ui/CommandConsole';
-
-const CAKE_BUFF_DURATION = 15;
+import { BaliInteractions } from './interactions/BaliInteractions';
+import { DubaiInteractions, type DubaiCarHost } from './interactions/DubaiInteractions';
+import { MapSkipInteractions } from './interactions/MapSkipInteractions';
+import { WeddingInteractions } from './interactions/WeddingInteractions';
+import type { InteractionGameState, InteractionHost } from './interactions/types';
 
 const CAR_MAX_SPEED = 14;
 const CAR_REVERSE_MAX = 5;
@@ -65,6 +63,12 @@ const CAR_EYE_HEIGHT = 0.78;
 const CAR_MIN_PITCH = -0.35;
 const CAR_MAX_PITCH = 0.22;
 const CAR_DEFAULT_PITCH = -0.12;
+/** Third-person chase camera (racing-style) while driving. */
+const CHASE_DISTANCE = 6.5;
+const CHASE_HEIGHT = 2.8;
+const CHASE_LOOK_AHEAD = 4;
+const CHASE_LOOK_HEIGHT = 1.1;
+const CHASE_SMOOTH = 9;
 
 type GameState = 'menu' | 'intro' | 'playing' | 'paused' | 'boss-cinematic' | 'transition' | 'map-intro' | 'win' | 'lose';
 
@@ -79,6 +83,7 @@ export class Game {
   private readonly input: InputManager;
   private readonly weapon: WeaponSystem;
   private readonly enemies: EnemyManager;
+  private readonly enemyAmbience = new EnemyAmbience();
   private readonly npcs: NpcManager;
   private readonly anxiety: AnxietyMeter;
   private readonly hud: HUD;
@@ -105,32 +110,26 @@ export class Game {
   private cheatGodMode = false;
   private lightsaberMode = false;
   private weaponBeforeLightsaber: WeaponId = 'pistol';
-  private catFed = false;
-  private catAnimTime = 0;
-  private catMesh: THREE.Object3D | null = null;
-  private suzyCatMesh: THREE.Object3D | null = null;
-  private suzyAnimTime = 0;
-  private pianoPlayed = false;
-  private pianoInteractArmed = false;
-  private catInteractArmed = false;
-  private altarUsedThisLevel = false;
-  private cakeUsedThisLevel = false;
   private settings: GameSettings = loadSettings();
   private intentionalUnlock = false;
   private extraEnemiesRequired = 0;
   private bossCinematicEnemy: Enemy | null = null;
   private pendingBossPhase: 2 | 3 | null = null;
   private readonly bossCinematicPlayed = new Set<2 | 3>();
-  private weddingChatNpc: 'bride' | 'groom' | null = null;
   private pendingFinalWin = false;
   private finalWinDelay = 0;
+  private flashWarningTimer = 0;
   private consoleResumePointerLock = false;
   private consoleResumePaused = false;
   private readonly waterOverlay: HTMLDivElement;
   private treasureChestMesh: THREE.Object3D | null = null;
-  private treasureDiscovered = false;
   private lamborghiniMesh: THREE.Group | null = null;
   private drivingCar = false;
+  private carCameraChase = true;
+  private chaseCamInitialized = false;
+  private readonly chaseCamPos = new THREE.Vector3();
+  private readonly chaseLookAt = new THREE.Vector3();
+  private readonly chaseIdealPos = new THREE.Vector3();
   private carX = 0;
   private carY = 3.01;
   private carZ = 0;
@@ -141,6 +140,12 @@ export class Game {
   private plasmaTvMesh: THREE.Group | null = null;
   private plasmaTvOn = false;
   private tvSlideshow = new TvSlideshow();
+
+  private readonly interactionHost: InteractionHost;
+  private readonly mapSkip: MapSkipInteractions;
+  private readonly wedding: WeddingInteractions;
+  private readonly bali: BaliInteractions;
+  private readonly dubai: DubaiInteractions;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -155,40 +160,18 @@ export class Game {
     this.lighting = createLighting(this.scene, MAPS[0].atmosphere);
     this.balloons = new BalloonManager();
 
-    this.loadMap(0);
-
     this.input = new InputManager(this.renderer.domElement);
-    this.player = new Player(this.world, this.input, container.clientWidth / container.clientHeight);
-    this.scene.add(this.player.camera);
 
-    this.effects = new ProjectileEffects(this.scene);
-    this.enemyProjectiles = new EnemyProjectileManager(this.scene);
-    this.weapon = new WeaponSystem(this.world, this.effects);
-    this.weapon.setBalloonRaycast((origin, direction, maxDistance) => {
-      if (MAPS[this.mapIndex]?.id !== 'wedding-hall' || !this.balloons.hasRemaining()) return null;
-      return this.balloons.raycastHit(origin, direction, maxDistance);
-    });
     this.audio = new AudioManager();
-
     this.anxiety = new AnxietyMeter();
-    this.enemies = new EnemyManager(this.scene, this.world, {
-      onKilled: (enemy) => this.handleEnemyKilled(enemy),
-      onContact: (enemy, dt) => this.handleEnemyContact(enemy, dt),
-      onFlash: (enemy) => this.handleEnemyFlash(enemy),
-      onBossPhase: (enemy, phase) => this.handleBossPhase(enemy, phase),
-      onBossDeathEffect: (position, kind) => {
-        if (kind === 'fire') this.effects.spawnBossFireBurst(position);
-        else this.effects.spawnBossDustBurst(position);
-      },
-      onShootFireball: (origin, direction, speed, anxietyHit, color) =>
-        this.enemyProjectiles.spawnFireball(origin, direction, speed, anxietyHit, color),
-    });
 
     this.hud = new HUD(container);
     this.dialogue = new DialogueBox(container);
     this.menu = new MenuScreen(container, {
       onStart: () => this.startRun(),
       onRestart: () => this.startRun(),
+      onInteract: () => this.startMenuMusic(),
+      onClick: () => this.playMenuClick(),
     });
     this.pause = new PauseScreen(container, this.settings, {
       onResume: () => this.resumeFromPause(),
@@ -218,6 +201,37 @@ export class Game {
     });
     container.appendChild(this.waterOverlay);
 
+    this.interactionHost = this.createInteractionHost();
+    this.mapSkip = new MapSkipInteractions(this.interactionHost);
+    this.wedding = new WeddingInteractions(this.interactionHost);
+    this.bali = new BaliInteractions(this.interactionHost);
+    this.dubai = new DubaiInteractions(this.interactionHost, this.createDubaiCarHost());
+
+    this.loadMap(0);
+
+    this.player = new Player(this.world, this.input, container.clientWidth / container.clientHeight);
+    this.scene.add(this.player.camera);
+
+    this.effects = new ProjectileEffects(this.scene);
+    this.enemyProjectiles = new EnemyProjectileManager(this.scene);
+    this.weapon = new WeaponSystem(this.world, this.effects);
+    this.weapon.setBalloonRaycast((origin, direction, maxDistance) => {
+      if (MAPS[this.mapIndex]?.id !== 'wedding-hall' || !this.balloons.hasRemaining()) return null;
+      return this.balloons.raycastHit(origin, direction, maxDistance);
+    });
+    this.enemies = new EnemyManager(this.scene, this.world, {
+      onKilled: (enemy) => this.handleEnemyKilled(enemy),
+      onContact: (enemy, dt) => this.handleEnemyContact(enemy, dt),
+      onFlash: (enemy) => this.handleEnemyFlash(enemy),
+      onBossPhase: (enemy, phase) => this.handleBossPhase(enemy, phase),
+      onBossDeathEffect: (position, kind) => {
+        if (kind === 'fire') this.effects.spawnBossFireBurst(position);
+        else this.effects.spawnBossDustBurst(position);
+      },
+      onShootFireball: (origin, direction, speed, anxietyHit, color) =>
+        this.enemyProjectiles.spawnFireball(origin, direction, speed, anxietyHit, color),
+    });
+
     this.levelState = makeLevelState(MAPS[0].levels[0]);
     this.applySettings(this.settings);
     this.player.onFall = () => this.handlePlayerFall();
@@ -227,6 +241,7 @@ export class Game {
     this.input.onLockChange(() => this.handlePointerLockChange());
 
     this.menu.showStart();
+    this.startMenuMusic();
   }
 
   private loadMap(mapIndex: number): void {
@@ -244,17 +259,18 @@ export class Game {
     this.world = new World(mapDef);
     this.worldGroup = this.world.buildMesh();
     this.scene.add(this.worldGroup);
+    this.renderer.setPixelRatio(
+      mapDef.id === 'dubai' ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2),
+    );
     this.addBanner();
     this.addDecorations();
     this.addProps();
     this.npcs.spawnAll(this.world.npcs, this.world);
     this.audio?.setBgm(mapDef.bgm ?? null);
-    this.catFed = false;
-    this.pianoPlayed = false;
-    this.pianoInteractArmed = false;
-    this.catInteractArmed = false;
+    this.mapSkip.resetForMapLoad();
     this.drivingCar = false;
-    this.lamboInteractArmed = false;
+    this.carCameraChase = true;
+    this.chaseCamInitialized = false;
     this.player?.setExternalDrive(false);
     this.player?.setEyeHeightOverride(null);
     if (this.player) this.player.rig.setDrivingMode(false);
@@ -285,31 +301,35 @@ export class Game {
   }
 
   private addProps(): void {
-    this.catMesh = null;
-    this.suzyCatMesh = null;
     this.treasureChestMesh = null;
-    this.treasureDiscovered = false;
+    this.bali.setTreasureDiscovered(false);
     this.plasmaTvMesh = null;
     this.plasmaTvOn = false;
     this.tvSlideshow.dispose();
     this.tvSlideshow = new TvSlideshow();
     this.balloons.clear();
-    if (this.world.props.length === 0) return;
-    const props = buildProps(this.world.props);
-    this.worldGroup.add(props);
-    this.balloons.registerFromScene(props);
-    props.traverse((child) => {
-      if (child.name === 'eating-cat') this.catMesh = child;
-      if (child.name === 'suzy-cat') this.suzyCatMesh = child;
-      if (child.name === 'lamborghini') this.lamborghiniMesh = child as THREE.Group;
-      if (child.name === 'plasma-tv') this.plasmaTvMesh = child as THREE.Group;
-    });
+    if (this.world.props.length > 0) {
+      const props = buildProps(this.world.props);
+      this.worldGroup.add(props);
+      this.balloons.registerFromScene(props);
+      props.traverse((child) => {
+        if (child.name === 'eating-cat') this.mapSkip.setCatMesh(child);
+        if (child.name === 'suzy-cat') this.wedding.setSuzyCatMesh(child);
+        if (child.name === 'lamborghini') this.lamborghiniMesh = child as THREE.Group;
+        if (child.name === 'plasma-tv') this.plasmaTvMesh = child as THREE.Group;
+      });
+    }
+    if (this.world.theaterSeats.length > 0) {
+      this.worldGroup.add(buildTheaterSeats(this.world.theaterSeats));
+    }
     this.setPlasmaTvPower(false);
     this.initLamborghiniFromWorld();
   }
 
   private initLamborghiniFromWorld(): void {
     this.drivingCar = false;
+    this.carCameraChase = true;
+    this.chaseCamInitialized = false;
     this.lamboInteractArmed = false;
     this.carSpeed = 0;
     this.carPitch = CAR_DEFAULT_PITCH;
@@ -362,9 +382,14 @@ export class Game {
     this.audio.setMuted(this.settings.muted);
     this.audio.setSfxVolume(this.settings.sfxVolume);
     this.audio.setMusicVolume(this.settings.musicVolume);
-    if (!this.settings.muted && (this.state === 'playing' || this.state === 'paused')) {
-      const bgm = MAPS[this.mapIndex]?.bgm ?? null;
-      if (bgm) this.audio.setBgm(bgm);
+    this.hud.setMuted(this.settings.muted);
+    if (!this.settings.muted) {
+      if (this.state === 'menu') {
+        this.audio.setBgm('menu-peace');
+      } else if (this.state === 'playing' || this.state === 'paused') {
+        const bgm = MAPS[this.mapIndex]?.bgm ?? null;
+        if (bgm) this.audio.setBgm(bgm);
+      }
     }
     if (this.pause.isVisible()) this.pause.show(this.settings);
   }
@@ -394,6 +419,35 @@ export class Game {
     this.enemies.clear();
     this.npcs.clear();
     this.menu.showStart(this.score > 0 ? this.score : undefined);
+    this.startMenuMusic();
+  }
+
+  private startMenuMusic(): void {
+    this.audio.ensureStarted();
+    if (!this.settings.muted) {
+      this.audio.setBgm('menu-peace');
+    }
+  }
+
+  private playMenuClick(): void {
+    this.audio.ensureStarted();
+    this.audio.play('ui-click');
+  }
+
+  private resumeBgmAfterUnmute(): void {
+    if (this.state === 'menu') {
+      this.audio.setBgm('menu-peace');
+      return;
+    }
+    if (this.state !== 'playing' && this.state !== 'paused') return;
+
+    if (MAPS[this.mapIndex]?.id === 'wedding-hall' && this.levelState.phase === 'celebration') {
+      this.audio.setBgm('wedding-celebration');
+      return;
+    }
+
+    const bgm = MAPS[this.mapIndex]?.bgm ?? null;
+    if (bgm) this.audio.setBgm(bgm);
   }
 
   private handlePlayerFall(): void {
@@ -405,12 +459,13 @@ export class Game {
   }
 
   private toggleMute(): void {
+    this.audio.ensureStarted();
     this.settings.muted = this.audio.toggleMuted();
     saveSettings(this.settings);
+    this.hud.setMuted(this.settings.muted);
     if (this.pause.isVisible()) this.pause.show(this.settings);
-    const currentBgm = MAPS[this.mapIndex]?.bgm ?? null;
-    if (!this.settings.muted && currentBgm && this.state === 'playing') {
-      this.audio.setBgm(currentBgm);
+    if (!this.settings.muted) {
+      this.resumeBgmAfterUnmute();
     }
   }
 
@@ -431,6 +486,13 @@ export class Game {
 
   private update(dt: number): void {
     if (this.commandConsole.isOpen()) return;
+
+    if (
+      (this.state === 'menu' || this.state === 'playing' || this.state === 'paused') &&
+      this.input.consumeMute()
+    ) {
+      this.toggleMute();
+    }
 
     const active = this.state === 'playing' && this.input.isLocked();
 
@@ -457,11 +519,15 @@ export class Game {
       if (this.input.consumePause()) {
         this.enterPause();
       }
-      if (this.input.consumeMute()) {
-        this.toggleMute();
-      }
 
       this.enemies.update(dt, this.player.position);
+      this.enemyAmbience.tick(
+        dt,
+        this.enemies.enemies,
+        this.player.position,
+        this.audio,
+        this.state === 'playing' && this.levelState.phase !== 'celebration',
+      );
       this.npcs.update(dt, this.world, this.world.interactables);
       this.enemyProjectiles.update(dt, this.player.position, this.world, (amount) => {
         this.anxiety.add(amount);
@@ -470,16 +536,21 @@ export class Game {
       });
       this.anxiety.update(dt, true);
       this.tickLevel(dt);
-      this.tickMapSkipHint();
-      this.tickCatInteraction(dt);
-      this.tickPianoInteraction();
-      this.tickAltarInteraction();
-      this.tickWeddingNpcInteraction();
-      this.tickDubaiExploreInteraction();
+      this.mapSkip.tickMapSkipHint();
+      this.mapSkip.tickCat(dt);
+      this.mapSkip.tickPiano();
+      this.wedding.tickAltar();
+      this.wedding.tickWeddingNpc();
+      this.dubai.tickExplore();
       if (this.plasmaTvOn) this.tvSlideshow.update(dt);
-      this.tickSuzyCatInteraction(dt);
-      this.tickCakeInteraction();
-      this.tickBaliTreasureInteraction();
+      this.wedding.tickSuzyCat(dt);
+      this.wedding.tickCake();
+      this.bali.tickTreasure(this.treasureChestMesh !== null);
+
+      if (this.flashWarningTimer > 0) {
+        this.flashWarningTimer -= dt;
+        if (this.flashWarningTimer <= 0) this.hud.setSubtitle([]);
+      }
 
       if (active && this.levelState.phase !== 'celebration') {
         if (!this.lightsaberMode) {
@@ -500,10 +571,12 @@ export class Game {
       ) {
         const origin = this.player.getEyePosition();
         const dir = this.player.getAimDirection();
+        const muzzle = this.player.rig.getMuzzleWorldPosition();
         const result = this.weapon.fire(
           this.activeWeapon,
           origin,
           dir,
+          muzzle,
           this.enemies.enemies,
           {
             onBossPhase: (enemy, phase) => this.handleBossPhase(enemy, phase),
@@ -541,13 +614,18 @@ export class Game {
       });
     }
 
+    const mapDef = MAPS[this.mapIndex];
+    const exploreMode =
+      mapDef.explorationOnly || this.levelState.phase === 'celebration' || this.drivingCar;
+
     this.hud.update({
+      mode: exploreMode ? 'explore' : 'combat',
       anxietyPercent: this.anxiety.percent,
-      mapName: MAPS[this.mapIndex].displayName,
+      mapName: mapDef.shortName,
       mapIndex: this.mapIndex + 1,
       totalMaps: MAPS.length,
       level: this.levelIndex + 1,
-      totalLevels: MAPS[this.mapIndex].levels.length,
+      totalLevels: mapDef.levels.length,
       overallStage: this.stagesCleared + 1,
       totalStages: totalLevelCount(),
       score: this.score,
@@ -555,425 +633,14 @@ export class Game {
         0,
         this.levelState.level.totalEnemies + this.extraEnemiesRequired - this.levelState.killedTotal,
       ),
-      reloadRatio: this.weapon.cooldownRatio(),
+      reloadRatio: exploreMode ? 0 : this.weapon.cooldownRatio(),
       weaponName: this.player.rig.isCelebrationMode()
         ? HUD_LABELS.bouquet
         : this.player.rig.isMoneyMode()
           ? HUD_LABELS.money
           : WEAPONS[this.activeWeapon].displayName,
-      bossHpRatio: this.getBossHpRatio(),
-    });
-  }
-
-  private tickMapSkipHint(): void {
-    if (this.levelState.phase !== 'awaiting-map-skip') return;
-
-    const mapId = MAPS[this.mapIndex].id;
-    const piano = this.world.interactables.find((item) => item.kind === 'piano');
-    const cat = this.world.interactables.find((item) => item.kind === 'cat');
-
-    if (mapId === 'concert-hall' && piano && this.isNearInteractable(piano)) {
-      this.hud.setSubtitle([]);
-      return;
-    }
-    if (mapId === 'lighthouse' && cat && this.isNearInteractable(cat)) {
-      this.hud.setSubtitle([]);
-      return;
-    }
-
-    if (mapId === 'concert-hall') {
-      this.hud.setSubtitle([PIANO_PLAY_MESSAGES.mapSkipHint]);
-    } else if (mapId === 'lighthouse') {
-      this.hud.setSubtitle([CAT_FEED_MESSAGES.mapSkipHint]);
-    }
-  }
-
-  private canUseMapSkipInteractable(): boolean {
-    const phase = this.levelState.phase;
-    return phase === 'active' || phase === 'awaiting-map-skip';
-  }
-
-  private tickCatInteraction(dt: number): void {
-    if (this.catMesh) {
-      this.catAnimTime += dt;
-      updateEatingCat(this.catMesh, this.catAnimTime);
-    }
-
-    if (this.catFed || !this.input.isLocked() || !this.canUseMapSkipInteractable()) {
-      if (!this.catFed) return;
-      this.hud.setInteractPrompt(null);
-      return;
-    }
-
-    const cat = this.world.interactables.find((item) => item.kind === 'cat');
-    if (!cat) return;
-
-    const near = this.isNearInteractable(cat);
-
-    if (!near) {
-      this.catInteractArmed = false;
-      this.input.flushInteract();
-      this.hud.setInteractPrompt(null);
-      return;
-    }
-
-    this.hud.setInteractPrompt(CAT_FEED_MESSAGES.prompt);
-    this.hud.setSubtitle([]);
-
-    if (!this.catInteractArmed) {
-      this.catInteractArmed = true;
-      this.input.flushInteract();
-      return;
-    }
-
-    if (this.input.consumeInteract()) {
-      this.feedCatAndAdvance();
-    }
-  }
-
-  private feedCatAndAdvance(): void {
-    if (this.catFed) return;
-    this.catFed = true;
-    this.enemies.clear();
-    this.state = 'transition';
-    this.intentionalUnlock = true;
-    this.input.releasePointerLock();
-    this.hud.setCrosshairVisible(false);
-    this.hud.setInteractPrompt(null);
-    this.hud.setSubtitle([]);
-    this.anxiety.reduce(20);
-
-    this.dialogue.show({
-      title: CAT_FEED_MESSAGES.title,
-      body: CAT_FEED_MESSAGES.body,
-      continueLabel: CAT_FEED_MESSAGES.button,
-      onContinue: () => this.advanceStageAfterSkip(),
-    });
-  }
-
-  private tickAltarInteraction(): void {
-    if (this.altarUsedThisLevel || !this.input.isLocked()) return;
-    if (this.levelState.phase === 'celebration') return;
-
-    const altar = this.world.interactables.find((item) => item.kind === 'altar');
-    if (!altar || !this.isNearInteractable(altar)) return;
-
-    this.hud.setInteractPrompt(ALTAR_MESSAGES.prompt);
-
-    if (this.input.consumeInteract()) {
-      this.useAltarBreather();
-    }
-  }
-
-  private useAltarBreather(): void {
-    if (this.altarUsedThisLevel) return;
-    this.altarUsedThisLevel = true;
-    this.anxiety.reduce(15);
-    this.hud.setInteractPrompt(null);
-    this.intentionalUnlock = true;
-    this.input.releasePointerLock();
-    this.dialogue.show({
-      title: ALTAR_MESSAGES.title,
-      body: ALTAR_MESSAGES.body,
-      continueLabel: 'Devam Et',
-      onContinue: () => {
-        if (this.state === 'playing') this.input.requestPointerLock();
-      },
-    });
-  }
-
-  private tickCakeInteraction(): void {
-    if (this.cakeUsedThisLevel || !this.input.isLocked()) return;
-
-    const cake = this.world.interactables.find((item) => item.kind === 'cake');
-    if (!cake || !this.isNearInteractable(cake)) return;
-
-    this.hud.setInteractPrompt(CAKE_MESSAGES.prompt);
-
-    if (this.input.consumeInteract()) {
-      this.useCakeBoost();
-    }
-  }
-
-  private useCakeBoost(): void {
-    if (this.cakeUsedThisLevel) return;
-    this.cakeUsedThisLevel = true;
-    this.anxiety.freezeRise(CAKE_BUFF_DURATION);
-    this.player.applySpeedBoost(CAKE_BUFF_DURATION);
-    this.hud.setInteractPrompt(null);
-    this.intentionalUnlock = true;
-    this.input.releasePointerLock();
-    this.dialogue.show({
-      title: CAKE_MESSAGES.title,
-      body: CAKE_MESSAGES.body,
-      continueLabel: 'Devam Et',
-      onContinue: () => {
-        if (this.state === 'playing') this.input.requestPointerLock();
-      },
-    });
-  }
-
-  private getSuzyInteractPoint(): { x: number; z: number; radius: number } | null {
-    if (this.suzyCatMesh) {
-      const pos = new THREE.Vector3();
-      this.suzyCatMesh.getWorldPosition(pos);
-      const suzy = this.world.interactables.find((item) => item.kind === 'suzy-cat');
-      return { x: pos.x, z: pos.z, radius: suzy?.radius ?? 2.2 };
-    }
-    const suzy = this.world.interactables.find((item) => item.kind === 'suzy-cat');
-    return suzy ? { x: suzy.x, z: suzy.z, radius: suzy.radius ?? 2.2 } : null;
-  }
-
-  private tickSuzyCatInteraction(dt: number): void {
-    if (this.suzyCatMesh) {
-      this.suzyAnimTime += dt;
-      updateSuzyCatIdle(this.suzyCatMesh, this.suzyAnimTime);
-    }
-
-    if (!this.input.isLocked() || MAPS[this.mapIndex].id !== 'wedding-hall') return;
-
-    const suzy = this.getSuzyInteractPoint();
-    if (!suzy || !this.isNearInteractable(suzy)) return;
-
-    // Gelin/damada daha yakınsak Suzy prompt'unu gösterme.
-    if (this.levelState.phase === 'celebration') {
-      const suzyDist = Math.hypot(this.player.position.x - suzy.x, this.player.position.z - suzy.z);
-      const groom = this.world.interactables.find((item) => item.kind === 'groom-chat');
-      const bride = this.world.interactables.find((item) => item.kind === 'bride-chat');
-      const groomDist =
-        groom && this.isNearInteractable(groom)
-          ? Math.hypot(this.player.position.x - groom.x, this.player.position.z - groom.z)
-          : Infinity;
-      const brideDist =
-        bride && this.isNearInteractable(bride)
-          ? Math.hypot(this.player.position.x - bride.x, this.player.position.z - bride.z)
-          : Infinity;
-      if (Math.min(groomDist, brideDist) <= suzyDist) return;
-    }
-
-    this.hud.setInteractPrompt(SUZY_CAT_MESSAGES.prompt);
-
-    if (this.input.consumeInteract()) {
-      this.petSuzyCat();
-    }
-  }
-
-  private petSuzyCat(): void {
-    if (!this.suzyCatMesh) return;
-
-    const dx = this.player.position.x - this.suzyCatMesh.position.x;
-    const dz = this.player.position.z - this.suzyCatMesh.position.z;
-    this.suzyCatMesh.rotation.y = Math.atan2(dx, dz);
-
-    const heartOrigin = new THREE.Vector3();
-    this.suzyCatMesh.getWorldPosition(heartOrigin);
-    heartOrigin.y += 0.38;
-    this.effects.spawnFloatingHearts(heartOrigin);
-    this.audio.play('meow');
-  }
-
-  private tickWeddingNpcInteraction(): void {
-    if (MAPS[this.mapIndex].id !== 'wedding-hall' || !this.input.isLocked()) {
-      this.hud.setSubtitle([]);
-      return;
-    }
-
-    const phase = this.levelState.phase;
-    if (phase === 'celebration') {
-      this.tickWeddingCelebrationInteraction();
-      return;
-    }
-
-    if (phase !== 'active') {
-      this.hud.setSubtitle([]);
-      return;
-    }
-
-    const allSpawned = this.levelState.batchIndex >= this.levelState.level.batches.length;
-    const enemiesRemain = !allSpawned || this.enemies.aliveCount() > 0;
-    if (!enemiesRemain) {
-      this.hud.setSubtitle([]);
-      return;
-    }
-
-    const groom = this.world.interactables.find((item) => item.kind === 'groom-chat');
-    const bride = this.world.interactables.find((item) => item.kind === 'bride-chat');
-    const lines: string[] = [];
-
-    if (groom && this.isNearInteractable(groom)) {
-      lines.push(`${NPC_STATS.groom.displayName}: ${WEDDING_NPC_MESSAGES.groomStressed}`);
-    }
-    if (bride && this.isNearInteractable(bride)) {
-      lines.push(`${NPC_STATS.bride.displayName}: ${WEDDING_NPC_MESSAGES.brideStressed}`);
-    }
-
-    this.hud.setSubtitle(lines);
-  }
-
-  private tickWeddingCelebrationInteraction(): void {
-    this.hud.setSubtitle([]);
-
-    const groom = this.world.interactables.find((item) => item.kind === 'groom-chat');
-    const bride = this.world.interactables.find((item) => item.kind === 'bride-chat');
-    const suzy = this.getSuzyInteractPoint();
-    const nearGroom = groom ? this.isNearInteractable(groom) : false;
-    const nearBride = bride ? this.isNearInteractable(bride) : false;
-    const nearSuzy = suzy ? this.isNearInteractable(suzy) : false;
-
-    if (!nearGroom && !nearBride) {
-      // Pasta / Suzy kendi prompt'unu ayarlasın; burada silme.
-      const cake = this.world.interactables.find((item) => item.kind === 'cake');
-      const nearCake = cake ? this.isNearInteractable(cake) : false;
-      if (!nearSuzy && !nearCake) this.hud.setInteractPrompt(null);
-      return;
-    }
-
-    const groomDist = nearGroom && groom
-      ? Math.hypot(this.player.position.x - groom.x, this.player.position.z - groom.z)
-      : Infinity;
-    const brideDist = nearBride && bride
-      ? Math.hypot(this.player.position.x - bride.x, this.player.position.z - bride.z)
-      : Infinity;
-    const suzyDist = nearSuzy && suzy
-      ? Math.hypot(this.player.position.x - suzy.x, this.player.position.z - suzy.z)
-      : Infinity;
-
-    // Suzy daha yakınsa sohbet prompt'unu dayatma.
-    if (suzyDist < Math.min(groomDist, brideDist)) return;
-
-    let target: 'bride' | 'groom' | null = null;
-    if (nearGroom && nearBride) {
-      target = groomDist <= brideDist ? 'groom' : 'bride';
-    } else if (nearGroom) {
-      target = 'groom';
-    } else if (nearBride) {
-      target = 'bride';
-    }
-
-    if (target === 'groom') {
-      this.hud.setInteractPrompt(WEDDING_NPC_MESSAGES.groomChatPrompt);
-    } else if (target === 'bride') {
-      this.hud.setInteractPrompt(WEDDING_NPC_MESSAGES.brideChatPrompt);
-    }
-
-    if (this.input.consumeInteract() && target) {
-      this.weddingChatNpc = target;
-      this.openWeddingChatChoices();
-    }
-  }
-
-  private openWeddingChatChoices(): void {
-    const npc = this.weddingChatNpc;
-    if (!npc) return;
-
-    this.intentionalUnlock = true;
-    this.input.releasePointerLock();
-    this.hud.setInteractPrompt(null);
-    this.hud.setCrosshairVisible(false);
-
-    this.dialogue.showChoices({
-      title: WEDDING_NPC_MESSAGES.choiceTitle,
-      speaker: NPC_STATS[npc].displayName,
-      choices: [
-        { id: 'a', label: WEDDING_NPC_MESSAGES.choices[npc].a },
-        { id: 'b', label: WEDDING_NPC_MESSAGES.choices[npc].b },
-        { id: 'c', label: WEDDING_NPC_MESSAGES.choices[npc].c },
-      ],
-      onChoose: (id) => this.showWeddingChatResponse(npc, id),
-    });
-  }
-
-  private showWeddingChatResponse(npc: 'bride' | 'groom', choice: 'a' | 'b' | 'c'): void {
-    const body = WEDDING_NPC_MESSAGES.responses[npc][choice];
-    this.dialogue.show({
-      title: NPC_STATS[npc].displayName,
-      body,
-      continueLabel: choice === 'c' ? 'Bali\'ye Git' : 'Devam Et',
-      onContinue: () => {
-        this.weddingChatNpc = null;
-        if (choice === 'c') {
-          this.transitionToBaliHoneymoon();
-          return;
-        }
-        if (this.state === 'playing' && this.levelState.phase === 'celebration') {
-          this.hud.setCrosshairVisible(true);
-          this.input.requestPointerLock();
-        }
-      },
-    });
-  }
-
-  private transitionToBaliHoneymoon(): void {
-    const baliIndex = MAPS.findIndex((map) => map.id === 'bali');
-    if (baliIndex < 0) return;
-
-    this.dialogue.hide();
-    this.player.rig.setCelebrationMode(false);
-    this.anxiety.unlock();
-    this.anxiety.reduce(40);
-    this.mapIndex = baliIndex;
-    this.levelIndex = 0;
-    this.loadMap(baliIndex);
-    this.player.respawn();
-    this.hud.show();
-    this.beginLevel(baliIndex, 0);
-  }
-
-  private isNearInteractable(item: { x: number; z: number; radius?: number }): boolean {
-    const dx = this.player.position.x - item.x;
-    const dz = this.player.position.z - item.z;
-    return Math.sqrt(dx * dx + dz * dz) <= (item.radius ?? 2.5);
-  }
-
-  private tickPianoInteraction(): void {
-    if (this.pianoPlayed || !this.input.isLocked() || !this.canUseMapSkipInteractable()) return;
-
-    const piano = this.world.interactables.find((item) => item.kind === 'piano');
-    if (!piano) return;
-
-    const near = this.isNearInteractable(piano);
-
-    if (!near) {
-      this.pianoInteractArmed = false;
-      this.input.flushInteract();
-      if (!this.world.interactables.some((i) => i.kind === 'cat')) {
-        this.hud.setInteractPrompt(null);
-      }
-      return;
-    }
-
-    this.hud.setInteractPrompt(PIANO_PLAY_MESSAGES.prompt);
-    this.hud.setSubtitle([]);
-
-    if (!this.pianoInteractArmed) {
-      this.pianoInteractArmed = true;
-      this.input.flushInteract();
-      return;
-    }
-
-    if (this.input.consumeInteract()) {
-      this.playPianoAndAdvance();
-    }
-  }
-
-  private playPianoAndAdvance(): void {
-    if (this.pianoPlayed) return;
-    this.pianoPlayed = true;
-    this.enemies.clear();
-    this.state = 'transition';
-    this.intentionalUnlock = true;
-    this.input.releasePointerLock();
-    this.hud.setCrosshairVisible(false);
-    this.hud.setInteractPrompt(null);
-    this.hud.setSubtitle([]);
-    this.anxiety.reduce(25);
-    this.audio.play('wave-clear');
-
-    this.dialogue.show({
-      title: PIANO_PLAY_MESSAGES.title,
-      body: PIANO_PLAY_MESSAGES.body,
-      continueLabel: PIANO_PLAY_MESSAGES.button,
-      onContinue: () => this.advanceStageAfterSkip(),
+      bossHpRatio: exploreMode ? null : this.getBossHpRatio(),
+      bossLabel: ENEMY_STATS['beklenti-golgesi'].displayName,
     });
   }
 
@@ -984,16 +651,14 @@ export class Game {
     // Count remaining levels in this map as cleared (including the current one)
     const levelsLeftInMap = currentMap.levels.length - this.levelIndex;
     this.stagesCleared += levelsLeftInMap;
-    this.pianoPlayed = false;
-    this.catFed = false;
-    this.pianoInteractArmed = false;
-    this.catInteractArmed = false;
+    this.mapSkip.resetSkipFlagsAfterAdvance();
 
     if (isLastMap) {
       this.transitionToWin();
       return;
     }
 
+    const fromMapId = currentMap.id;
     this.mapIndex += 1;
     this.levelIndex = 0;
     this.loadMap(this.mapIndex);
@@ -1004,9 +669,9 @@ export class Game {
     this.state = 'map-intro';
     this.dialogue.show({
       title: `Yeni Harita: ${nextMap.displayName}`,
-      body: nextMap.description,
+      body: this.buildMapIntroBody(nextMap, fromMapId),
       continueLabel: 'Yolculuğa Başla',
-      onContinue: () => this.beginLevel(this.mapIndex, 0),
+      onContinue: () => this.beginLevel(this.mapIndex, 0, { skipDialogue: true }),
     });
   }
 
@@ -1053,16 +718,6 @@ export class Game {
         this.pendingFinalWin = true;
         this.finalWinDelay = 5;
         this.confetti.show();
-        return;
-      }
-
-      const isMapSkipMap =
-        currentMap.id === 'concert-hall' || currentMap.id === 'lighthouse';
-      const isLastLevelInMap = this.levelIndex >= currentMap.levels.length - 1;
-
-      if (isMapSkipMap && isLastLevelInMap) {
-        s.phase = 'awaiting-map-skip';
-        this.audio.play('wave-clear');
         return;
       }
 
@@ -1140,9 +795,6 @@ export class Game {
 
   private applyCheat(cheatId: CheatId): CommandSubmitResult {
     switch (cheatId) {
-      case 'happilymarried':
-        this.teleportToWeddingEpilogue();
-        return null;
       case 'nefesal':
         this.anxiety.reset();
         return null;
@@ -1177,6 +829,8 @@ export class Game {
         return this.teleportToMap('concert-hall', 0);
       case 'denizfeneri':
         return this.teleportToMap('lighthouse', 0);
+      case 'dugunsalonu':
+        return this.teleportToMap('wedding-hall', 0);
       case 'bali':
         return this.teleportToMap('bali', 0);
       case 'dubai':
@@ -1255,7 +909,6 @@ export class Game {
     this.finalWinDelay = 0;
     this.pendingBossPhase = null;
     this.bossCinematicEnemy = null;
-    this.weddingChatNpc = null;
     this.extraEnemiesRequired = 0;
     this.bossCinematicPlayed.clear();
     this.confetti.hide();
@@ -1278,44 +931,11 @@ export class Game {
     return null;
   }
 
-  private teleportToWeddingEpilogue(): void {
-    this.audio.ensureStarted();
-    const weddingMapIndex = MAPS.findIndex((map) => map.id === 'wedding-hall');
-    if (weddingMapIndex < 0) return;
-
-    this.pendingFinalWin = false;
-    this.finalWinDelay = 0;
-    this.pendingBossPhase = null;
-    this.bossCinematicEnemy = null;
-    this.weddingChatNpc = null;
-    this.extraEnemiesRequired = 0;
-    this.bossCinematicPlayed.clear();
-    this.confetti.hide();
-    this.bossCinematic.hide();
-    this.dialogue.hide();
-    this.menu.hide();
-    this.pause.hide();
-    this.consoleResumePointerLock = false;
-    this.consoleResumePaused = false;
-
-    this.mapIndex = weddingMapIndex;
-    this.levelIndex = MAPS[weddingMapIndex].levels.length - 1;
-    this.stagesCleared = totalLevelCount();
-    this.loadMap(weddingMapIndex);
-    this.levelState = makeLevelState(MAPS[weddingMapIndex].levels[this.levelIndex]);
-    this.enemies.clear();
-    this.enemyProjectiles.clear();
-    this.anxiety.lockAtZero();
-    this.player.respawn();
-    this.hud.show();
-    this.enterWeddingEpilogue();
-  }
-
   private enterWeddingEpilogue(): void {
     this.menu.hide();
     this.state = 'playing';
     this.levelState.phase = 'celebration';
-    this.cakeUsedThisLevel = false;
+    this.wedding.resetForLevel();
     this.player.rig.setCelebrationMode(true);
     this.hud.show();
     this.hud.setCrosshairVisible(false);
@@ -1348,7 +968,7 @@ export class Game {
     this.menu.hide();
     this.state = 'playing';
     this.levelState.phase = 'celebration';
-    this.treasureDiscovered = false;
+    this.bali.setTreasureDiscovered(false);
     this.player.rig.setCelebrationMode(false);
     this.hud.show();
     this.hud.setCrosshairVisible(true);
@@ -1390,46 +1010,6 @@ export class Game {
     }
   }
 
-  private tickBaliTreasureInteraction(): void {
-    if (
-      MAPS[this.mapIndex].id !== 'bali' ||
-      this.levelState.phase !== 'celebration' ||
-      !this.input.isLocked() ||
-      this.treasureDiscovered ||
-      !this.treasureChestMesh
-    ) {
-      return;
-    }
-
-    const chest = this.world.interactables.find((item) => item.kind === 'treasure-chest');
-    if (!chest || !this.isNearInteractable(chest)) {
-      this.hud.setInteractPrompt(null);
-      return;
-    }
-
-    this.hud.setInteractPrompt(BALI_TREASURE_MESSAGES.prompt);
-
-    if (this.input.consumeInteract()) {
-      this.discoverBaliTreasure();
-    }
-  }
-
-  private discoverBaliTreasure(): void {
-    this.treasureDiscovered = true;
-    this.hud.setInteractPrompt(null);
-    this.intentionalUnlock = true;
-    this.input.releasePointerLock();
-    this.hud.setCrosshairVisible(false);
-    this.audio.play('win');
-
-    this.dialogue.show({
-      title: BALI_TREASURE_MESSAGES.title,
-      body: BALI_TREASURE_MESSAGES.body,
-      continueLabel: BALI_TREASURE_MESSAGES.continueLabel,
-      onContinue: () => this.transitionToDubai(),
-    });
-  }
-
   private transitionToDubai(): void {
     const dubaiIndex = MAPS.findIndex((map) => map.id === 'dubai');
     if (dubaiIndex < 0) return;
@@ -1446,107 +1026,6 @@ export class Game {
     this.beginLevel(dubaiIndex, 0);
   }
 
-  private tickDubaiExploreInteraction(): void {
-    if (MAPS[this.mapIndex].id !== 'dubai' || !this.input.isLocked()) {
-      return;
-    }
-    if (this.levelState.phase !== 'celebration') return;
-
-    if (this.drivingCar) {
-      this.hud.setSubtitle([]);
-      this.hud.setInteractPrompt(LAMBO_DRIVE_MESSAGES.exitPrompt);
-      if (this.input.consumeInteract()) this.exitCarDrive();
-      return;
-    }
-
-    this.hud.setSubtitle([]);
-
-    const lambo = this.world.interactables.find((item) => item.kind === 'lamborghini-drive');
-    const groom = this.world.interactables.find((item) => item.kind === 'groom-chat');
-    const bride = this.world.interactables.find((item) => item.kind === 'bride-chat');
-    const tv = this.world.interactables.find((item) => item.kind === 'plasma-tv');
-    const nearestLocal = this.findNearestDubaiLocal();
-    const nearLambo = lambo ? this.isNearInteractable(lambo) : false;
-    const nearGroom = groom ? this.isNearInteractable(groom) : false;
-    const nearBride = bride ? this.isNearInteractable(bride) : false;
-    const nearTv = tv ? this.isNearInteractable(tv) : false;
-    const nearLocal = nearestLocal !== null;
-
-    if (!nearLambo && !nearGroom && !nearBride && !nearLocal && !nearTv) {
-      this.lamboInteractArmed = false;
-      this.hud.setInteractPrompt(null);
-      return;
-    }
-
-    const lamboDist =
-      nearLambo && lambo
-        ? Math.hypot(this.player.position.x - lambo.x, this.player.position.z - lambo.z)
-        : Infinity;
-    const groomDist =
-      nearGroom && groom
-        ? Math.hypot(this.player.position.x - groom.x, this.player.position.z - groom.z)
-        : Infinity;
-    const brideDist =
-      nearBride && bride
-        ? Math.hypot(this.player.position.x - bride.x, this.player.position.z - bride.z)
-        : Infinity;
-    const localDist = nearestLocal?.dist ?? Infinity;
-    const tvDist =
-      nearTv && tv ? Math.hypot(this.player.position.x - tv.x, this.player.position.z - tv.z) : Infinity;
-
-    const closest = Math.min(lamboDist, groomDist, brideDist, localDist, tvDist);
-    if (closest === lamboDist && nearLambo) {
-      this.hud.setInteractPrompt(LAMBO_DRIVE_MESSAGES.prompt);
-      if (!this.lamboInteractArmed) {
-        this.lamboInteractArmed = true;
-        this.input.flushInteract();
-        return;
-      }
-      if (this.input.consumeInteract()) this.enterCarDrive();
-      return;
-    }
-
-    this.lamboInteractArmed = false;
-
-    if (closest === tvDist && nearTv) {
-      this.hud.setInteractPrompt(this.plasmaTvOn ? TV_MESSAGES.turnOff : TV_MESSAGES.turnOn);
-      if (this.input.consumeInteract()) this.setPlasmaTvPower(!this.plasmaTvOn);
-      return;
-    }
-
-    if (closest === localDist && nearestLocal) {
-      const prompt =
-        nearestLocal.kind === 'camel-chat'
-          ? DUBAI_LOCAL_MESSAGES.camelPrompt
-          : DUBAI_LOCAL_MESSAGES.arabPrompt;
-      this.hud.setInteractPrompt(prompt);
-      if (this.input.consumeInteract()) {
-        this.openDubaiLocalChat(nearestLocal.kind, nearestLocal.speakerName);
-      }
-      return;
-    }
-
-    let target: 'bride' | 'groom' | null = null;
-    if (nearGroom && nearBride) {
-      target = groomDist <= brideDist ? 'groom' : 'bride';
-    } else if (nearGroom) {
-      target = 'groom';
-    } else if (nearBride) {
-      target = 'bride';
-    }
-
-    if (target === 'groom') {
-      this.hud.setInteractPrompt(DUBAI_NPC_MESSAGES.groomChatPrompt);
-    } else if (target === 'bride') {
-      this.hud.setInteractPrompt(DUBAI_NPC_MESSAGES.brideChatPrompt);
-    }
-
-    if (this.input.consumeInteract() && target) {
-      this.weddingChatNpc = target;
-      this.openDubaiChatChoices();
-    }
-  }
-
   private setPlasmaTvPower(on: boolean): void {
     this.plasmaTvOn = on;
     if (!this.plasmaTvMesh) return;
@@ -1561,51 +1040,50 @@ export class Game {
     }
   }
 
-  private findNearestDubaiLocal(): {
-    kind: 'camel-chat' | 'arab-chat';
-    dist: number;
-    speakerName: string;
-  } | null {
-    let best: { kind: 'camel-chat' | 'arab-chat'; dist: number; speakerName: string } | null = null;
-    for (const item of this.world.interactables) {
-      if (item.kind !== 'camel-chat' && item.kind !== 'arab-chat') continue;
-      if (!this.isNearInteractable(item)) continue;
-      const dist = Math.hypot(this.player.position.x - item.x, this.player.position.z - item.z);
-      if (!best || dist < best.dist) {
-        best = {
-          kind: item.kind,
-          dist,
-          speakerName:
-            item.speakerName ??
-            (item.kind === 'camel-chat' ? NPC_STATS.camel.displayName : NPC_STATS['arab-man'].displayName),
-        };
-      }
-    }
-    return best;
+  private drivingInteractPrompt(): string {
+    return `${LAMBO_DRIVE_MESSAGES.exitPrompt}  ·  ${LAMBO_DRIVE_MESSAGES.cameraToggle}`;
   }
 
-  private openDubaiLocalChat(kind: 'camel-chat' | 'arab-chat', speakerName: string): void {
-    this.intentionalUnlock = true;
-    this.input.releasePointerLock();
-    this.hud.setInteractPrompt(null);
-    this.hud.setCrosshairVisible(false);
+  private applyCarCameraMode(): void {
+    if (this.carCameraChase) {
+      this.player.setEyeHeightOverride(null);
+      this.setCabinOccludersVisible(true);
+      this.player.rig.setDrivingMode(true, 'chase');
+      this.chaseCamInitialized = false;
+    } else {
+      this.carPitch = CAR_DEFAULT_PITCH;
+      this.player.setEyeHeightOverride(CAR_EYE_HEIGHT);
+      this.setCabinOccludersVisible(false);
+      this.player.rig.setDrivingMode(true, 'fps');
+      this.player.position.set(this.carX, this.carY, this.carZ);
+      this.player.setViewAngles(this.carYaw, this.carPitch);
+    }
+  }
 
-    const lines = DUBAI_LOCAL_MESSAGES.lines;
-    const body = lines[Math.floor(Math.random() * lines.length)] ?? lines[0];
-    const title =
-      kind === 'camel-chat' ? `${speakerName} 🐪` : speakerName;
+  private updateChaseCamera(dt: number): void {
+    // Forward is (-sin(yaw), 0, -cos(yaw)); camera sits behind + above the car.
+    this.chaseIdealPos.set(
+      this.carX + Math.sin(this.carYaw) * CHASE_DISTANCE,
+      this.carY + CHASE_HEIGHT,
+      this.carZ + Math.cos(this.carYaw) * CHASE_DISTANCE,
+    );
 
-    this.dialogue.show({
-      title,
-      body: body.replace(/\n/g, '<br/>'),
-      continueLabel: DUBAI_LOCAL_MESSAGES.continueLabel,
-      onContinue: () => {
-        if (this.state === 'playing' && this.levelState.phase === 'celebration') {
-          this.hud.setCrosshairVisible(false);
-          this.input.requestPointerLock();
-        }
-      },
-    });
+    if (!this.chaseCamInitialized) {
+      this.chaseCamPos.copy(this.chaseIdealPos);
+      this.chaseCamInitialized = true;
+    } else {
+      const t = 1 - Math.exp(-CHASE_SMOOTH * dt);
+      this.chaseCamPos.lerp(this.chaseIdealPos, t);
+    }
+
+    this.chaseLookAt.set(
+      this.carX - Math.sin(this.carYaw) * CHASE_LOOK_AHEAD,
+      this.carY + CHASE_LOOK_HEIGHT,
+      this.carZ - Math.cos(this.carYaw) * CHASE_LOOK_AHEAD,
+    );
+
+    this.player.camera.position.copy(this.chaseCamPos);
+    this.player.camera.lookAt(this.chaseLookAt);
   }
 
   private enterCarDrive(): void {
@@ -1613,15 +1091,14 @@ export class Game {
     this.drivingCar = true;
     this.carSpeed = 0;
     this.carPitch = CAR_DEFAULT_PITCH;
+    this.carCameraChase = true;
+    this.chaseCamInitialized = false;
     this.player.setExternalDrive(true);
-    this.player.setEyeHeightOverride(CAR_EYE_HEIGHT);
-    this.setCabinOccludersVisible(false);
-    this.player.rig.setDrivingMode(true);
     this.snapCarToGround();
     this.player.position.set(this.carX, this.carY, this.carZ);
-    this.player.setViewAngles(this.carYaw, this.carPitch);
+    this.applyCarCameraMode();
     this.hud.setCrosshairVisible(false);
-    this.hud.setInteractPrompt(LAMBO_DRIVE_MESSAGES.exitPrompt);
+    this.hud.setInteractPrompt(this.drivingInteractPrompt());
     this.audio.ensureStarted();
     this.audio.startCarEngine();
   }
@@ -1629,6 +1106,8 @@ export class Game {
   private exitCarDrive(): void {
     this.drivingCar = false;
     this.carSpeed = 0;
+    this.carCameraChase = true;
+    this.chaseCamInitialized = false;
     this.audio.stopCarEngine();
     this.player.setExternalDrive(false);
     this.player.setEyeHeightOverride(null);
@@ -1657,13 +1136,21 @@ export class Game {
   }
 
   private tickCarDriving(dt: number, active: boolean): void {
+    if (active && this.input.consumeCameraToggle()) {
+      this.carCameraChase = !this.carCameraChase;
+      this.applyCarCameraMode();
+      this.hud.setInteractPrompt(this.drivingInteractPrompt());
+    }
+
     if (active) {
       const { dx, dy } = this.input.consumeMouseDelta();
-      const sens = this.player.getMouseSensitivity();
-      this.carYaw -= dx * sens;
-      this.carPitch -= dy * sens;
-      if (this.carPitch > CAR_MAX_PITCH) this.carPitch = CAR_MAX_PITCH;
-      if (this.carPitch < CAR_MIN_PITCH) this.carPitch = CAR_MIN_PITCH;
+      if (!this.carCameraChase) {
+        const sens = this.player.getMouseSensitivity();
+        this.carYaw -= dx * sens;
+        this.carPitch -= dy * sens;
+        if (this.carPitch > CAR_MAX_PITCH) this.carPitch = CAR_MAX_PITCH;
+        if (this.carPitch < CAR_MIN_PITCH) this.carPitch = CAR_MIN_PITCH;
+      }
 
       const wishForward = this.input.isDown('forward') ? 1 : 0;
       const wishBack = this.input.isDown('back') ? 1 : 0;
@@ -1694,7 +1181,11 @@ export class Game {
     this.snapCarToGround();
 
     this.player.position.set(this.carX, this.carY, this.carZ);
-    this.player.setViewAngles(this.carYaw, this.carPitch);
+    if (this.carCameraChase) {
+      this.updateChaseCamera(dt);
+    } else {
+      this.player.setViewAngles(this.carYaw, this.carPitch);
+    }
     this.syncLamborghiniMesh();
     this.player.rig.update(dt, Math.abs(this.carSpeed) > 0.5, this.carSpeed);
     this.audio.updateCarEngine(Math.abs(this.carSpeed) / CAR_MAX_SPEED);
@@ -1771,43 +1262,6 @@ export class Game {
     );
   }
 
-  private openDubaiChatChoices(): void {
-    const npc = this.weddingChatNpc;
-    if (!npc) return;
-
-    this.intentionalUnlock = true;
-    this.input.releasePointerLock();
-    this.hud.setInteractPrompt(null);
-    this.hud.setCrosshairVisible(false);
-
-    this.dialogue.showChoices({
-      title: DUBAI_NPC_MESSAGES.choiceTitle,
-      speaker: NPC_STATS[npc].displayName,
-      choices: [
-        { id: 'a', label: DUBAI_NPC_MESSAGES.choices[npc].a },
-        { id: 'b', label: DUBAI_NPC_MESSAGES.choices[npc].b },
-        { id: 'c', label: DUBAI_NPC_MESSAGES.choices[npc].c },
-      ],
-      onChoose: (id) => this.showDubaiChatResponse(npc, id),
-    });
-  }
-
-  private showDubaiChatResponse(npc: 'bride' | 'groom', choice: 'a' | 'b' | 'c'): void {
-    const body = DUBAI_NPC_MESSAGES.responses[npc][choice];
-    this.dialogue.show({
-      title: NPC_STATS[npc].displayName,
-      body,
-      continueLabel: 'Devam Et',
-      onContinue: () => {
-        this.weddingChatNpc = null;
-        if (this.state === 'playing' && this.levelState.phase === 'celebration') {
-          this.hud.setCrosshairVisible(false);
-          this.input.requestPointerLock();
-        }
-      },
-    });
-  }
-
   private finishLevel(): void {
     this.audio.play('wave-clear');
     this.stagesCleared++;
@@ -1831,36 +1285,35 @@ export class Game {
       return;
     }
 
-    this.state = 'transition';
     this.intentionalUnlock = true;
     this.input.releasePointerLock();
     this.hud.setCrosshairVisible(false);
 
-    const level = this.levelState.level;
-    if (isLastLevelInMap) {
-      this.dialogue.show({
-        title: `${currentMap.displayName} - Tamamlandı`,
-        body: level.clearMessage,
-        continueLabel: 'Yeni Yolculuk',
-        onContinue: () => this.transitionToNextMap(),
-      });
-    } else {
-      this.dialogue.show({
-        title: `Level ${level.index} tamamlandı`,
-        body: level.clearMessage,
-        continueLabel: 'Sonraki Level',
-        onContinue: () => this.beginLevel(this.mapIndex, this.levelIndex + 1),
-      });
+    // Between levels: one scenario popup only (next level intro) — skip the
+    // generic "Level X tamamlandı" dialogue so players aren't hit twice.
+    if (!isLastLevelInMap) {
+      this.beginLevel(this.mapIndex, this.levelIndex + 1);
+      return;
     }
+
+    const level = this.levelState.level;
+    this.state = 'transition';
+    this.dialogue.show({
+      title: level.title,
+      body: level.clearMessage,
+      continueLabel: 'Yeni Yolculuk',
+      onContinue: () => this.transitionToNextMap(),
+    });
   }
 
   private transitionToNextMap(): void {
+    const currentMap = MAPS[this.mapIndex];
     const nextMapIndex = this.mapIndex + 1;
     const nextMap = MAPS[nextMapIndex];
     this.state = 'map-intro';
     this.dialogue.show({
       title: `Yeni Harita: ${nextMap.displayName}`,
-      body: nextMap.description,
+      body: this.buildMapIntroBody(nextMap, currentMap.id),
       continueLabel: 'Yolculuğa Başla',
       onContinue: () => {
         this.mapIndex = nextMapIndex;
@@ -1868,12 +1321,28 @@ export class Game {
         this.loadMap(nextMapIndex);
         this.anxiety.reduce(25);
         this.player.respawn();
-        this.beginLevel(this.mapIndex, 0);
+        this.beginLevel(this.mapIndex, 0, { skipDialogue: true });
       },
     });
   }
 
-  private beginLevel(mapIndex: number, levelIndex: number): void {
+  private buildMapIntroBody(
+    mapDef: (typeof MAPS)[number],
+    fromMapId?: MapId,
+  ): string {
+    const bridge = fromMapId
+      ? MAP_BRIDGE_MESSAGES[`${fromMapId}->${mapDef.id}`]
+      : undefined;
+    const firstIntro = mapDef.levels[0]?.intro;
+    const base = firstIntro ? `${mapDef.description}\n\n${firstIntro}` : mapDef.description;
+    return bridge ? `${bridge}\n\n${base}` : base;
+  }
+
+  private beginLevel(
+    mapIndex: number,
+    levelIndex: number,
+    options?: { skipDialogue?: boolean },
+  ): void {
     const mapDef = MAPS[mapIndex];
     if (!mapDef) {
       this.transitionToWin();
@@ -1888,20 +1357,29 @@ export class Game {
     this.levelIndex = levelIndex;
     this.levelState = makeLevelState(level);
     this.state = 'intro';
-    this.altarUsedThisLevel = false;
-    this.cakeUsedThisLevel = false;
+    this.wedding.resetForLevel();
     this.extraEnemiesRequired = 0;
     this.bossCinematicPlayed.clear();
     this.enemyProjectiles.clear();
-    this.pianoInteractArmed = false;
-    this.catInteractArmed = false;
     this.hud.setCrosshairVisible(false);
     if (levelIndex === 0) this.player.respawn();
+
     if (levelIndex > 0) this.anxiety.reduce(10);
+
+    if (options?.skipDialogue) {
+      this.activateLevel();
+      return;
+    }
+
+    const breatherKey = `${mapDef.id}-${level.index}`;
+    const breatherLine = LEVEL_BREATHER_MESSAGES[breatherKey];
+    const introBody = levelIndex > 0
+      ? `${level.intro}\n\n${WAVE_TRANSITION_LABELS.breatherBody}${breatherLine ? ` ${breatherLine}` : ''}`
+      : level.intro;
 
     this.dialogue.show({
       title: level.title,
-      body: level.intro,
+      body: introBody,
       continueLabel: 'Başla',
       onContinue: () => this.activateLevel(),
     });
@@ -1998,6 +1476,8 @@ export class Game {
     this.anxiety.add(12);
     this.hud.flashDamage();
     this.audio.play('hurt');
+    this.flashWarningTimer = 1.2;
+    this.hud.setSubtitle(['Flaş!']);
   }
 
   private handleBossPhase(enemy: Enemy, phase: 2 | 3): void {
@@ -2017,9 +1497,11 @@ export class Game {
     }
     enemy.startRageTransition(phase === 3 ? 2 : 1);
 
-    const text = phase === 2 ? 'Altın Canavarı kızdı!' : 'Altın Canavarı ÖFKELENDİ!';
+    const text = phase === 2 ? BOSS_PHASE_MESSAGES.phase2 : BOSS_PHASE_MESSAGES.phase3;
+    const hint = phase === 2 ? BOSS_PHASE_MESSAGES.hint2 : BOSS_PHASE_MESSAGES.hint3;
     const durationMs = phase === 2 ? 2800 : 2000;
     this.bossCinematic.show(text, durationMs, () => this.finishBossCinematic());
+    this.hud.setSubtitle([hint]);
     this.audio.play('hurt');
     this.hud.flashDamage();
   }
@@ -2047,6 +1529,110 @@ export class Game {
     this.input.requestPointerLock();
   }
 
+  private createInteractionHost(): InteractionHost {
+    const game = this;
+    return {
+      get mapIndex() {
+        return game.mapIndex;
+      },
+      get levelIndex() {
+        return game.levelIndex;
+      },
+      get levelState() {
+        return game.levelState;
+      },
+      get state() {
+        return game.state as InteractionGameState;
+      },
+      get world() {
+        return game.world;
+      },
+      get input() {
+        return game.input;
+      },
+      get player() {
+        return game.player;
+      },
+      get hud() {
+        return game.hud;
+      },
+      get dialogue() {
+        return game.dialogue;
+      },
+      get audio() {
+        return game.audio;
+      },
+      get anxiety() {
+        return game.anxiety;
+      },
+      get enemies() {
+        return game.enemies;
+      },
+      get effects() {
+        return game.effects;
+      },
+      getMapId: () => MAPS[game.mapIndex].id,
+      isNearInteractable: (item) => game.isNearInteractable(item),
+      setState: (state) => {
+        game.state = state;
+      },
+      setIntentionalUnlock: (value) => {
+        game.intentionalUnlock = value;
+      },
+      advanceStageAfterSkip: () => game.advanceStageAfterSkip(),
+      transitionToBaliHoneymoon: () => game.transitionToBaliHoneymoon(),
+      transitionToDubai: () => game.transitionToDubai(),
+      returnToMainMenu: () => game.returnToMainMenu(),
+      beginLevel: (mapIndex, levelIndex) => game.beginLevel(mapIndex, levelIndex),
+      loadMap: (mapIndex) => game.loadMap(mapIndex),
+      respawnPlayer: () => game.player.respawn(),
+      requestPointerLock: () => game.input.requestPointerLock(),
+      releasePointerLock: () => game.input.releasePointerLock(),
+      findInteractable: (kind) => game.world.interactables.find((item) => item.kind === kind),
+    };
+  }
+
+  private createDubaiCarHost(): DubaiCarHost {
+    const game = this;
+    return {
+      isDriving: () => game.drivingCar,
+      enterDrive: () => game.enterCarDrive(),
+      exitDrive: () => game.exitCarDrive(),
+      isTvOn: () => game.plasmaTvOn,
+      setTvPower: (on) => game.setPlasmaTvPower(on),
+      isLamboInteractArmed: () => game.lamboInteractArmed,
+      armLamboInteract: () => {
+        game.lamboInteractArmed = true;
+      },
+      disarmLamboInteract: () => {
+        game.lamboInteractArmed = false;
+      },
+      flushInteract: () => game.input.flushInteract(),
+    };
+  }
+
+  private isNearInteractable(item: { x: number; z: number; radius?: number }): boolean {
+    const dx = this.player.position.x - item.x;
+    const dz = this.player.position.z - item.z;
+    return Math.sqrt(dx * dx + dz * dz) <= (item.radius ?? 2.5);
+  }
+
+  private transitionToBaliHoneymoon(): void {
+    const baliIndex = MAPS.findIndex((map) => map.id === 'bali');
+    if (baliIndex < 0) return;
+
+    this.dialogue.hide();
+    this.player.rig.setCelebrationMode(false);
+    this.anxiety.unlock();
+    this.anxiety.reduce(40);
+    this.mapIndex = baliIndex;
+    this.levelIndex = 0;
+    this.loadMap(baliIndex);
+    this.player.respawn();
+    this.hud.show();
+    this.beginLevel(baliIndex, 0);
+  }
+
   private startRun(): void {
     this.audio.ensureStarted();
     this.pause.hide();
@@ -2054,11 +1640,10 @@ export class Game {
     this.score = 0;
     this.mapIndex = 0;
     this.levelIndex = 0;
-    this.catFed = false;
-    this.catAnimTime = 0;
-    this.pianoPlayed = false;
-    this.altarUsedThisLevel = false;
-    this.cakeUsedThisLevel = false;
+    this.mapSkip.resetForNewRun();
+    this.wedding.resetForNewRun();
+    this.bali.resetForNewRun();
+    this.dubai.resetForNewRun();
     this.player.rig.setCelebrationMode(false);
     this.bossCinematicPlayed.clear();
     this.pendingFinalWin = false;
@@ -2077,9 +1662,9 @@ export class Game {
     this.state = 'map-intro';
     this.dialogue.show({
       title: firstMap.displayName,
-      body: firstMap.description,
+      body: this.buildMapIntroBody(firstMap),
       continueLabel: 'Yolculuğa Başla',
-      onContinue: () => this.beginLevel(0, 0),
+      onContinue: () => this.beginLevel(0, 0, { skipDialogue: true }),
     });
   }
 

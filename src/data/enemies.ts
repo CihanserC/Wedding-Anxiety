@@ -8,7 +8,14 @@ export type EnemyType =
   | 'inek'
   | 'kertenkele';
 
-export type EnemyBehavior = 'chase' | 'stalker' | 'dasher' | 'floater' | 'flasher' | 'wander';
+export type EnemyBehavior =
+  | 'chase'
+  | 'stalker'
+  | 'dasher'
+  | 'floater'
+  | 'flasher'
+  | 'wander'
+  | 'critic';
 
 export interface EnemyStats {
   type: EnemyType;
@@ -47,16 +54,16 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     type: 'mukemmeliyetci-kuzen',
     displayName: 'Mükemmeliyetçi Kuzen',
     hp: 3,
-    speed: 2.2,
+    speed: 2.9,
     contactDamage: 8,
     radius: 0.45,
     height: 2.1,
-    color: 0x0d2b3a,
-    accentColor: 0x88b0c0,
+    color: 0x141820,
+    accentColor: 0x9b1028,
     scoreValue: 80,
     anxietyReward: 8,
     contactAnxietyPerSecond: 18,
-    behavior: 'stalker',
+    behavior: 'critic',
   },
   'zaman-canavari': {
     type: 'zaman-canavari',
@@ -90,7 +97,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
   },
   'beklenti-golgesi': {
     type: 'beklenti-golgesi',
-    displayName: 'Beklenti Gölgesi',
+    displayName: 'Altın Canavarı',
     hp: 45,
     speed: 1.9,
     contactDamage: 22,

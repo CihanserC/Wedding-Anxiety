@@ -1,5 +1,4 @@
 export type CheatId =
-  | 'happilymarried'
   | 'nefesal'
   | 'sakinol'
   | 'iddqd'
@@ -10,6 +9,7 @@ export type CheatId =
   | 'dugunvakti'
   | 'konserde'
   | 'denizfeneri'
+  | 'dugunsalonu'
   | 'bali'
   | 'dubai'
   | 'baloncu'
@@ -27,12 +27,6 @@ export interface CheatDefinition {
 }
 
 export const CHEAT_REGISTRY: readonly CheatDefinition[] = [
-  {
-    id: 'happilymarried',
-    code: 'happilymarried',
-    description: 'Düğün epiloguna ışınlan',
-    category: 'map',
-  },
   {
     id: 'nefesal',
     code: 'nefesal',
@@ -93,6 +87,12 @@ export const CHEAT_REGISTRY: readonly CheatDefinition[] = [
     id: 'denizfeneri',
     code: 'denizfeneri',
     description: 'Deniz Feneri, level 1',
+    category: 'map',
+  },
+  {
+    id: 'dugunsalonu',
+    code: 'dugunsalonu',
+    description: 'Düğün Salonu, level 1',
     category: 'map',
   },
   {
