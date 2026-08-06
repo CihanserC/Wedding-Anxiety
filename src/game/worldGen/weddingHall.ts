@@ -62,6 +62,7 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
   const spawnFacing = Math.PI;
   const stairsOrigin = { x: centerX, y: 1.01, z: stageFrontZ - 0.15 };
   const gardenFlowerProps = buildGardenFlowerProps(w, hallX0, hallZ0, hallWidth);
+  const stageSportsLights = buildStageSportsLightProps(centerX, stageFrontZ, coupleZ);
 
   return {
     playerSpawn: spawn,
@@ -97,13 +98,6 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
     collisionBoxes: buildWeddingStairCollisionBoxes(stairsOrigin),
     npcs: [
       {
-        type: 'bride',
-        x: centerX - 0.55,
-        y: 2.01,
-        z: coupleZ,
-        rotationY: Math.PI,
-      },
-      {
         type: 'groom',
         x: centerX + 0.55,
         y: 2.01,
@@ -113,6 +107,13 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
       ...guestNpcs,
     ],
     props: [
+      {
+        kind: 'wedding-bride-obj',
+        x: centerX - 0.55,
+        y: 2.01,
+        z: coupleZ,
+        rotationY: Math.PI,
+      },
       {
         kind: 'wedding-steps',
         x: stairsOrigin.x,
@@ -128,6 +129,8 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
         rotationY: Math.PI,
         scale: 1,
       },
+      // Low round floor spots — evenly spaced along the downstage lip
+      ...stageSportsLights,
       {
         kind: 'cake-table',
         x: cakeTableX,
@@ -212,6 +215,36 @@ export function generateWeddingHall(w: WorldWriter): GeneratorResult {
       },
     ],
   };
+}
+
+/** Black floor PAR spots — three per wing, aimed at the ceremony center. */
+function buildStageSportsLightProps(
+  centerX: number,
+  stageFrontZ: number,
+  coupleZ: number,
+): PropSpec[] {
+  const y = 2.01;
+  const wingX = 9;
+  const zOffsets = [1.4, 3.4, 5.4];
+  const props: PropSpec[] = [];
+
+  for (const side of [-1, 1] as const) {
+    for (const zOff of zOffsets) {
+      const x = centerX + side * wingX;
+      const z = stageFrontZ + zOff;
+      const dx = centerX - x;
+      const dz = coupleZ - z;
+      props.push({
+        kind: 'stage-sports-light',
+        x,
+        y,
+        z,
+        rotationY: Math.atan2(dx, -dz),
+      });
+    }
+  }
+
+  return props;
 }
 
 function generateGarden(w: WorldWriter, hallX0: number, hallZ0: number, hallWidth: number): void {

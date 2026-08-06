@@ -181,6 +181,138 @@ export function buildBananaPlant(): THREE.Group {
   return g;
 }
 
+/**
+ * Huge thick-trunk banana tree with hanging banana bunches.
+ * Shake interaction hides `hanging-bananas` and drops them to the ground.
+ */
+export function buildGiantBananaTree(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'giant-banana-tree';
+
+  const bark = lambert(0x6b8f3a);
+  const barkDark = lambert(0x4a6a28);
+  const leaf = lambert(0x2f9e38);
+  const leafDark = lambert(0x1e7a28);
+  const peel = lambert(0xffe135);
+  const peelDeep = lambert(0xf0c020);
+  const peelTip = lambert(0xc4a35a);
+  const stem = lambert(0x5a4020);
+
+  // Thick layered trunk (~2.4 wide at base)
+  let y = 0.35;
+  for (let i = 0; i < 9; i++) {
+    const w = 2.4 - i * 0.12;
+    const seg = box(w, 0.72, w, i % 2 === 0 ? bark : barkDark);
+    seg.position.y = y;
+    g.add(seg);
+    y += 0.68;
+  }
+
+  const crownY = y + 0.2;
+
+  // Broad upright leaves radiating from crown
+  const leafAngles = [0, 0.7, 1.4, 2.1, 2.8, 3.5, 4.2, 4.9, 5.6];
+  for (const a of leafAngles) {
+    const len = 3.2 + (a % 1.2) * 0.4;
+    const blade = box(0.85, 0.12, len, a % 1.4 < 0.7 ? leaf : leafDark);
+    blade.position.set(Math.sin(a) * 0.9, crownY + 0.4, Math.cos(a) * 0.9);
+    blade.rotation.y = a;
+    blade.rotation.x = -0.55;
+    g.add(blade);
+  }
+  for (let i = 0; i < 5; i++) {
+    const a = i * 1.25 + 0.4;
+    const blade = box(0.7, 0.1, 2.4, leafDark);
+    blade.position.set(Math.sin(a) * 0.45, crownY + 0.9, Math.cos(a) * 0.45);
+    blade.rotation.y = a;
+    blade.rotation.x = -0.25;
+    g.add(blade);
+  }
+
+  // Giant hanging banana clusters — high on the crown so they're obvious from afar
+  const hanging = new THREE.Group();
+  hanging.name = 'hanging-bananas';
+  hanging.position.set(0, crownY + 0.15, 0);
+  g.add(hanging);
+
+  // Central stalk
+  const mainStalk = box(0.35, 1.1, 0.35, stem);
+  mainStalk.position.y = -0.2;
+  hanging.add(mainStalk);
+
+  // Several radial bunches of huge crescent bananas
+  const bunchAngles = [0, 0.9, 1.8, 2.7, 3.6, 4.5, 5.4];
+  let bananaCount = 0;
+  for (const a of bunchAngles) {
+    const bunch = new THREE.Group();
+    bunch.position.set(Math.sin(a) * 0.85, -0.35, Math.cos(a) * 0.85);
+    bunch.rotation.y = a;
+    hanging.add(bunch);
+
+    const stalk = box(0.22, 0.7, 0.22, stem);
+    stalk.position.y = 0.1;
+    bunch.add(stalk);
+
+    // 5–6 huge bananas per bunch
+    for (let i = 0; i < 6; i++) {
+      const side = i % 2 === 0 ? 1 : -1;
+      const ox = side * (0.35 + (i % 3) * 0.22);
+      const oy = -0.15 - i * 0.38;
+      const oz = 0.15 + (i % 3) * 0.12;
+      const banana = buildHugeHangingBanana(peel, peelDeep, peelTip, stem);
+      banana.position.set(ox, oy, oz);
+      banana.rotation.z = side * (0.35 + i * 0.08);
+      banana.rotation.x = 0.25 + i * 0.05;
+      bunch.add(banana);
+      bananaCount++;
+    }
+  }
+
+  // Extra top cluster so bananas poke above the leaves
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const banana = buildHugeHangingBanana(peel, peelDeep, peelTip, stem);
+    banana.position.set(Math.sin(a) * 0.55, 0.55, Math.cos(a) * 0.55);
+    banana.rotation.x = -0.4;
+    banana.rotation.z = Math.sin(a) * 0.3;
+    hanging.add(banana);
+    bananaCount++;
+  }
+
+  hanging.userData.bananaCount = bananaCount;
+  return g;
+}
+
+/** Oversized crescent banana for the giant tree crown. */
+function buildHugeHangingBanana(
+  peel: THREE.MeshLambertMaterial,
+  peelDeep: THREE.MeshLambertMaterial,
+  tip: THREE.MeshLambertMaterial,
+  stemMat: THREE.MeshLambertMaterial,
+): THREE.Group {
+  const banana = new THREE.Group();
+  banana.name = 'hanging-banana';
+
+  const segs: Array<[number, number, number, number, number, THREE.MeshLambertMaterial]> = [
+    [0.28, 0.3, 0.28, 0.12, 0.2, peel],
+    [0.34, 0.36, 0.32, 0.16, 0.02, peel],
+    [0.36, 0.38, 0.34, 0.1, -0.22, peelDeep],
+    [0.32, 0.34, 0.3, 0.0, -0.46, peel],
+    [0.26, 0.28, 0.24, -0.12, -0.66, peel],
+    [0.18, 0.2, 0.18, -0.24, -0.82, tip],
+  ];
+  for (const [w, h, d, y, z, mat] of segs) {
+    const seg = box(w, h, d, mat);
+    seg.position.set(0, y, z);
+    seg.rotation.x = -0.2 - Math.abs(z) * 0.25;
+    banana.add(seg);
+  }
+  const stemTip = box(0.12, 0.12, 0.16, stemMat);
+  stemTip.position.set(0, 0.14, 0.36);
+  banana.add(stemTip);
+  return banana;
+}
+
 /** Small ground fern. */
 export function buildFern(): THREE.Group {
   const g = new THREE.Group();

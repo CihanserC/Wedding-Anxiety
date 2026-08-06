@@ -34,6 +34,7 @@ export class PlayerRig {
     this.weapons.set('shield', buildShield());
     this.weapons.set('happiness', buildHappinessBlaster());
     this.weapons.set('lightsaber', buildLightsaber());
+    this.weapons.set('banana', buildBanana());
 
     for (const [id, group] of this.weapons) {
       group.visible = id === this.activeId;
@@ -468,6 +469,61 @@ function buildHappinessBlaster(): THREE.Group {
   g.add(loop);
 
   addMuzzlePoint(g, 0, 0.02, -0.88);
+  return g;
+}
+
+/** Classic crescent banana held in first-person — Bali-only. */
+function buildBanana(): THREE.Group {
+  const g = new THREE.Group();
+  const peel = makeMat(0xffe135, { emissive: 0xffc107, emissiveIntensity: 0.2 });
+  const peelDeep = makeMat(0xf0c020);
+  const tip = makeMat(0xc4a35a);
+  const stem = makeMat(0x4a3420);
+  const bruise = makeMat(0xd4a017);
+
+  // Crescent curve along -Z (forward), arching upward then down to tip
+  const segments: Array<{
+    w: number;
+    h: number;
+    d: number;
+    x: number;
+    y: number;
+    z: number;
+    rx: number;
+    mat: THREE.MeshLambertMaterial;
+  }> = [
+    { w: 0.09, h: 0.09, d: 0.1, x: 0, y: 0.08, z: 0.14, rx: 0.35, mat: stem },
+    { w: 0.14, h: 0.15, d: 0.14, x: 0, y: 0.1, z: 0.04, rx: 0.2, mat: peel },
+    { w: 0.16, h: 0.17, d: 0.16, x: 0.01, y: 0.12, z: -0.08, rx: 0.05, mat: peel },
+    { w: 0.17, h: 0.18, d: 0.17, x: 0.02, y: 0.1, z: -0.22, rx: -0.15, mat: peel },
+    { w: 0.16, h: 0.17, d: 0.16, x: 0.02, y: 0.05, z: -0.36, rx: -0.35, mat: peelDeep },
+    { w: 0.14, h: 0.15, d: 0.15, x: 0.01, y: -0.01, z: -0.48, rx: -0.55, mat: peel },
+    { w: 0.11, h: 0.12, d: 0.12, x: 0, y: -0.08, z: -0.58, rx: -0.7, mat: peel },
+    { w: 0.07, h: 0.08, d: 0.09, x: 0, y: -0.14, z: -0.66, rx: -0.85, mat: tip },
+  ];
+
+  for (const s of segments) {
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, s.d), s.mat);
+    seg.position.set(s.x, s.y, s.z);
+    seg.rotation.x = s.rx;
+    g.add(seg);
+  }
+
+  // Subtle ridge / bruise spots for banana character
+  const spotA = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.05), bruise);
+  spotA.position.set(0.07, 0.14, -0.2);
+  g.add(spotA);
+  const spotB = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 0.04), bruise);
+  spotB.position.set(-0.06, 0.02, -0.4);
+  g.add(spotB);
+
+  // Stem nub at the held end
+  const stemTip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.07), stem);
+  stemTip.position.set(0, 0.1, 0.2);
+  stemTip.rotation.x = 0.5;
+  g.add(stemTip);
+
+  addMuzzlePoint(g, 0, -0.12, -0.72);
   return g;
 }
 

@@ -84,6 +84,16 @@ export class EnemyManager {
   spawnAmbientFauna(specs: FaunaSpawnSpec[]): void {
     this.clearAmbient();
     for (const spec of specs) {
+      if (spec.type === 'ari') {
+        const pos = new THREE.Vector3(spec.x, spec.y, spec.z);
+        const enemy = new Enemy(this.world, 'ari', pos);
+        enemy.ambient = true;
+        enemy.setBuzzHome(pos);
+        this.enemies.push(enemy);
+        this.scene.add(enemy.root);
+        continue;
+      }
+
       const stats = ENEMY_STATS[spec.type];
       const resolved = this.world.resolveStandingPoint(
         spec.x,
@@ -138,6 +148,8 @@ export class EnemyManager {
       if (enemy.stats.behavior === 'wander' || enemy.stats.contactAnxietyPerSecond <= 0) {
         continue;
       }
+
+      if (enemy.bananaDistracted) continue;
 
       const playerMinY = playerPos.y;
       const playerMaxY = playerPos.y + PLAYER_CONTACT_HEIGHT;

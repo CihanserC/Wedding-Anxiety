@@ -124,6 +124,14 @@ export const CODEX_ENEMIES: CodexEntry[] = [
       'Kayalıklarda güneşlenen minik kertenkele. Zararsız keşif süsü, anksiyete yaratmaz.',
     tags: ['Bali', 'Dost'],
   },
+  {
+    id: 'ari',
+    name: 'Arı',
+    role: 'Barışçıl Fauna',
+    blurb:
+      'Muz ağacı ve çiçekler arasında vızıldayan minik uçan arı. Zararsız; sadece tropik atmosferi tamamlar.',
+    tags: ['Bali', 'Dost'],
+  },
 ];
 
 export const CODEX_WEAPONS: CodexEntry[] = [

@@ -3,6 +3,11 @@ import * as THREE from 'three';
 const NAME_COLOR = '#ff1a1a';
 const NAME_STROKE = '#330000';
 
+export interface NameTagStyle {
+  color?: string;
+  stroke?: string;
+}
+
 function fitFontSize(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -19,25 +24,32 @@ function fitFontSize(
   return minSize;
 }
 
+function drawNameTag(
+  canvas: HTMLCanvasElement,
+  label: string,
+  style?: NameTagStyle,
+): void {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const pad = 24;
+  const fontSize = fitFontSize(ctx, label, canvas.width - pad * 2);
+  ctx.font = `bold ${fontSize}px "Segoe UI", "Arial", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = Math.max(4, Math.round(fontSize * 0.14));
+  ctx.strokeStyle = style?.stroke ?? NAME_STROKE;
+  ctx.strokeText(label, canvas.width / 2, canvas.height / 2);
+  ctx.fillStyle = style?.color ?? NAME_COLOR;
+  ctx.fillText(label, canvas.width / 2, canvas.height / 2);
+}
+
 /** Red billboard name label above combat enemies. */
-export function createNameTag(label: string): THREE.Sprite {
+export function createNameTag(label: string, style?: NameTagStyle): THREE.Sprite {
   const canvas = document.createElement('canvas');
   canvas.width = 768;
   canvas.height = 128;
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const pad = 24;
-    const fontSize = fitFontSize(ctx, label, canvas.width - pad * 2);
-    ctx.font = `bold ${fontSize}px "Segoe UI", "Arial", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineWidth = Math.max(4, Math.round(fontSize * 0.14));
-    ctx.strokeStyle = NAME_STROKE;
-    ctx.strokeText(label, canvas.width / 2, canvas.height / 2);
-    ctx.fillStyle = NAME_COLOR;
-    ctx.fillText(label, canvas.width / 2, canvas.height / 2);
-  }
+  drawNameTag(canvas, label, style);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.needsUpdate = true;
@@ -53,6 +65,20 @@ export function createNameTag(label: string): THREE.Sprite {
   sprite.scale.set(height * aspect, height, 1);
   sprite.name = 'enemy-name-tag';
   return sprite;
+}
+
+export function updateNameTag(sprite: THREE.Sprite, label: string, style?: NameTagStyle): void {
+  const canvas = document.createElement('canvas');
+  canvas.width = 768;
+  canvas.height = 128;
+  drawNameTag(canvas, label, style);
+
+  const oldMap = sprite.material.map;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  sprite.material.map = texture;
+  sprite.material.needsUpdate = true;
+  if (oldMap) oldMap.dispose();
 }
 
 function disposeSpriteResources(sprite: THREE.Sprite): void {

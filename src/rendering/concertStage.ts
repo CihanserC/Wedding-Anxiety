@@ -80,6 +80,50 @@ export function buildStageSpotlight(): THREE.Group {
   return g;
 }
 
+/** Low-profile round black floor PAR spot — sits on the stage, no pole or truss. */
+export function buildStageSportsLight(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'stage-sports-light';
+
+  const black = lambert(0x050508);
+  const ring = lambert(0x101014);
+  const lensMat = new THREE.MeshBasicMaterial({ color: 0xd8d0c0 });
+
+  const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.56, 0.08, 24), black);
+  pad.position.set(0, 0.04, 0);
+  g.add(pad);
+
+  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.5, 0.07, 24), ring);
+  skirt.position.set(0, 0.09, 0);
+  g.add(skirt);
+
+  const can = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.42, 0.32, 20), black);
+  can.position.set(0, 0.26, 0.05);
+  can.rotation.x = -0.58;
+  g.add(can);
+
+  const lens = new THREE.Mesh(new THREE.CircleGeometry(0.3, 22), lensMat);
+  lens.position.set(0, 0.36, 0.2);
+  lens.rotation.x = -0.58;
+  g.add(lens);
+
+  const lensRing = new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.028, 8, 22), ring);
+  lensRing.position.set(0, 0.355, 0.19);
+  lensRing.rotation.x = Math.PI / 2 - 0.58;
+  g.add(lensRing);
+
+  const spot = new THREE.SpotLight(0xfff0d8, 3.2, 22, Math.PI / 6.5, 0.28, 1.1);
+  spot.position.set(0, 0.3, 0.14);
+  g.add(spot);
+
+  const target = new THREE.Object3D();
+  target.position.set(0, 3.8, 5.5);
+  g.add(target);
+  spot.target = target;
+
+  return g;
+}
+
 /** Low footlights along the downstage edge. */
 export function buildStageFootlights(): THREE.Group {
   const g = new THREE.Group();

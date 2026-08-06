@@ -1,11 +1,14 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import type { PropSpec } from '../game/worldGen/types';
 import { buildSuzyCat } from './SuzyCat';
 import {
   buildBananaPlant,
   buildBroadleafTree,
   buildFern,
+  buildGiantBananaTree,
   buildPalmTree,
   buildTropicalBush,
 } from './tropicalProps';
@@ -24,6 +27,7 @@ import {
   buildStageFootlights,
   buildStageSideDrape,
   buildStageSpotlight,
+  buildStageSportsLight,
 } from './concertStage';
 import { buildCoastalPicnic, buildCoastalPine, buildCoastalTree } from './coastalProps';
 import { buildGardenFlower } from './gardenFlowers';
@@ -40,7 +44,9 @@ export function buildProps(specs: PropSpec[]): THREE.Group {
     const mesh = buildProp(spec);
     mesh.position.set(spec.x, spec.y, spec.z);
     if (spec.rotationY) mesh.rotation.y = spec.rotationY;
-    if (!['lighthouse', 'car', 'cake-table'].includes(spec.kind) && spec.scale) mesh.scale.setScalar(spec.scale);
+    if (!['lighthouse', 'car', 'cake-table', 'wedding-bride-obj'].includes(spec.kind) && spec.scale) {
+      mesh.scale.setScalar(spec.scale);
+    }
     group.add(mesh);
   }
   return group;
@@ -82,6 +88,8 @@ function buildProp(spec: PropSpec): THREE.Group {
       return buildTropicalBush();
     case 'banana-plant':
       return buildBananaPlant();
+    case 'giant-banana-tree':
+      return buildGiantBananaTree();
     case 'fern':
       return buildFern();
     case 'treasure-chest':
@@ -110,6 +118,8 @@ function buildProp(spec: PropSpec): THREE.Group {
       return buildStageFootlights();
     case 'stage-side-drape':
       return buildStageSideDrape();
+    case 'stage-sports-light':
+      return buildStageSportsLight();
     case 'coastal-picnic':
       return buildCoastalPicnic();
     case 'coastal-pine':
@@ -120,6 +130,8 @@ function buildProp(spec: PropSpec): THREE.Group {
       return buildGardenFlower(Math.floor(spec.x * 13 + spec.z * 7));
     case 'wall-painting':
       return buildWallPainting(spec.paintingId ?? 'mona-lisa');
+    case 'wedding-bride-obj':
+      return buildWeddingBrideObj(spec.scale ?? 1);
   }
   return new THREE.Group();
 }
@@ -606,6 +618,9 @@ function buildCarModel(extraScale: number): THREE.Group {
 /** Target world height for the lighthouse GLB (matches old voxel tower feel). */
 const LIGHTHOUSE_TARGET_HEIGHT = 16;
 
+/** Target world height for the wedding bride OBJ (~human scale). */
+const WEDDING_BRIDE_TARGET_HEIGHT = 1.7;
+
 /** Preserve GLB textures — do not replace with flat colours. */
 function prepareGlbMeshes(object: THREE.Object3D): void {
   object.traverse((child) => {
@@ -683,6 +698,63 @@ function buildLighthouseModel(extraScale: number): THREE.Group {
       stub.position.y = LIGHTHOUSE_TARGET_HEIGHT * 0.5;
       g.add(stub);
     },
+  );
+
+  return g;
+}
+
+function fitModelToHeight(model: THREE.Object3D, targetHeight: number, extraScale: number): void {
+  model.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(model);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  const height = Math.max(size.y, 0.001);
+  model.scale.setScalar((targetHeight / height) * extraScale);
+
+  model.updateMatrixWorld(true);
+  const fitted = new THREE.Box3().setFromObject(model);
+  const center = new THREE.Vector3();
+  fitted.getCenter(center);
+  model.position.set(-center.x, -fitted.min.y, -center.z);
+}
+
+function addWeddingBrideStub(parent: THREE.Group): void {
+  const white = new THREE.MeshLambertMaterial({ color: 0xf7f4ef });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.32, 1.1, 10), white);
+  body.position.y = 0.55;
+  parent.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 10), white);
+  head.position.y = 1.28;
+  parent.add(head);
+}
+
+function buildWeddingBrideObj(extraScale: number): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'wedding-bride-obj';
+
+  const base = `${import.meta.env.BASE_URL}wedding_bride/`;
+  const mtlLoader = new MTLLoader();
+  mtlLoader.setPath(base);
+  mtlLoader.load(
+    'wedding_bride.mtl',
+    (materials) => {
+      materials.preload();
+      const objLoader = new OBJLoader();
+      objLoader.setMaterials(materials);
+      objLoader.setPath(base);
+      objLoader.load(
+        'wedding_bride.obj',
+        (model) => {
+          fitModelToHeight(model, WEDDING_BRIDE_TARGET_HEIGHT, extraScale);
+          prepareGlbMeshes(model);
+          g.add(model);
+        },
+        undefined,
+        () => addWeddingBrideStub(g),
+      );
+    },
+    undefined,
+    () => addWeddingBrideStub(g),
   );
 
   return g;

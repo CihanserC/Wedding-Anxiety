@@ -5,6 +5,7 @@ import { HUD } from '../ui/HUD';
 import { MenuScreen } from '../ui/MenuScreen';
 import { DialogueBox } from '../ui/DialogueBox';
 import {
+  BALI_TREASURE_MESSAGES,
   BOSS_PHASE_MESSAGES,
   HUD_LABELS,
   LAMBO_DRIVE_MESSAGES,
@@ -118,6 +119,7 @@ export class Game {
   private readonly bossCinematicPlayed = new Set<2 | 3>();
   private pendingFinalWin = false;
   private finalWinDelay = 0;
+  private celebrationWinHandler: (() => void) | null = null;
   private flashWarningTimer = 0;
   private consoleResumePointerLock = false;
   private consoleResumePaused = false;
@@ -262,12 +264,13 @@ export class Game {
     this.renderer.setPixelRatio(
       mapDef.id === 'dubai' ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2),
     );
+    this.mapSkip.resetForMapLoad();
+    this.bali.resetForMapLoad();
     this.addBanner();
     this.addDecorations();
     this.addProps();
     this.npcs.spawnAll(this.world.npcs, this.world);
     this.audio?.setBgm(mapDef.bgm ?? null);
-    this.mapSkip.resetForMapLoad();
     this.drivingCar = false;
     this.carCameraChase = true;
     this.chaseCamInitialized = false;
@@ -280,6 +283,12 @@ export class Game {
     this.weapon?.setWorld(this.world);
     this.enemies?.setWorld(this.world);
     this.player?.setWorld(this.world);
+
+    if (mapDef.id === 'bali' && this.player) {
+      this.setActiveWeapon('banana');
+    } else if (this.activeWeapon === 'banana' && this.player) {
+      this.setActiveWeapon('pistol');
+    }
   }
 
   private addBanner(): void {
@@ -303,6 +312,7 @@ export class Game {
   private addProps(): void {
     this.treasureChestMesh = null;
     this.bali.setTreasureDiscovered(false);
+    this.bali.setBananaTreeMesh(null);
     this.plasmaTvMesh = null;
     this.plasmaTvOn = false;
     this.tvSlideshow.dispose();
@@ -317,6 +327,7 @@ export class Game {
         if (child.name === 'suzy-cat') this.wedding.setSuzyCatMesh(child);
         if (child.name === 'lamborghini') this.lamborghiniMesh = child as THREE.Group;
         if (child.name === 'plasma-tv') this.plasmaTvMesh = child as THREE.Group;
+        if (child.name === 'giant-banana-tree') this.bali.setBananaTreeMesh(child);
       });
     }
     if (this.world.theaterSeats.length > 0) {
@@ -512,7 +523,10 @@ export class Game {
         if (this.finalWinDelay <= 0) {
           this.pendingFinalWin = false;
           this.confetti.hide();
-          this.showFinalWinScreen();
+          const handler = this.celebrationWinHandler;
+          this.celebrationWinHandler = null;
+          if (handler) handler();
+          else this.showFinalWinScreen();
         }
       }
 
@@ -546,6 +560,7 @@ export class Game {
       this.wedding.tickSuzyCat(dt);
       this.wedding.tickCake();
       this.bali.tickTreasure(this.treasureChestMesh !== null);
+      this.bali.tickBananaTree(dt);
 
       if (this.flashWarningTimer > 0) {
         this.flashWarningTimer -= dt;
@@ -553,14 +568,14 @@ export class Game {
       }
 
       if (active && this.levelState.phase !== 'celebration') {
-        if (!this.lightsaberMode) {
+        if (MAPS[this.mapIndex].id === 'bali' || this.lightsaberMode) {
+          this.input.consumeWeaponSelect();
+          this.input.consumeWeaponScroll();
+        } else {
           const requested = this.input.consumeWeaponSelect();
           if (requested !== null) this.setActiveWeapon(WEAPON_ORDER[requested]);
           const wheel = this.input.consumeWeaponScroll();
           if (wheel !== 0) this.cycleWeapon(wheel);
-        } else {
-          this.input.consumeWeaponSelect();
-          this.input.consumeWeaponScroll();
         }
       }
 
@@ -907,6 +922,7 @@ export class Game {
 
     this.pendingFinalWin = false;
     this.finalWinDelay = 0;
+    this.celebrationWinHandler = null;
     this.pendingBossPhase = null;
     this.bossCinematicEnemy = null;
     this.extraEnemiesRequired = 0;
@@ -946,7 +962,7 @@ export class Game {
     this.input.requestPointerLock();
   }
 
-  private showBaliWinScreen(): void {
+  private showBaliWinScreen(message?: string): void {
     this.anxiety.lockAtZero();
     this.state = 'win';
     this.intentionalUnlock = true;
@@ -959,7 +975,7 @@ export class Game {
     this.audio.stopBgm();
     this.audio.play('win');
     this.menu.showWin(this.score, this.stagesCleared, totalLevelCount(), {
-      message: WIN_MESSAGES.baliFinaleBody,
+      message: message ?? WIN_MESSAGES.baliFinaleBody,
       onContinuePlaying: () => this.enterBaliEpilogue(),
     });
   }
@@ -967,20 +983,30 @@ export class Game {
   private enterBaliEpilogue(): void {
     this.menu.hide();
     this.state = 'playing';
+    this.startBaliTreasureHunt();
+    this.input.requestPointerLock();
+  }
+
+  unlockBaliTreasureHunt(): void {
+    if (MAPS[this.mapIndex]?.id !== 'bali') return;
+    if (this.levelState.phase === 'celebration') return;
+    this.startBaliTreasureHunt();
+    this.hud.setSubtitle([BALI_TREASURE_MESSAGES.hint]);
+  }
+
+  private startBaliTreasureHunt(): void {
     this.levelState.phase = 'celebration';
     this.bali.setTreasureDiscovered(false);
     this.player.rig.setCelebrationMode(false);
     this.hud.show();
     this.hud.setCrosshairVisible(true);
     this.hud.setInteractPrompt(null);
-    this.hud.setSubtitle([]);
     this.anxiety.lockAtZero();
     this.enemies.clear();
     this.enemyProjectiles.clear();
     this.spawnAmbientFauna();
     this.spawnBaliTreasureChest();
     this.audio.setBgm(MAPS[this.mapIndex].bgm ?? null);
-    this.input.requestPointerLock();
   }
 
   private spawnBaliTreasureChest(): void {
@@ -1407,6 +1433,9 @@ export class Game {
     this.levelState.phase = 'active';
     this.levelState.timer = 2.5;
     this.player.rig.setHeldItem('none');
+    if (mapDef.id === 'bali') {
+      this.setActiveWeapon('banana');
+    }
     this.hud.setCrosshairVisible(true);
     this.hud.show();
     this.spawnAmbientFauna();
@@ -1589,6 +1618,7 @@ export class Game {
       requestPointerLock: () => game.input.requestPointerLock(),
       releasePointerLock: () => game.input.releasePointerLock(),
       findInteractable: (kind) => game.world.interactables.find((item) => item.kind === kind),
+      unlockBaliTreasureHunt: () => game.unlockBaliTreasureHunt(),
     };
   }
 
@@ -1648,6 +1678,7 @@ export class Game {
     this.bossCinematicPlayed.clear();
     this.pendingFinalWin = false;
     this.finalWinDelay = 0;
+    this.celebrationWinHandler = null;
     this.confetti.hide();
     this.resetCheatState();
     this.loadMap(0);

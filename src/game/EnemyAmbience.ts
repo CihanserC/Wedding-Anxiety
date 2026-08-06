@@ -50,7 +50,15 @@ export class EnemyAmbience {
     const readyGrowlers: Enemy[] = [];
 
     for (const enemy of enemies) {
-      if (enemy.ambient || enemy.dead || enemy.dying || enemy.combatFrozen) continue;
+      if (
+        enemy.ambient ||
+        enemy.dead ||
+        enemy.dying ||
+        enemy.combatFrozen ||
+        enemy.bananaDistracted
+      ) {
+        continue;
+      }
 
       const dx = enemy.position.x - playerPos.x;
       const dz = enemy.position.z - playerPos.z;
@@ -79,9 +87,14 @@ export class EnemyAmbience {
 
     if (readyGrowlers.length > 0 && this.globalGrowlLock <= 0) {
       const pick = readyGrowlers[Math.floor(Math.random() * readyGrowlers.length)];
-      const pitch = GROWL_PITCH[pick.stats.type] ?? 1;
-      audio.playEnemyGrowl(pitch * (0.92 + Math.random() * 0.16));
-      this.globalGrowlLock = 0.85;
+      if (pick.stats.type === 'maymun') {
+        audio.playMonkeyScreech(4000);
+        this.globalGrowlLock = 5.2;
+      } else {
+        const pitch = GROWL_PITCH[pick.stats.type] ?? 1;
+        audio.playEnemyGrowl(pitch * (0.92 + Math.random() * 0.16));
+        this.globalGrowlLock = 0.85;
+      }
     }
   }
 }

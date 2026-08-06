@@ -6,7 +6,8 @@ export type EnemyType =
   | 'beklenti-golgesi'
   | 'maymun'
   | 'inek'
-  | 'kertenkele';
+  | 'kertenkele'
+  | 'ari';
 
 export type EnemyBehavior =
   | 'chase'
@@ -15,6 +16,7 @@ export type EnemyBehavior =
   | 'floater'
   | 'flasher'
   | 'wander'
+  | 'buzz'
   | 'critic';
 
 export interface EnemyStats {
@@ -113,7 +115,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
   },
   maymun: {
     type: 'maymun',
-    displayName: 'Maymun',
+    displayName: 'Aç Maymun',
     hp: 2,
     speed: 2.0,
     contactDamage: 5,
@@ -155,5 +157,20 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     anxietyReward: 1,
     contactAnxietyPerSecond: 0,
     behavior: 'wander',
+  },
+  ari: {
+    type: 'ari',
+    displayName: 'Arı',
+    hp: 1,
+    speed: 1.6,
+    contactDamage: 0,
+    radius: 0.12,
+    height: 0.25,
+    color: 0xffd54a,
+    accentColor: 0x1a1a1a,
+    scoreValue: 5,
+    anxietyReward: 0,
+    contactAnxietyPerSecond: 0,
+    behavior: 'buzz',
   },
 };

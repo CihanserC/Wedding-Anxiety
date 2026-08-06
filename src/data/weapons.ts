@@ -1,4 +1,4 @@
-export type WeaponId = 'pistol' | 'rifle' | 'shield' | 'happiness' | 'lightsaber';
+export type WeaponId = 'pistol' | 'rifle' | 'shield' | 'happiness' | 'lightsaber' | 'banana';
 
 export interface WeaponDefinition {
   id: WeaponId;
@@ -83,6 +83,21 @@ export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
     muzzleColor: 0xff4040,
     muzzleSize: 0.06,
     recoil: 0,
+  },
+  /** Bali-only — yellow banana projectile */
+  banana: {
+    id: 'banana',
+    displayName: 'Muz',
+    damage: 1,
+    cooldown: 0.35,
+    range: 48,
+    pellets: 1,
+    spread: 0,
+    tracerColor: 0xffe135,
+    muzzleColor: 0xfff176,
+    muzzleSize: 0.12,
+    recoil: 0.06,
+    boltStyle: true,
   },
 };
 

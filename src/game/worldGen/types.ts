@@ -86,6 +86,7 @@ export type PropKind =
   | 'broadleaf-tree'
   | 'tropical-bush'
   | 'banana-plant'
+  | 'giant-banana-tree'
   | 'fern'
   | 'treasure-chest'
   | 'boat'
@@ -100,11 +101,13 @@ export type PropKind =
   | 'stage-spotlight'
   | 'stage-footlights'
   | 'stage-side-drape'
+  | 'stage-sports-light'
   | 'coastal-picnic'
   | 'coastal-pine'
   | 'coastal-tree'
   | 'garden-flower'
-  | 'wall-painting';
+  | 'wall-painting'
+  | 'wedding-bride-obj';
 
 export type FamousPaintingId =
   | 'mona-lisa'
@@ -136,6 +139,7 @@ export interface InteractableSpec {
     | 'camel-chat'
     | 'arab-chat'
     | 'treasure-chest'
+    | 'banana-tree'
     | 'lamborghini-drive'
     | 'plasma-tv'
     | 'ufo-board'
@@ -165,7 +169,7 @@ export interface CollisionBox {
 }
 
 export interface FaunaSpawnSpec {
-  type: 'inek' | 'kertenkele';
+  type: 'inek' | 'kertenkele' | 'ari';
   x: number;
   y: number;
   z: number;

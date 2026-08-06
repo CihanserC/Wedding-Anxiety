@@ -16,6 +16,9 @@ interface EffectEntry {
   driftZ?: number;
   gravity?: number;
   vy?: number;
+  groundY?: number;
+  /** Settled bananas stay visible without fading out. */
+  persist?: boolean;
 }
 
 interface LaserBoltEntry {
@@ -48,6 +51,140 @@ export class ProjectileEffects {
     const line = new THREE.Line(geometry, material);
     this.scene.add(line);
     this.effects.push({ object: line, born: this.now, life: 0.12, materials: [material] });
+  }
+
+  /** Drop bananas from a tree crown to the ground; they settle as a lasting pile. */
+  spawnFallingBananas(origin: THREE.Vector3, groundY: number, count = 8): THREE.Vector3 {
+    const pileCenter = origin.clone();
+    pileCenter.y = groundY;
+    pileCenter.x += 0.4;
+    pileCenter.z += 0.2;
+
+    for (let i = 0; i < count; i++) {
+      const banana = this.buildBananaMesh(1.8 + Math.random() * 0.6);
+      banana.position.copy(origin);
+      banana.position.x += (Math.random() - 0.5) * 2.4;
+      banana.position.y += Math.random() * 1.2;
+      banana.position.z += (Math.random() - 0.5) * 2.4;
+      banana.rotation.set(
+        Math.random() * 0.8,
+        Math.random() * Math.PI,
+        Math.random() * 0.6 - 0.3,
+      );
+      this.scene.add(banana);
+      const materials: THREE.Material[] = [];
+      banana.traverse((child) => {
+        if (child instanceof THREE.Mesh) materials.push(child.material as THREE.Material);
+      });
+      const angle = Math.random() * Math.PI * 2;
+      const outward = 1.2 + Math.random() * 2.8;
+      this.effects.push({
+        object: banana,
+        born: this.now,
+        life: 120,
+        materials,
+        driftX: Math.cos(angle) * outward,
+        driftZ: Math.sin(angle) * outward,
+        vy: 0.5 + Math.random() * 3.5,
+        gravity: 14,
+        groundY: groundY + Math.random() * 0.12,
+        persist: true,
+      });
+    }
+
+    return pileCenter;
+  }
+
+  private buildBananaMesh(scale = 1): THREE.Group {
+    const g = new THREE.Group();
+    const peel = new THREE.MeshBasicMaterial({ color: 0xffe135 });
+    const tip = new THREE.MeshBasicMaterial({ color: 0xc4a35a });
+    const stem = new THREE.MeshBasicMaterial({ color: 0x4a3420 });
+
+    const segs: Array<[number, number, number, number, number]> = [
+      [0.14, 0.15, 0.14, 0.08, 0.1],
+      [0.18, 0.19, 0.16, 0.1, -0.02],
+      [0.17, 0.18, 0.15, 0.04, -0.16],
+      [0.14, 0.15, 0.13, -0.04, -0.28],
+      [0.1, 0.11, 0.1, -0.12, -0.38],
+    ];
+    for (let i = 0; i < segs.length; i++) {
+      const [w, h, d, y, z] = segs[i];
+      const seg = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        i === segs.length - 1 ? tip : peel,
+      );
+      seg.position.set(0, y, z);
+      seg.rotation.x = -0.2 - i * 0.18;
+      g.add(seg);
+    }
+    const stemMesh = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.08), stem);
+    stemMesh.position.set(0, 0.06, 0.2);
+    g.add(stemMesh);
+    g.scale.setScalar(scale);
+    return g;
+  }
+
+  /** Yellow banana-shaped traveling bolt (Bali muz silahı). */
+  spawnBananaBolt(from: THREE.Vector3, to: THREE.Vector3, color = 0xffe135): void {
+    const dir = to.clone().sub(from);
+    const distance = dir.length();
+    if (distance < 0.05) return;
+    dir.normalize();
+
+    const group = new THREE.Group();
+    const peelMat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 1,
+    });
+    const tipMat = new THREE.MeshBasicMaterial({
+      color: 0xc4a35a,
+      transparent: true,
+      opacity: 1,
+    });
+    const stemMat = new THREE.MeshBasicMaterial({
+      color: 0x4a3420,
+      transparent: true,
+      opacity: 1,
+    });
+
+    // Crescent banana body pointing along +Z (travel axis)
+    const segs: Array<[number, number, number, number, number]> = [
+      [0.1, 0.11, 0.12, 0.04, 0.18],
+      [0.12, 0.13, 0.14, 0.06, 0.06],
+      [0.13, 0.14, 0.14, 0.04, -0.06],
+      [0.12, 0.13, 0.13, -0.01, -0.18],
+      [0.09, 0.1, 0.11, -0.06, -0.28],
+    ];
+    for (let i = 0; i < segs.length; i++) {
+      const [w, h, d, y, z] = segs[i];
+      const seg = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        i === segs.length - 1 ? tipMat : peelMat,
+      );
+      seg.position.set(0, y, z);
+      seg.rotation.x = -0.15 - i * 0.12;
+      group.add(seg);
+    }
+    const stem = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.06), stemMat);
+    stem.position.set(0, 0.02, 0.28);
+    group.add(stem);
+
+    group.position.copy(from);
+    group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+    this.scene.add(group);
+
+    const travelTime = Math.min(0.22, Math.max(0.09, distance / 70));
+    this.laserBolts.push({
+      group,
+      from: from.clone(),
+      to: to.clone(),
+      born: this.now,
+      travelTime,
+      fadeTime: 0.08,
+      materials: [peelMat, tipMat, stemMat],
+    });
   }
 
   /** Thin elongated Star Wars-style bolt: white core + colored glow halo. */
@@ -396,6 +533,25 @@ export class ProjectileEffects {
         this.effects.splice(i, 1);
         continue;
       }
+      if (e.driftX !== undefined) e.object.position.x += e.driftX * dt;
+      if (e.driftZ !== undefined) e.object.position.z += e.driftZ * dt;
+      if (e.vy !== undefined) {
+        e.object.position.y += e.vy * dt;
+        if (e.gravity !== undefined) e.vy -= e.gravity * dt;
+      }
+      if (e.groundY !== undefined && e.object.position.y <= e.groundY) {
+        e.object.position.y = e.groundY;
+        e.vy = 0;
+        e.gravity = undefined;
+        e.driftX = (e.driftX ?? 0) * 0.85;
+        e.driftZ = (e.driftZ ?? 0) * 0.85;
+        if (Math.abs(e.driftX) < 0.05) e.driftX = 0;
+        if (Math.abs(e.driftZ) < 0.05) e.driftZ = 0;
+      }
+      if (e.persist) {
+        // Settled bananas keep full opacity
+        continue;
+      }
       const opacity = 1 - t;
       for (const mat of e.materials) {
         (mat as THREE.Material & { opacity: number }).opacity = opacity;
@@ -405,12 +561,6 @@ export class ProjectileEffects {
       }
       if (e.bobPhase !== undefined) {
         e.object.position.x += Math.sin(this.now * 3.5 + e.bobPhase) * dt * 0.15;
-      }
-      if (e.driftX !== undefined) e.object.position.x += e.driftX * dt;
-      if (e.driftZ !== undefined) e.object.position.z += e.driftZ * dt;
-      if (e.vy !== undefined) {
-        e.object.position.y += e.vy * dt;
-        if (e.gravity !== undefined) e.vy -= e.gravity * dt;
       }
       if (e.object instanceof THREE.Mesh) {
         const isRing = e.object.geometry instanceof THREE.RingGeometry;

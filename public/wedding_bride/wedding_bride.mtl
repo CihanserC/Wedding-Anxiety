@@ -1,0 +1,78 @@
+newmtl tripo_part_10_material
+Kd 1.000000000 1.000000000 1.000000000
+d 1.000000000
+illum 2
+map_Kd wedding_bride_tripo_part_10_basecolor.jpg
+
+newmtl tripo_part_2_material_1
+Kd 1.000000000 1.000000000 1.000000000
+d 1.000000000
+illum 2
+map_Kd wedding_bride_tripo_part_2_basecolor.jpg
+
+newmtl tripo_part_6_material_2
+Kd 1.000000000 1.000000000 1.000000000
+d 1.000000000
+illum 2
+map_Kd wedding_bride_tripo_part_6_basecolor.jpg
+
+newmtl tripo_part_0_material_3
+Kd 1.000000000 1.000000000 1.000000000
+d 1.000000000
+illum 2
+map_Kd wedding_bride_tripo_part_0_basecolor.jpg
+
+newmtl tripo_part_9_material_4
+Kd 1.000000000 1.000000000 1.000000000
+d 1.000000000
+illum 2
+map_Kd wedding_bride_tripo_part_9_basecolor.jpg
+
+newmtl tripo_part_5_material_5
+Kd 1.000000000 1.000000000 1.000000000
+d 1.000000000
+illum 2
+map_Kd wedding_bride_tripo_part_5_basecolor.jpg
+
+newmtl tripo_part_8_material_6
+Kd 1.000000000 1.000000000 1.000000000
+d 1.000000000
+illum 2
+map_Kd wedding_bride_tripo_part_8_basecolor.jpg
+
+newmtl tripo_part_7_material_7
+Kd 1.000000000 1.000000000 1.000000000
+d 1.000000000
+illum 2
+map_Kd wedding_bride_tripo_part_7_basecolor.jpg
+
+newmtl tripo_part_3_material_8
+Kd 1.000000000 1.000000000 1.000000000
+d 1.000000000
+illum 2
+map_Kd wedding_bride_tripo_part_3_basecolor.jpg
+
+newmtl tripo_part_11_material_9
+Kd 1.000000000 1.000000000 1.000000000
+d 1.000000000
+illum 2
+map_Kd wedding_bride_tripo_part_11_basecolor.jpg
+
+newmtl tripo_part_12_material_10
+Kd 1.000000000 1.000000000 1.000000000
+d 1.000000000
+illum 2
+map_Kd wedding_bride_tripo_part_12_basecolor.jpg
+
+newmtl tripo_part_1_material_11
+Kd 1.000000000 1.000000000 1.000000000
+d 1.000000000
+illum 2
+map_Kd wedding_bride_tripo_part_1_basecolor.jpg
+
+newmtl tripo_part_4_material_12
+Kd 1.000000000 1.000000000 1.000000000
+d 1.000000000
+illum 2
+map_Kd wedding_bride_tripo_part_4_basecolor.jpg
+

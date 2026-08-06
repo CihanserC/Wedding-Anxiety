@@ -90,12 +90,28 @@ export function generateBali(w: WorldWriter): GeneratorResult {
   const treasureChest = placeRockyCove(w, cx, cz);
 
   const boats = placeBoats(cx, cz);
+  const treeX = cx + 8;
+  const treeZ = cz + 4;
+  // Solid grass pad under/around the giant banana tree (covers river water)
+  fillGrassAround(w, treeX, treeZ, 6);
+
   const props = [
     ...placeTropicalProps(cx, cz, villaX, villaZ),
     ...placeVillaFurniture(villaX, villaZ),
     ...boats,
+    { kind: 'giant-banana-tree' as const, x: treeX + 0.5, y: 1, z: treeZ + 0.5 },
   ];
-  const collisionBoxes = boats.flatMap((boat) => buildBoatCollisionBoxes(boat));
+  const collisionBoxes = [
+    ...boats.flatMap((boat) => buildBoatCollisionBoxes(boat)),
+    {
+      minX: treeX + 0.5 - 1.3,
+      minY: 1,
+      minZ: treeZ + 0.5 - 1.3,
+      maxX: treeX + 0.5 + 1.3,
+      maxY: 8,
+      maxZ: treeZ + 0.5 + 1.3,
+    },
+  ];
   const ambientFauna = placeFauna(w, cx, cz);
 
   const spawnX = cx + 6;
@@ -113,6 +129,15 @@ export function generateBali(w: WorldWriter): GeneratorResult {
     collisionBoxes,
     ambientFauna,
     treasureChest,
+    interactables: [
+      {
+        kind: 'banana-tree',
+        x: treeX + 0.5,
+        y: 2,
+        z: treeZ + 0.5,
+        radius: 3.5,
+      },
+    ],
   };
 }
 
@@ -232,6 +257,32 @@ function carveRiver(w: WorldWriter, cx: number, cz: number): void {
     const [rx, rz] = points[i];
     w.setBlock(rx - 2, 1, rz, BLOCK_ROCK);
     w.setBlock(rx + 3, 1, rz + 1, BLOCK_ROCK);
+  }
+}
+
+/** Replace water/sand around a point with solid grass so props sit on dry ground. */
+function fillGrassAround(w: WorldWriter, cx: number, cz: number, radius: number): void {
+  const r2 = radius * radius;
+  for (let z = cz - radius; z <= cz + radius; z++) {
+    for (let x = cx - radius; x <= cx + radius; x++) {
+      const dx = x - cx;
+      const dz = z - cz;
+      if (dx * dx + dz * dz > r2) continue;
+      if (x < 1 || x >= w.width - 1 || z < 1 || z >= w.depth - 1) continue;
+      const ground = w.getBlock(x, 1, z);
+      if (
+        ground === BLOCK_WATER ||
+        ground === BLOCK_SAND ||
+        ground === BLOCK_ROCK ||
+        ground === BLOCK_PATH
+      ) {
+        w.setBlock(x, 1, z, BLOCK_GRASS);
+      }
+      // Clear standing water / debris above the pad
+      if (w.getBlock(x, 2, z) === BLOCK_WATER) {
+        w.setBlock(x, 2, z, BLOCK_AIR);
+      }
+    }
   }
 }
 
@@ -796,6 +847,24 @@ function placeFauna(w: WorldWriter, cx: number, cz: number): FaunaSpawnSpec[] {
     fauna.push({ type: 'kertenkele', x: x + 0.5, y: 2.01, z: z + 0.5 });
     lizardCount++;
     if (lizardCount >= 18) break;
+  }
+
+  // Tiny buzzing bees near banana tree, flowers, and villa garden
+  const treeX = cx + 8;
+  const treeZ = cz + 4;
+  const beeSpots: Array<[number, number, number]> = [
+    [treeX + 1.5, 3.6, treeZ + 0.5],
+    [treeX - 1.2, 4.0, treeZ - 0.8],
+    [treeX + 0.3, 3.4, treeZ + 2.0],
+    [cx + 4, 3.2, cz + 10],
+    [cx - 6, 3.5, cz + 8],
+    [cx + 10, 3.8, cz - 6],
+    [cx - 10, 3.3, cz - 4],
+    [cx + 2, 3.7, cz + 2],
+  ];
+  for (const [x, y, z] of beeSpots) {
+    if (!isLand(w, Math.floor(x), Math.floor(z))) continue;
+    fauna.push({ type: 'ari', x, y, z });
   }
 
   return fauna;

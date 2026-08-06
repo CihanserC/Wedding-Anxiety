@@ -40,10 +40,20 @@ export const WIN_MESSAGES = {
 
 export const BALI_TREASURE_MESSAGES = {
   prompt: 'E - Hazineyi keşfet',
+  hint: 'Kayalıkların arasında bir hazine sandığı belirdi…',
   title: 'Hazine!',
   body:
     "Gizli hazineyi buldun! Kapılar açıldı, artık Dubai'de istediğin özgür hayatı yaşayabilirsin, habibi.",
   continueLabel: "Dubai'ye Uç",
+};
+
+export const BANANA_TREE_MESSAGES = {
+  prompt: 'E - Muz ağacını salla',
+  subtitle: 'Muzlar düştü! Maymunlar muza koşuyor…',
+  popupTitle: 'Maymunlar Tok!',
+  popupBody:
+    'Adadaki bütün maymunlar seni rahat bırakacaklar — karınları artık tok.',
+  popupContinue: 'Tamam',
 };
 
 export const LOSE_MESSAGES = {

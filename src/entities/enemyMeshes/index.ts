@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { EnemyStats, EnemyType } from '../../data/enemies';
+import { buildAri } from './ari';
 import { buildInek } from './inek';
 import { buildKertenkele } from './kertenkele';
 import { buildMaymun } from './maymun';
@@ -36,6 +37,8 @@ export function buildEnemyMesh(type: EnemyType, stats: EnemyStats): EnemyMeshRes
       return buildInek(stats);
     case 'kertenkele':
       return buildKertenkele(stats);
+    case 'ari':
+      return buildAri(stats);
   }
 }
 

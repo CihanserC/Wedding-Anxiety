@@ -5,7 +5,9 @@ import {
   createNameTag,
   createSpeechBubble,
   disposeNameTag,
+  updateNameTag,
   updateSpeechBubble,
+  type NameTagStyle,
 } from '../rendering/EntityNameTag';
 import { buildEnemyMesh } from './enemyMeshes';
 
@@ -39,6 +41,13 @@ export class Enemy {
   dying = false;
   /** Ambient wildlife — not counted for wave clear. */
   ambient = false;
+  /** Distracted by fallen bananas (Bali) — walk to pile, squat, no growl. */
+  bananaDistracted = false;
+  bananaArrived = false;
+  bananaTarget: THREE.Vector3 | null = null;
+  /** Home point for buzzing bees (ambient ari). */
+  private buzzHome: THREE.Vector3 | null = null;
+  private buzzHeightPhase = Math.random() * Math.PI * 2;
   /** Red name label above combat enemies (null for ambient fauna). */
   nameTag: THREE.Sprite | null = null;
   speechBubble: THREE.Sprite | null = null;
@@ -130,6 +139,18 @@ export class Enemy {
     const tagLift = this.stats.type === 'mukemmeliyetci-kuzen' ? 0.38 : 0.12;
     this.nameTag.position.set(0, this.stats.height + tagLift, 0);
     this.root.add(this.nameTag);
+  }
+
+  setNameTagLabel(label: string, style?: NameTagStyle): void {
+    if (!this.nameTag) return;
+    updateNameTag(this.nameTag, label, style);
+  }
+
+  /** Bali: mark a monkey as fed — green tag and stop chasing the player. */
+  markMonkeyFed(pilePos: THREE.Vector3): void {
+    if (this.stats.type !== 'maymun') return;
+    this.distractToBananas(pilePos);
+    this.setNameTagLabel('Mutlu Maymun', { color: '#3dd66b', stroke: '#0a3018' });
   }
 
   showTaunt(text: string, duration = 3.5): void {
@@ -264,6 +285,23 @@ export class Enemy {
     this.deathTimer = 0.35;
   }
 
+  /** Bali: abandon chase and walk to fallen bananas, then squat and stare. */
+  distractToBananas(pilePos: THREE.Vector3): void {
+    if (this.dead || this.dying || this.ambient) return;
+    if (this.stats.type !== 'maymun') return;
+    this.bananaDistracted = true;
+    this.bananaArrived = false;
+    this.bananaTarget = pilePos.clone();
+    this.clearSpeechBubble();
+    this.growlCooldown = 9999;
+    this.tauntCooldown = 9999;
+  }
+
+  /** Anchor a buzzing bee around a home point in the air. */
+  setBuzzHome(pos: THREE.Vector3): void {
+    this.buzzHome = pos.clone();
+  }
+
   get bossRagePhase(): 0 | 2 | 3 {
     if (this.bossPhasesTriggered.has(3)) return 3;
     if (this.bossPhasesTriggered.has(2)) return 2;
@@ -349,6 +387,16 @@ export class Enemy {
 
     if (this.dying) {
       this.tickDeath(dt);
+      return;
+    }
+
+    if (this.bananaDistracted && this.bananaTarget) {
+      this.tickBananaDistract(dt);
+      return;
+    }
+
+    if (this.stats.behavior === 'buzz') {
+      this.tickBuzz(dt);
       return;
     }
 
@@ -654,6 +702,123 @@ export class Enemy {
     );
   }
 
+  private tickBuzz(dt: number): void {
+    const home = this.buzzHome ?? this.position;
+    const leash = 3.2;
+
+    this.wanderTimer -= dt;
+    if (this.wanderTimer <= 0) {
+      this.wanderTimer = 0.8 + Math.random() * 1.4;
+      const angle = Math.random() * Math.PI * 2;
+      this.wanderDir.set(Math.cos(angle), 0, Math.sin(angle));
+    }
+
+    const speed = this.stats.speed * this.speedMultiplier;
+    this.position.x += this.wanderDir.x * speed * dt;
+    this.position.z += this.wanderDir.z * speed * dt;
+
+    // Soft leash back toward home
+    const dx = this.position.x - home.x;
+    const dz = this.position.z - home.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > leash) {
+      this.position.x = home.x + (dx / dist) * leash;
+      this.position.z = home.z + (dz / dist) * leash;
+      this.wanderTimer = 0;
+    }
+
+    this.buzzHeightPhase += dt * 3.2;
+    const baseY = home.y;
+    this.position.y = baseY + Math.sin(this.buzzHeightPhase + this.bobPhase) * 0.35;
+
+    this.vy = 0;
+    this.root.rotation.y = Math.atan2(this.wanderDir.x, this.wanderDir.z);
+    this.root.position.copy(this.position);
+    this.applyTypeAnimation(dt);
+  }
+
+  private tickBananaDistract(dt: number): void {
+    if (!this.bananaTarget) return;
+
+    if (this.hitFlashRemaining > 0) {
+      this.hitFlashRemaining -= dt;
+      if (this.hitFlashRemaining <= 0) {
+        for (const mat of this.materials) {
+          mat.emissive = new THREE.Color(0x000000);
+          mat.emissiveIntensity = 0;
+        }
+      }
+    }
+
+    const toTarget = new THREE.Vector3(
+      this.bananaTarget.x - this.position.x,
+      0,
+      this.bananaTarget.z - this.position.z,
+    );
+    const distXZ = toTarget.length();
+    let moveDirX = 0;
+    let moveDirZ = 0;
+    let blockedHoriz = false;
+
+    if (!this.bananaArrived && distXZ > 0.9) {
+      toTarget.divideScalar(distXZ);
+      moveDirX = toTarget.x;
+      moveDirZ = toTarget.z;
+      const speed = this.stats.speed * 0.9;
+      const beforeX = this.position.x;
+      const beforeZ = this.position.z;
+      this.tryMove(moveDirX * speed * dt, 0, moveDirZ * speed * dt);
+      blockedHoriz =
+        Math.abs(this.position.x - beforeX) < 1e-4 &&
+        Math.abs(this.position.z - beforeZ) < 1e-4;
+      this.root.rotation.y = Math.atan2(moveDirX, moveDirZ);
+    } else {
+      this.bananaArrived = true;
+      // Face the pile while idle-hopping nearby
+      if (distXZ > 0.001) {
+        this.root.rotation.y = Math.atan2(toTarget.x, toTarget.z);
+      }
+    }
+
+    this.jumpCooldown = Math.max(0, this.jumpCooldown - dt);
+    const groundedBefore = this.isGrounded();
+    if (groundedBefore && this.canHop()) {
+      this.tryHop(dt, blockedHoriz, this.bananaTarget, distXZ);
+    }
+
+    this.vy -= 22 * dt;
+    if (this.vy < -30) this.vy = -30;
+    if (groundedBefore && this.vy < 0) this.vy = 0;
+    this.tryMove(0, this.vy * dt, 0);
+
+    // Air control while hopping toward bananas
+    if (!this.isGrounded() && (moveDirX !== 0 || moveDirZ !== 0)) {
+      const airSpeed = this.stats.speed * 0.85 * dt;
+      this.tryMove(moveDirX * airSpeed, 0, moveDirZ * airSpeed);
+    }
+
+    this.root.position.copy(this.position);
+
+    if (this.bananaArrived && this.isGrounded() && this.vy <= 0.05) {
+      this.root.scale.set(1, 0.72, 1);
+      if (this.headGroup) {
+        this.headGroup.rotation.x = 0.55;
+        this.headGroup.rotation.z = Math.sin(this.time * 1.2) * 0.04;
+      }
+      if (this.armGroups) {
+        this.armGroups[0].rotation.x = -0.9;
+        this.armGroups[1].rotation.x = -0.85;
+      }
+      if (this.tail) {
+        this.tail.rotation.z = Math.sin(this.time * 1.5) * 0.12;
+        this.tail.rotation.x = -0.15;
+      }
+    } else {
+      this.root.scale.set(1, 1, 1);
+      this.applyTypeAnimation(dt);
+    }
+  }
+
   private applyTypeAnimation(_dt: number): void {
     const t = this.time;
     let baseBob = Math.sin(t * 6 + this.bobPhase) * 0.05;
@@ -745,6 +910,22 @@ export class Enemy {
               this.armGroups[i].rotation.z = Math.sin(t * 2 + i) * 0.3;
             }
           }
+        }
+        baseBob = 0;
+        break;
+      }
+      case 'buzz': {
+        // Fast wing flap
+        if (this.armGroups) {
+          const flap = Math.sin(t * 48) * 0.7;
+          this.armGroups[0].rotation.z = 0.35 + flap;
+          this.armGroups[1].rotation.z = -0.35 - flap;
+          this.armGroups[0].rotation.x = Math.sin(t * 40) * 0.15;
+          this.armGroups[1].rotation.x = Math.sin(t * 40 + 0.5) * 0.15;
+        }
+        if (this.floatBody) {
+          this.floatBody.position.y = Math.sin(t * 10 + this.bobPhase) * 0.04;
+          this.floatBody.rotation.z = Math.sin(t * 6) * 0.08;
         }
         baseBob = 0;
         break;

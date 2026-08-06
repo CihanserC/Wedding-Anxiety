@@ -28,6 +28,8 @@ export class AudioManager {
   private bgmNoteIndex = 0;
   private blasterBuffer: AudioBuffer | null = null;
   private blasterLoadPromise: Promise<void> | null = null;
+  private monkeyBuffer: AudioBuffer | null = null;
+  private monkeyLoadPromise: Promise<void> | null = null;
   private lightsaberHitBuffer: AudioBuffer | null = null;
   private lightsaberHoldBuffer: AudioBuffer | null = null;
   private lightsaberLoadPromise: Promise<void> | null = null;
@@ -59,6 +61,7 @@ export class AudioManager {
       this.musicGain.gain.value = 0.12;
       this.musicGain.connect(this.ctx.destination);
       void this.loadBlasterSound();
+      void this.loadMonkeySound();
       void this.loadLightsaberSounds();
     } catch {
       this.ctx = null;
@@ -276,7 +279,7 @@ export class AudioManager {
     } else if (id === 'bali-tropical') {
       this.startBaliTropical();
     } else if (id === 'dubai-luxury') {
-      this.startDubaiLuxury();
+      this.tryExternalDubaiArabicChiptune().catch(() => this.startDubaiLuxuryLoop());
     }
   }
 
@@ -305,6 +308,21 @@ export class AudioManager {
       audio.load();
     });
     if (this.bgmId !== 'mozart-allegro') return;
+    this.bgmHtml = audio;
+    await audio.play();
+  }
+
+  private async tryExternalDubaiArabicChiptune(): Promise<void> {
+    const url = `${import.meta.env.BASE_URL}${encodeURIComponent('Arabic Chiptune.mp3')}`;
+    const audio = new Audio(url);
+    audio.loop = true;
+    audio.volume = 0.3;
+    await new Promise<void>((resolve, reject) => {
+      audio.addEventListener('canplaythrough', () => resolve(), { once: true });
+      audio.addEventListener('error', () => reject(new Error('no file')), { once: true });
+      audio.load();
+    });
+    if (this.bgmId !== 'dubai-luxury') return;
     this.bgmHtml = audio;
     await audio.play();
   }
@@ -466,8 +484,8 @@ export class AudioManager {
     step();
   }
 
-  /** Slow golden ambient for the Dubai luxury villa. */
-  private startDubaiLuxury(): void {
+  /** Slow golden ambient for the Dubai luxury villa (procedural fallback). */
+  private startDubaiLuxuryLoop(): void {
     if (!this.ctx || !this.musicGain || this.bgmId !== 'dubai-luxury') return;
 
     const melody: Array<{ freq: number; beats: number }> = [
@@ -717,6 +735,54 @@ export class AudioManager {
       this.blasterLoadPromise = null;
     });
     return this.blasterLoadPromise;
+  }
+
+  /** Monkey screech — public/monkey_sound.mp3, optional delay before play. */
+  playMonkeyScreech(delayMs = 4000): void {
+    if (!this.ctx || !this.masterGain || this.muted) return;
+    if (!this.monkeyBuffer) {
+      void this.loadMonkeySound().then(() => {
+        if (this.monkeyBuffer) this.scheduleMonkeyScreech(delayMs);
+      });
+      return;
+    }
+    this.scheduleMonkeyScreech(delayMs);
+  }
+
+  private scheduleMonkeyScreech(delayMs: number): void {
+    const play = () => this.playMonkeyBuffer();
+    if (delayMs > 0) {
+      window.setTimeout(play, delayMs);
+    } else {
+      play();
+    }
+  }
+
+  private playMonkeyBuffer(): void {
+    if (!this.ctx || !this.masterGain || this.muted || !this.monkeyBuffer) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.monkeyBuffer;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0.9;
+    src.connect(gain);
+    gain.connect(this.masterGain);
+    src.start();
+  }
+
+  private loadMonkeySound(): Promise<void> {
+    if (this.monkeyBuffer) return Promise.resolve();
+    if (this.monkeyLoadPromise) return this.monkeyLoadPromise;
+    this.monkeyLoadPromise = (async () => {
+      if (!this.ctx) return;
+      const url = `${import.meta.env.BASE_URL}monkey_sound.mp3`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`monkey_sound fetch failed: ${res.status}`);
+      const arr = await res.arrayBuffer();
+      this.monkeyBuffer = await this.ctx.decodeAudioData(arr.slice(0));
+    })().catch(() => {
+      this.monkeyLoadPromise = null;
+    });
+    return this.monkeyLoadPromise;
   }
 
   /** One-shot swing/hit — public/lightsaber-hit.mp3 */

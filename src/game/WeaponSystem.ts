@@ -164,7 +164,9 @@ export class WeaponSystem {
       end = origin.clone().addScaledVector(direction, weapon.range);
     }
 
-    if (weapon.boltStyle) {
+    if (weapon.boltStyle && weapon.id === 'banana') {
+      this.effects.spawnBananaBolt(muzzleWorld, end, weapon.tracerColor);
+    } else if (weapon.boltStyle) {
       this.effects.spawnLaserBolt(muzzleWorld, end, weapon.tracerColor);
     } else {
       this.effects.spawnTracer(muzzleWorld, end, weapon.tracerColor);
