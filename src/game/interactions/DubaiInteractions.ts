@@ -2,6 +2,7 @@ import {
   DUBAI_FINALE_MESSAGES,
   DUBAI_LOCAL_MESSAGES,
   DUBAI_NPC_MESSAGES,
+  HELI_FLIGHT_MESSAGES,
   LAMBO_DRIVE_MESSAGES,
   SPACE_UFO_MESSAGES,
   TV_MESSAGES,
@@ -13,17 +14,25 @@ export interface DubaiCarHost {
   isDriving(): boolean;
   enterDrive(): void;
   exitDrive(): void;
+  isFlyingHeli(): boolean;
+  canExitHeli(): boolean;
+  enterHeli(): void;
+  exitHeli(): void;
   isTvOn(): boolean;
   setTvPower(on: boolean): void;
   isLamboInteractArmed(): boolean;
   armLamboInteract(): void;
   disarmLamboInteract(): void;
+  isHeliInteractArmed(): boolean;
+  armHeliInteract(): void;
+  disarmHeliInteract(): void;
   flushInteract(): void;
 }
 
 export class DubaiInteractions {
   private dubaiFinaleShown = false;
   private lamboInteractArmed = false;
+  private heliInteractArmed = false;
 
   constructor(
     private readonly host: InteractionHost,
@@ -33,11 +42,24 @@ export class DubaiInteractions {
   resetForNewRun(): void {
     this.dubaiFinaleShown = false;
     this.lamboInteractArmed = false;
+    this.heliInteractArmed = false;
   }
 
   tickExplore(): void {
     if (this.host.getMapId() !== 'dubai' || !this.host.input.isLocked()) return;
     if (this.host.levelState.phase !== 'celebration') return;
+
+    if (this.car.isFlyingHeli()) {
+      this.host.hud.setSubtitle([]);
+      const exitLine = this.car.canExitHeli()
+        ? HELI_FLIGHT_MESSAGES.exitPrompt
+        : HELI_FLIGHT_MESSAGES.exitTooHigh;
+      this.host.hud.setInteractPrompt(
+        `${exitLine}  ·  ${HELI_FLIGHT_MESSAGES.controls}  ·  ${HELI_FLIGHT_MESSAGES.cameraToggle}`,
+      );
+      if (this.host.input.consumeInteract() && this.car.canExitHeli()) this.car.exitHeli();
+      return;
+    }
 
     if (this.car.isDriving()) {
       this.host.hud.setSubtitle([]);
@@ -52,6 +74,7 @@ export class DubaiInteractions {
 
     const sunset = this.host.findInteractable('sunset-point');
     const lambo = this.host.findInteractable('lamborghini-drive');
+    const heli = this.host.findInteractable('helicopter-board');
     const groom = this.host.findInteractable('groom-chat');
     const bride = this.host.findInteractable('bride-chat');
     const tv = this.host.findInteractable('plasma-tv');
@@ -60,14 +83,25 @@ export class DubaiInteractions {
 
     const nearSunset = sunset ? this.host.isNearInteractable(sunset) : false;
     const nearLambo = lambo ? this.host.isNearInteractable(lambo) : false;
+    const nearHeli = heli ? this.host.isNearInteractable(heli) : false;
     const nearGroom = groom ? this.host.isNearInteractable(groom) : false;
     const nearBride = bride ? this.host.isNearInteractable(bride) : false;
     const nearTv = tv ? this.host.isNearInteractable(tv) : false;
     const nearUfo = ufo ? this.host.isNearInteractable(ufo) : false;
     const nearLocal = nearestLocal !== null;
 
-    if (!nearSunset && !nearLambo && !nearGroom && !nearBride && !nearLocal && !nearTv && !nearUfo) {
+    if (
+      !nearSunset &&
+      !nearLambo &&
+      !nearHeli &&
+      !nearGroom &&
+      !nearBride &&
+      !nearLocal &&
+      !nearTv &&
+      !nearUfo
+    ) {
       this.lamboInteractArmed = false;
+      this.heliInteractArmed = false;
       this.host.hud.setInteractPrompt(null);
       return;
     }
@@ -79,17 +113,38 @@ export class DubaiInteractions {
 
     const sunsetDist = dist(sunset, nearSunset);
     const lamboDist = dist(lambo, nearLambo);
+    const heliDist = dist(heli, nearHeli);
     const groomDist = dist(groom, nearGroom);
     const brideDist = dist(bride, nearBride);
     const localDist = nearestLocal?.dist ?? Infinity;
     const tvDist = dist(tv, nearTv);
     const ufoDist = dist(ufo, nearUfo);
 
-    const closest = Math.min(sunsetDist, lamboDist, groomDist, brideDist, localDist, tvDist, ufoDist);
+    const closest = Math.min(
+      sunsetDist,
+      lamboDist,
+      heliDist,
+      groomDist,
+      brideDist,
+      localDist,
+      tvDist,
+      ufoDist,
+    );
 
     if (closest === sunsetDist && nearSunset) {
       this.host.hud.setInteractPrompt(DUBAI_FINALE_MESSAGES.prompt);
       if (this.host.input.consumeInteract()) this.openFinale();
+      return;
+    }
+
+    if (closest === heliDist && nearHeli) {
+      this.host.hud.setInteractPrompt(HELI_FLIGHT_MESSAGES.prompt);
+      if (!this.heliInteractArmed) {
+        this.heliInteractArmed = true;
+        this.host.input.flushInteract();
+        return;
+      }
+      if (this.host.input.consumeInteract()) this.car.enterHeli();
       return;
     }
 
@@ -105,6 +160,7 @@ export class DubaiInteractions {
     }
 
     this.lamboInteractArmed = false;
+    this.heliInteractArmed = false;
 
     if (closest === ufoDist && nearUfo) {
       this.host.hud.setInteractPrompt(SPACE_UFO_MESSAGES.prompt);
@@ -239,23 +295,11 @@ export class DubaiInteractions {
   }
 
   private openSpaceUfoTeaser(): void {
-    this.host.setIntentionalUnlock(true);
-    this.host.releasePointerLock();
+    // Keep pointer lock — releasing then re-requesting races the async unlock
+    // and leaves space flight without mouse/WASD (controls require isLocked).
     this.host.hud.setInteractPrompt(null);
     this.host.hud.setCrosshairVisible(false);
-    this.host.audio.play('win');
-
-    this.host.dialogue.show({
-      title: SPACE_UFO_MESSAGES.title,
-      body: SPACE_UFO_MESSAGES.body,
-      continueLabel: SPACE_UFO_MESSAGES.continueLabel,
-      onContinue: () => {
-        if (this.host.state === 'playing' && this.host.levelState.phase === 'celebration') {
-          this.host.hud.setCrosshairVisible(false);
-          this.host.requestPointerLock();
-        }
-      },
-    });
+    this.host.enterSpaceMode();
   }
 
   private openDubaiChatChoices(npc: 'bride' | 'groom'): void {

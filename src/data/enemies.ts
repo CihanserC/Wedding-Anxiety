@@ -7,7 +7,9 @@ export type EnemyType =
   | 'maymun'
   | 'inek'
   | 'kertenkele'
-  | 'ari';
+  | 'ari'
+  | 'uzayli-dusmanca'
+  | 'golge-canavar';
 
 export type EnemyBehavior =
   | 'chase'
@@ -17,7 +19,8 @@ export type EnemyBehavior =
   | 'flasher'
   | 'wander'
   | 'buzz'
-  | 'critic';
+  | 'critic'
+  | 'wraith';
 
 export interface EnemyStats {
   type: EnemyType;
@@ -172,5 +175,35 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     anxietyReward: 0,
     contactAnxietyPerSecond: 0,
     behavior: 'buzz',
+  },
+  'uzayli-dusmanca': {
+    type: 'uzayli-dusmanca',
+    displayName: 'Düşman Uzaylı',
+    hp: 3,
+    speed: 2.2,
+    contactDamage: 8,
+    radius: 0.4,
+    height: 1.7,
+    color: 0x3a8a50,
+    accentColor: 0xff3040,
+    scoreValue: 70,
+    anxietyReward: 7,
+    contactAnxietyPerSecond: 18,
+    behavior: 'chase',
+  },
+  'golge-canavar': {
+    type: 'golge-canavar',
+    displayName: 'Gölge Canavar',
+    hp: 3,
+    speed: 1.6,
+    contactDamage: 10,
+    radius: 0.5,
+    height: 2.2,
+    color: 0x1a1520,
+    accentColor: 0xffaa22,
+    scoreValue: 80,
+    anxietyReward: 8,
+    contactAnxietyPerSecond: 20,
+    behavior: 'wraith',
   },
 };

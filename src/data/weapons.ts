@@ -1,4 +1,11 @@
-export type WeaponId = 'pistol' | 'rifle' | 'shield' | 'happiness' | 'lightsaber' | 'banana';
+export type WeaponId =
+  | 'pistol'
+  | 'rifle'
+  | 'shield'
+  | 'happiness'
+  | 'lightsaber'
+  | 'banana'
+  | 'alien';
 
 export interface WeaponDefinition {
   id: WeaponId;
@@ -25,9 +32,9 @@ export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
     range: 60,
     pellets: 1,
     spread: 0,
-    tracerColor: 0xfff4a0,
-    muzzleColor: 0xfff2b0,
-    muzzleSize: 0.08,
+    tracerColor: 0xffee66,
+    muzzleColor: 0xffee66,
+    muzzleSize: 0.1,
     recoil: 0.05,
   },
   rifle: {
@@ -97,6 +104,21 @@ export const WEAPONS: Record<WeaponId, WeaponDefinition> = {
     muzzleColor: 0xfff176,
     muzzleSize: 0.12,
     recoil: 0.06,
+    boltStyle: true,
+  },
+  /** Planet-surface only — kawaii pastel cat ray gun */
+  alien: {
+    id: 'alien',
+    displayName: 'Kawaii Işın Tabancası',
+    damage: 1,
+    cooldown: 0.2,
+    range: 58,
+    pellets: 1,
+    spread: 0.02,
+    tracerColor: 0xff9ec8,
+    muzzleColor: 0xffd0e8,
+    muzzleSize: 0.14,
+    recoil: 0.05,
     boltStyle: true,
   },
 };

@@ -15,6 +15,12 @@ import {
   buildGuestManCharacter,
   buildGuestWomanCharacter,
 } from '../../rendering/WeddingGuestCharacter';
+import {
+  buildAlienPeaceful,
+  buildDarthVader,
+  buildMasterYoda,
+} from '../../rendering/AlienCharacters';
+import { buildFrogCharacter } from '../../rendering/FrogCharacter';
 
 function applySittingPose(model: THREE.Group, type: NpcType): void {
   model.rotation.x = 0.08;
@@ -62,6 +68,14 @@ export function buildNpcMesh(
         return buildGuestManCharacter(variant);
       case 'guest-woman':
         return buildGuestWomanCharacter(variant);
+      case 'alien-peaceful':
+        return buildAlienPeaceful();
+      case 'darth-vader':
+        return buildDarthVader();
+      case 'master-yoda':
+        return buildMasterYoda();
+      case 'frog':
+        return buildFrogCharacter();
     }
   })();
 

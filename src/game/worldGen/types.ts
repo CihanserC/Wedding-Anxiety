@@ -96,7 +96,13 @@ export type PropKind =
   | 'dining-chair'
   | 'dining-table'
   | 'lamborghini'
+  | 'helicopter'
   | 'ufo'
+  | 'ufo-beacon'
+  | 'ufo-crate'
+  | 'ufo-sign'
+  | 'tie-advanced'
+  | 'vader-throne'
   | 'conductor-podium'
   | 'stage-spotlight'
   | 'stage-footlights'
@@ -142,11 +148,17 @@ export interface InteractableSpec {
     | 'treasure-chest'
     | 'banana-tree'
     | 'lamborghini-drive'
+    | 'helicopter-board'
     | 'plasma-tv'
     | 'ufo-board'
-    | 'sunset-point';
+    | 'sunset-point'
+    | 'vader-chat'
+    | 'yoda-chat'
+    | 'alien-chat'
+    | 'frog-chat'
+    | 'galaxy-return';
   x: number;
-  y: number;
+  y?: number;
   z: number;
   radius?: number;
   /** Optional display name override for local Dubai chatter NPCs. */
@@ -199,4 +211,7 @@ export interface GeneratorResult {
   treasureChest?: TreasureChestSpec;
   /** Detailed audience seats (concert hall); BLOCK_SEAT voxels stay for collision. */
   theaterSeats?: TheaterSeatSpec[];
+  /** Dubai: spawn beside the landed UFO after returning from space. */
+  ufoBoardSpawn?: THREE.Vector3;
+  ufoBoardFacing?: number;
 }

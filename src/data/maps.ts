@@ -1,6 +1,18 @@
 import type { SpawnRequest } from '../game/EnemyManager';
 
-export type MapId = 'concert-hall' | 'lighthouse' | 'wedding-hall' | 'bali' | 'dubai';
+export type MapId =
+  | 'concert-hall'
+  | 'lighthouse'
+  | 'wedding-hall'
+  | 'bali'
+  | 'dubai'
+  | 'planet-desert'
+  | 'planet-snow'
+  | 'planet-rainforest'
+  | 'planet-swamp'
+  | 'planet-lava'
+  | 'planet-ocean-mini'
+  | 'planet-void';
 
 export interface LevelDefinition {
   index: number;
@@ -39,6 +51,8 @@ export interface MapDefinition {
   bgm?: 'mozart-allegro' | 'lighthouse-ambient' | 'wedding-hope' | 'bali-tropical' | 'dubai-luxury';
   /** Peaceful roam map: no combat, no wave clear, celebration-style exploration. */
   explorationOnly?: boolean;
+  /** Galaxy planet surface — not part of the main campaign progression. */
+  isPlanet?: boolean;
   levels: LevelDefinition[];
 }
 
@@ -340,12 +354,257 @@ export const MAPS: MapDefinition[] = [
       },
     ],
   },
+  {
+    id: 'planet-desert',
+    displayName: 'Kum Diyar',
+    shortName: 'Çöl Gezegen',
+    description: 'Altın kumlar ve barışçıl gezginler.',
+    worldSize: { width: 48, depth: 48, height: 14 },
+    explorationOnly: true,
+    isPlanet: true,
+    atmosphere: {
+      ambientColor: 0xffe8c0,
+      ambientIntensity: 0.7,
+      sunColor: 0xffd080,
+      sunIntensity: 1.2,
+      sunPosition: [40, 55, -15],
+      fillColor: 0xffc070,
+      fillIntensity: 0.28,
+      fogColor: 0xe8d0a0,
+      fogNear: 20,
+      fogFar: 70,
+      skyColor: 0xc8a878,
+    },
+    levels: [
+      {
+        index: 1,
+        title: 'Kum Diyar',
+        intro: 'Çöl gezegenine indin. Uzakta barışçıl gezginler var.',
+        clearMessage: 'Kum Diyar keşfedildi.',
+        totalEnemies: 0,
+        batchInterval: 999,
+        batches: [],
+      },
+    ],
+  },
+  {
+    id: 'planet-snow',
+    displayName: 'Buz Vadi',
+    shortName: 'Kar Gezegen',
+    description: 'Donmuş ovalar. Düşmanca yaşam formları dolaşıyor.',
+    worldSize: { width: 48, depth: 48, height: 14 },
+    explorationOnly: true,
+    isPlanet: true,
+    atmosphere: {
+      ambientColor: 0xd0e8f8,
+      ambientIntensity: 0.75,
+      sunColor: 0xf0f8ff,
+      sunIntensity: 0.95,
+      sunPosition: [30, 50, 20],
+      fillColor: 0xa0c8e8,
+      fillIntensity: 0.35,
+      fogColor: 0xc8dce8,
+      fogNear: 18,
+      fogFar: 65,
+      skyColor: 0xb0c8d8,
+    },
+    levels: [
+      {
+        index: 1,
+        title: 'Buz Vadi',
+        intro: 'Buzlu bir dünyaya indin. Soğuk rüzgâr… ve düşmanlar.',
+        clearMessage: 'Buz Vadi keşfedildi.',
+        totalEnemies: 0,
+        batchInterval: 999,
+        batches: [],
+      },
+    ],
+  },
+  {
+    id: 'planet-rainforest',
+    displayName: 'Yeşil Taç',
+    shortName: 'Orman Gezegen',
+    description: 'Yoğun yağmur ormanı ve dost canlısı yerliler.',
+    worldSize: { width: 48, depth: 48, height: 16 },
+    explorationOnly: true,
+    isPlanet: true,
+    atmosphere: {
+      ambientColor: 0xc8f0c0,
+      ambientIntensity: 0.6,
+      sunColor: 0xffe8a0,
+      sunIntensity: 1.0,
+      sunPosition: [25, 50, 30],
+      fillColor: 0x60c080,
+      fillIntensity: 0.3,
+      fogColor: 0x88c098,
+      fogNear: 22,
+      fogFar: 70,
+      skyColor: 0x6ab888,
+    },
+    levels: [
+      {
+        index: 1,
+        title: 'Yeşil Taç',
+        intro: 'Yağmur ormanı gezegenine indin. Yaprak hışırtıları…',
+        clearMessage: 'Yeşil Taç keşfedildi.',
+        totalEnemies: 0,
+        batchInterval: 999,
+        batches: [],
+      },
+    ],
+  },
+  {
+    id: 'planet-swamp',
+    displayName: 'Sis Bataklığı',
+    shortName: 'Bataklık',
+    description: 'Sisli bataklık. Bilge bir varlık seni bekliyor.',
+    worldSize: { width: 48, depth: 48, height: 16 },
+    explorationOnly: true,
+    isPlanet: true,
+    atmosphere: {
+      ambientColor: 0xa8c080,
+      ambientIntensity: 0.5,
+      sunColor: 0xc8d090,
+      sunIntensity: 0.55,
+      sunPosition: [20, 40, 10],
+      fillColor: 0x608050,
+      fillIntensity: 0.3,
+      fogColor: 0x687858,
+      fogNear: 6,
+      fogFar: 38,
+      skyColor: 0x455040,
+    },
+    levels: [
+      {
+        index: 1,
+        title: 'Sis Bataklığı',
+        intro: 'Sis yoğun. Bir yerlerde bilge bir ses duyuluyor…',
+        clearMessage: 'Sis Bataklığı keşfedildi.',
+        totalEnemies: 0,
+        batchInterval: 999,
+        batches: [],
+      },
+    ],
+  },
+  {
+    id: 'planet-lava',
+    displayName: 'Kızıl Ateş',
+    shortName: 'Lav Gezegen',
+    description: 'Dev bir yanardağ. Lav akıyor. Karanlık bir lord tahtında bekliyor.',
+    worldSize: { width: 40, depth: 40, height: 18 },
+    explorationOnly: true,
+    isPlanet: true,
+    atmosphere: {
+      ambientColor: 0x601818,
+      ambientIntensity: 0.32,
+      sunColor: 0xff5020,
+      sunIntensity: 0.75,
+      sunPosition: [20, 40, -35],
+      fillColor: 0xff1808,
+      fillIntensity: 0.55,
+      fogColor: 0x280808,
+      fogNear: 8,
+      fogFar: 38,
+      skyColor: 0x180404,
+    },
+    levels: [
+      {
+        index: 1,
+        title: 'Kızıl Ateş',
+        intro:
+          'Yanardağ kükriyor. Lav nehirleri tahtın etrafında kıvrılıyor… Darth Vader seni bekliyor.',
+        clearMessage: 'Kızıl Ateş keşfedildi.',
+        totalEnemies: 0,
+        batchInterval: 999,
+        batches: [],
+      },
+    ],
+  },
+  {
+    id: 'planet-ocean-mini',
+    displayName: 'Mavi Damla',
+    shortName: 'Okyanus',
+    description: 'Neredeyse tamamen okyanus — minik bir ada.',
+    worldSize: { width: 28, depth: 28, height: 12 },
+    explorationOnly: true,
+    isPlanet: true,
+    atmosphere: {
+      ambientColor: 0xc0e8f8,
+      ambientIntensity: 0.7,
+      sunColor: 0xfff0c0,
+      sunIntensity: 1.15,
+      sunPosition: [35, 50, 25],
+      fillColor: 0x60b0e0,
+      fillIntensity: 0.35,
+      fogColor: 0x88c0d8,
+      fogNear: 15,
+      fogFar: 50,
+      skyColor: 0x70b8e0,
+    },
+    levels: [
+      {
+        index: 1,
+        title: 'Mavi Damla',
+        intro: 'Uçsuz bucaksız okyanus. Ortada minik bir ada.',
+        clearMessage: 'Mavi Damla keşfedildi.',
+        totalEnemies: 0,
+        batchInterval: 999,
+        batches: [],
+      },
+    ],
+  },
+  {
+    id: 'planet-void',
+    displayName: 'Issız Kaya',
+    shortName: 'Boş Gezegen',
+    description: 'Issız bir kaya — ama gölgeler hareket ediyor.',
+    worldSize: { width: 32, depth: 32, height: 10 },
+    explorationOnly: true,
+    isPlanet: true,
+    atmosphere: {
+      ambientColor: 0x808088,
+      ambientIntensity: 0.45,
+      sunColor: 0xc0c0c8,
+      sunIntensity: 0.8,
+      sunPosition: [25, 40, 15],
+      fillColor: 0x606070,
+      fillIntensity: 0.2,
+      fogColor: 0x404048,
+      fogNear: 12,
+      fogFar: 45,
+      skyColor: 0x181820,
+    },
+    levels: [
+      {
+        index: 1,
+        title: 'Issız Kaya',
+        intro: 'Sessizlik. Toz. Gölgeler.',
+        clearMessage: 'Issız kaya keşfedildi.',
+        totalEnemies: 0,
+        batchInterval: 999,
+        batches: [],
+      },
+    ],
+  },
 ];
 
+/** Campaign maps only (excludes galaxy planets). */
+export function campaignMaps(): MapDefinition[] {
+  return MAPS.filter((m) => !m.isPlanet);
+}
+
+export function getMapById(id: MapId): MapDefinition | undefined {
+  return MAPS.find((m) => m.id === id);
+}
+
+export function getMapIndexById(id: MapId): number {
+  return MAPS.findIndex((m) => m.id === id);
+}
+
 export function totalLevelCount(): number {
-  return MAPS.reduce((sum, m) => sum + m.levels.length, 0);
+  return campaignMaps().reduce((sum, m) => sum + m.levels.length, 0);
 }
 
 export function totalMapCount(): number {
-  return MAPS.length;
+  return campaignMaps().length;
 }

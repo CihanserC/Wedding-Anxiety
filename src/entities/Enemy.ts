@@ -82,6 +82,9 @@ export class Enemy {
   private retreatTimer = 0;
   private wanderDir = new THREE.Vector3(1, 0, 0);
   private wanderTimer = 1 + Math.random() * 2;
+  /** Wraith: idle wander until player enters aggro range. */
+  private wraithAggro = false;
+  private static readonly WRAITH_AGGRO_RANGE = 9;
   private jumpCooldown = 0.5 + Math.random();
   private hopTimer = 2 + Math.random() * 4;
   private readonly bossPhasesTriggered = new Set<2 | 3>();
@@ -442,7 +445,15 @@ export class Enemy {
     let moveDirX = 0;
     let moveDirZ = 0;
 
-    if (this.stats.behavior === 'wander') {
+    if (this.stats.behavior === 'wraith' && !this.wraithAggro) {
+      if (distXZ < Enemy.WRAITH_AGGRO_RANGE) {
+        this.wraithAggro = true;
+      }
+    }
+
+    const wraithWandering = this.stats.behavior === 'wraith' && !this.wraithAggro;
+
+    if (this.stats.behavior === 'wander' || wraithWandering) {
       this.wanderTimer -= dt;
       if (this.wanderTimer <= 0) {
         this.wanderTimer = 3 + Math.random() * 3;
@@ -592,7 +603,7 @@ export class Enemy {
         Math.abs(this.position.z - beforeZ) < 1e-4;
     }
 
-    if (this.stats.behavior === 'floater') {
+    if (this.stats.behavior === 'floater' || this.stats.behavior === 'wraith') {
       this.vy = 0;
     } else {
       this.jumpCooldown = Math.max(0, this.jumpCooldown - dt);
@@ -615,7 +626,11 @@ export class Enemy {
 
     this.contactAccumulator = Math.max(0, this.contactAccumulator - dt);
 
-    if (this.stats.behavior !== 'wander' && distXZ > 0.001) {
+    if (
+      this.stats.behavior !== 'wander' &&
+      !wraithWandering &&
+      distXZ > 0.001
+    ) {
       const facing = Math.atan2(toTarget.x, toTarget.z);
       this.root.rotation.y = facing;
     }
@@ -980,6 +995,37 @@ export class Enemy {
           if (this.armGroups[1]) this.armGroups[1].rotation.x = Math.sin(t * 5 + Math.PI) * 0.25;
         }
         baseBob = Math.sin(t * 4 + this.bobPhase) * 0.02;
+        break;
+      }
+      case 'wraith': {
+        if (this.floatBody) {
+          this.floatBody.position.y = Math.sin(t * 1.8 + this.bobPhase) * 0.18 + 0.15;
+        }
+        if (this.armGroups) {
+          const threaten = this.wraithAggro ? 0.2 : 0;
+          this.armGroups[0].rotation.z = 0.35 + Math.sin(t * 2.2) * 0.12 + threaten;
+          this.armGroups[1].rotation.z = -0.35 - Math.sin(t * 2.2 + 0.4) * 0.12 - threaten;
+          this.armGroups[0].rotation.x = -0.55 + Math.sin(t * 1.6) * 0.08;
+          this.armGroups[1].rotation.x = -0.55 + Math.sin(t * 1.6 + 0.7) * 0.08;
+        }
+        if (this.headGroup) {
+          this.headGroup.rotation.y = Math.sin(t * 1.4) * 0.1;
+          this.headGroup.rotation.z = Math.sin(t * 2) * 0.05;
+        }
+        if (this.jitterMeshes) {
+          for (let i = 0; i < this.jitterMeshes.length; i++) {
+            const m = this.jitterMeshes[i];
+            const base = (m.userData.basePos as THREE.Vector3 | undefined) ?? m.position;
+            if (!m.userData.basePos) m.userData.basePos = base.clone();
+            const bp = m.userData.basePos as THREE.Vector3;
+            m.position.set(
+              bp.x + Math.sin(t * 3 + i * 1.7) * 0.06,
+              bp.y + Math.sin(t * 2.4 + i) * 0.08,
+              bp.z + Math.cos(t * 2.8 + i * 1.3) * 0.06,
+            );
+          }
+        }
+        baseBob = Math.sin(t * 2.2 + this.bobPhase) * 0.06;
         break;
       }
     }

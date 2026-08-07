@@ -9,7 +9,11 @@ export type NpcType =
   | 'cellist'
   | 'violinist'
   | 'guest-man'
-  | 'guest-woman';
+  | 'guest-woman'
+  | 'alien-peaceful'
+  | 'darth-vader'
+  | 'master-yoda'
+  | 'frog';
 
 export interface NpcStats {
   type: NpcType;
@@ -83,6 +87,30 @@ export const NPC_STATS: Record<NpcType, NpcStats> = {
     type: 'guest-woman',
     displayName: 'Davetli',
     height: 1.62,
+    radius: 0.28,
+  },
+  'alien-peaceful': {
+    type: 'alien-peaceful',
+    displayName: 'Uzaylı',
+    height: 1.55,
+    radius: 0.35,
+  },
+  'darth-vader': {
+    type: 'darth-vader',
+    displayName: 'Darth Vader',
+    height: 1.95,
+    radius: 0.4,
+  },
+  'master-yoda': {
+    type: 'master-yoda',
+    displayName: 'Usta Yoda',
+    height: 0.95,
+    radius: 0.28,
+  },
+  frog: {
+    type: 'frog',
+    displayName: 'Kurbağa',
+    height: 0.55,
     radius: 0.28,
   },
 };

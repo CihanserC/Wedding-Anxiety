@@ -25,6 +25,7 @@ export type BgmId =
   | 'wedding-celebration'
   | 'bali-tropical'
   | 'dubai-luxury'
+  | 'space-calm'
   | null;
 
 export class AudioManager {
@@ -59,6 +60,17 @@ export class AudioManager {
   private carEngineFilter: BiquadFilterNode | null = null;
   private carEngineSpeed = 0;
   private carEngineTurbo = 0;
+
+  private heliRotorWanted = false;
+  private heliRotorGain: GainNode | null = null;
+  private heliRotorNoise: AudioBufferSourceNode | null = null;
+  private heliRotorThump: OscillatorNode | null = null;
+  private heliRotorThumpGain: GainNode | null = null;
+  private heliRotorWhine: OscillatorNode | null = null;
+  private heliRotorFilter: BiquadFilterNode | null = null;
+  private heliRotorLfo: OscillatorNode | null = null;
+  private heliRotorLfoGain: GainNode | null = null;
+  private heliRotorIntensity = 0;
 
   ensureStarted(): void {
     if (this.ctx) return;
@@ -136,6 +148,11 @@ export class AudioManager {
     }
     if (this.carEngineGain && this.carEngineWanted) {
       this.carEngineGain.gain.value = this.muted ? 0 : this.carEngineTargetGain(this.carEngineSpeed, this.carEngineTurbo);
+    }
+    if (this.heliRotorGain && this.heliRotorWanted) {
+      this.heliRotorGain.gain.value = this.muted
+        ? 0
+        : this.heliRotorTargetGain(this.heliRotorIntensity);
     }
   }
 
@@ -296,6 +313,8 @@ export class AudioManager {
       this.startBaliTropical();
     } else if (id === 'dubai-luxury') {
       this.tryExternalDubaiArabicChiptune().catch(() => this.startDubaiLuxuryLoop());
+    } else if (id === 'space-calm') {
+      this.startSpaceCalm();
     }
   }
 
@@ -535,6 +554,50 @@ export class AudioManager {
     step();
   }
 
+  /** Calm 8-bit loop for space flight. */
+  private startSpaceCalm(): void {
+    if (!this.ctx || !this.musicGain || this.bgmId !== 'space-calm') return;
+
+    // Soft minor/pentatonic phrases with rests — slow chiptune ambience
+    const melody: Array<{ freq: number; beats: number }> = [
+      { freq: 196.0, beats: 2 }, // G3
+      { freq: 233.08, beats: 2 }, // Bb3
+      { freq: 261.63, beats: 2 }, // C4
+      { freq: 311.13, beats: 3 }, // Eb4
+      { freq: 261.63, beats: 2 },
+      { freq: 233.08, beats: 2 },
+      { freq: 196.0, beats: 3 },
+      { freq: 0, beats: 2 },
+      { freq: 174.61, beats: 2 }, // F3
+      { freq: 196.0, beats: 2 },
+      { freq: 233.08, beats: 2 },
+      { freq: 293.66, beats: 3 }, // D4
+      { freq: 233.08, beats: 2 },
+      { freq: 196.0, beats: 2 },
+      { freq: 174.61, beats: 4 },
+      { freq: 0, beats: 3 },
+      { freq: 155.56, beats: 2 }, // Eb3
+      { freq: 196.0, beats: 2 },
+      { freq: 233.08, beats: 3 },
+      { freq: 261.63, beats: 2 },
+      { freq: 233.08, beats: 2 },
+      { freq: 196.0, beats: 4 },
+      { freq: 0, beats: 4 },
+    ];
+
+    const beatMs = 600;
+    const step = (): void => {
+      if (this.bgmId !== 'space-calm' || !this.ctx || !this.musicGain) return;
+      const note = melody[this.bgmNoteIndex % melody.length];
+      this.bgmNoteIndex++;
+      if (!this.muted && note.freq > 0) {
+        this.playChiptuneNote(note.freq, (note.beats * beatMs) / 1000, 0.32);
+      }
+      this.bgmTimer = window.setTimeout(step, note.beats * beatMs);
+    };
+    step();
+  }
+
   /** Warm ascending arpeggios for the wedding hall. */
   private startWeddingHope(): void {
     if (!this.ctx || !this.musicGain || this.bgmId !== 'wedding-hope') return;
@@ -662,6 +725,32 @@ export class AudioManager {
     osc2.start(now);
     osc.stop(now + duration + 0.1);
     osc2.stop(now + duration + 0.1);
+  }
+
+  /** Soft square-wave note for calm 8-bit space ambience. */
+  private playChiptuneNote(freq: number, duration: number, peak = 0.35): void {
+    if (!this.ctx || !this.musicGain) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const filter = this.ctx.createBiquadFilter();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(freq, now);
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(1400, now);
+    filter.Q.value = 0.6;
+
+    const attack = 0.02;
+    const release = Math.max(duration * 0.85, 0.12);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(peak, now + attack);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + release);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.musicGain);
+    osc.start(now);
+    osc.stop(now + duration + 0.08);
   }
 
   private envelope(gain: GainNode, attack: number, decay: number, peak = 1): void {
@@ -1061,6 +1150,178 @@ export class AudioManager {
     if (this.carEngineGain) {
       this.carEngineGain.disconnect();
       this.carEngineGain = null;
+    }
+  }
+
+  /** Looping helicopter rotor wash — intensity follows blade speed 0..1. */
+  startHeliRotor(): void {
+    this.heliRotorWanted = true;
+    this.heliRotorIntensity = 0.2;
+    if (!this.ctx || !this.masterGain) this.ensureStarted();
+    this.beginHeliRotorLoop();
+  }
+
+  stopHeliRotor(): void {
+    this.heliRotorWanted = false;
+    this.heliRotorIntensity = 0;
+    this.endHeliRotorLoop();
+  }
+
+  /** @param intensity 0..1 rotor power (idle → flight) */
+  updateHeliRotor(intensity: number): void {
+    if (!this.heliRotorWanted) return;
+    const t = Math.max(0, Math.min(1, intensity));
+    this.heliRotorIntensity = t;
+    if (!this.heliRotorGain) {
+      this.beginHeliRotorLoop();
+      return;
+    }
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+
+    // Blade thump rate rises with rotor speed
+    if (this.heliRotorLfo) {
+      this.heliRotorLfo.frequency.setTargetAtTime(12 + t * 28, now, 0.08);
+    }
+    if (this.heliRotorLfoGain) {
+      this.heliRotorLfoGain.gain.setTargetAtTime(0.012 + t * 0.055, now, 0.08);
+    }
+    if (this.heliRotorThump) {
+      this.heliRotorThump.frequency.setTargetAtTime(38 + t * 55, now, 0.06);
+    }
+    if (this.heliRotorWhine) {
+      this.heliRotorWhine.frequency.setTargetAtTime(220 + t * 380, now, 0.06);
+    }
+    if (this.heliRotorFilter) {
+      this.heliRotorFilter.frequency.setTargetAtTime(420 + t * 1600, now, 0.08);
+      this.heliRotorFilter.Q.setTargetAtTime(0.5 + t * 0.9, now, 0.08);
+    }
+    if (!this.muted) {
+      this.heliRotorGain.gain.setTargetAtTime(this.heliRotorTargetGain(t), now, 0.06);
+    }
+  }
+
+  private heliRotorTargetGain(intensity: number): number {
+    return 0.035 + intensity * 0.14;
+  }
+
+  private beginHeliRotorLoop(): void {
+    if (!this.ctx || !this.masterGain || !this.heliRotorWanted) return;
+    if (this.heliRotorGain) return;
+
+    const ctx = this.ctx;
+    const gain = ctx.createGain();
+    gain.gain.value = this.muted ? 0 : this.heliRotorTargetGain(this.heliRotorIntensity);
+
+    // Broadband rotor whoosh
+    const noiseDur = 2;
+    const noiseBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * noiseDur), ctx.sampleRate);
+    const data = noiseBuf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuf;
+    noise.loop = true;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 700;
+    filter.Q.value = 0.7;
+
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.value = 0.55;
+
+    // Low thump body
+    const thump = ctx.createOscillator();
+    thump.type = 'triangle';
+    thump.frequency.value = 45;
+    const thumpGain = ctx.createGain();
+    thumpGain.gain.value = 0.28;
+
+    // Higher turbine whine
+    const whine = ctx.createOscillator();
+    whine.type = 'sawtooth';
+    whine.frequency.value = 260;
+    const whineGain = ctx.createGain();
+    whineGain.gain.value = 0.04;
+    const whineFilter = ctx.createBiquadFilter();
+    whineFilter.type = 'lowpass';
+    whineFilter.frequency.value = 900;
+
+    // LFO pulses noise for blade chop
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 18;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.03;
+
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(gain);
+
+    thump.connect(thumpGain);
+    thumpGain.connect(gain);
+
+    whine.connect(whineFilter);
+    whineFilter.connect(whineGain);
+    whineGain.connect(gain);
+
+    lfo.connect(lfoGain);
+    lfoGain.connect(noiseGain.gain);
+
+    gain.connect(this.masterGain);
+
+    noise.start();
+    thump.start();
+    whine.start();
+    lfo.start();
+
+    this.heliRotorGain = gain;
+    this.heliRotorNoise = noise;
+    this.heliRotorThump = thump;
+    this.heliRotorThumpGain = thumpGain;
+    this.heliRotorWhine = whine;
+    this.heliRotorFilter = filter;
+    this.heliRotorLfo = lfo;
+    this.heliRotorLfoGain = lfoGain;
+  }
+
+  private endHeliRotorLoop(): void {
+    const stopOsc = (osc: OscillatorNode | AudioBufferSourceNode | null): void => {
+      if (!osc) return;
+      try {
+        osc.stop();
+      } catch {
+        /* already stopped */
+      }
+      try {
+        osc.disconnect();
+      } catch {
+        /* already disconnected */
+      }
+    };
+    stopOsc(this.heliRotorNoise);
+    stopOsc(this.heliRotorThump);
+    stopOsc(this.heliRotorWhine);
+    stopOsc(this.heliRotorLfo);
+    this.heliRotorNoise = null;
+    this.heliRotorThump = null;
+    this.heliRotorWhine = null;
+    this.heliRotorLfo = null;
+    if (this.heliRotorLfoGain) {
+      this.heliRotorLfoGain.disconnect();
+      this.heliRotorLfoGain = null;
+    }
+    if (this.heliRotorThumpGain) {
+      this.heliRotorThumpGain.disconnect();
+      this.heliRotorThumpGain = null;
+    }
+    if (this.heliRotorFilter) {
+      this.heliRotorFilter.disconnect();
+      this.heliRotorFilter = null;
+    }
+    if (this.heliRotorGain) {
+      this.heliRotorGain.disconnect();
+      this.heliRotorGain = null;
     }
   }
 

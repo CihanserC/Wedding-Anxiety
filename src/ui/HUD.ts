@@ -131,7 +131,8 @@ export class HUD {
     this.anxietyBlock.style.display = explore ? 'none' : 'flex';
     this.enemiesStat.style.display = explore ? 'none' : 'flex';
     this.weaponLabel.style.display = explore ? 'none' : 'block';
-    this.crosshair.style.display = explore ? 'none' : 'block';
+    // Crosshair visibility is owned by setCrosshairVisible (planets keep the
+    // alien gun in explore mode and still need a reticle).
 
     this.anxietyFill.style.width = `${pct.toFixed(1)}%`;
     const hue = 110 - pct * 1.1;
@@ -182,6 +183,7 @@ export class HUD {
   }
 
   setCrosshairVisible(visible: boolean): void {
+    this.crosshair.style.display = visible ? 'block' : 'none';
     this.crosshair.style.opacity = visible ? '1' : '0';
   }
 

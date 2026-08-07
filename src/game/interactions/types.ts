@@ -52,4 +52,5 @@ export interface InteractionHost {
   releasePointerLock(): void;
   findInteractable(kind: InteractableSpec['kind']): InteractableSpec | undefined;
   unlockBaliTreasureHunt(): void;
+  enterSpaceMode(): void;
 }

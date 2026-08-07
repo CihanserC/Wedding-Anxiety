@@ -7,10 +7,12 @@ import { DialogueBox } from '../ui/DialogueBox';
 import {
   BALI_TREASURE_MESSAGES,
   BOSS_PHASE_MESSAGES,
+  HELI_FLIGHT_MESSAGES,
   HUD_LABELS,
   LAMBO_DRIVE_MESSAGES,
   LEVEL_BREATHER_MESSAGES,
   MAP_BRIDGE_MESSAGES,
+  SPACE_UFO_MESSAGES,
   WAVE_TRANSITION_LABELS,
   WIN_MESSAGES,
 } from '../data/messages';
@@ -42,15 +44,30 @@ import { EnemyProjectileManager } from './EnemyProjectiles';
 import { loadSettings, saveSettings, type GameSettings } from './GameSettings';
 
 import { ENEMY_STATS } from '../data/enemies';
-import { MAPS, totalLevelCount, type MapId } from '../data/maps';
+import { MAPS, campaignMaps, getMapIndexById, totalLevelCount, type MapId } from '../data/maps';
 import { getCheatHelpEditorText, resolveCheat, type CheatId } from './CheatCodes';
 import type { CommandSubmitResult } from '../ui/CommandConsole';
 import { BaliInteractions } from './interactions/BaliInteractions';
 import { DubaiInteractions, type DubaiCarHost } from './interactions/DubaiInteractions';
 import { CarTurboEffects } from './CarTurboEffects';
+import { HeliFlightEffects } from './HeliFlightEffects';
+import { HelicopterFlight } from './HelicopterFlight';
+import { SwampRain } from './SwampRain';
 import { MapSkipInteractions } from './interactions/MapSkipInteractions';
+import { HELI_CABIN_HIDE, type HelicopterHandle } from '../rendering/Helicopter';
 import { WeddingInteractions } from './interactions/WeddingInteractions';
+import {
+  PlanetInteractions,
+  type PlanetAiHost,
+} from './interactions/PlanetInteractions';
 import type { InteractionGameState, InteractionHost } from './interactions/types';
+import type { GameMode } from './GameMode';
+import { isSpaceMode } from './GameMode';
+import { SpaceFlight } from './SpaceFlight';
+import { GalaxyMapOverlay } from '../ui/GalaxyMapOverlay';
+import { AiChatBox } from '../ui/AiChatBox';
+import type { PlanetDefinition } from '../data/planets';
+import type { AiCharacterId } from '../data/aiPrompts';
 
 const CAR_MAX_SPEED = 14;
 const CAR_TURBO_MAX_SPEED = 23;
@@ -68,6 +85,12 @@ const CAR_EYE_HEIGHT = 0.78;
 const CAR_MIN_PITCH = -0.35;
 const CAR_MAX_PITCH = 0.22;
 const CAR_DEFAULT_PITCH = -0.12;
+/** FPS cockpit: forward of fuselage center (nose = -Z), above skids. */
+const HELI_COCKPIT_FORWARD = 1.35;
+const HELI_COCKPIT_HEIGHT = 1.55;
+const HELI_MIN_PITCH = -0.45;
+const HELI_MAX_PITCH = 0.35;
+const HELI_DEFAULT_PITCH = -0.08;
 /** Third-person chase camera (racing-style) while driving. */
 const CHASE_DISTANCE = 6.5;
 const CHASE_HEIGHT = 2.8;
@@ -143,16 +166,33 @@ export class Game {
   private carPitch = -0.06;
   private carSpeed = 0;
   private lamboInteractArmed = false;
+  private heliMesh: THREE.Group | null = null;
+  private heliHandle: HelicopterHandle | null = null;
+  private readonly heliFlight = new HelicopterFlight();
+  private flyingHeli = false;
+  private heliCameraChase = true;
+  private heliPitch = HELI_DEFAULT_PITCH;
+  private heliInteractArmed = false;
   private plasmaTvMesh: THREE.Group | null = null;
   private plasmaTvOn = false;
   private tvSlideshow = new TvSlideshow();
   private readonly carTurbo: CarTurboEffects;
+  private readonly heliFx: HeliFlightEffects;
+  private readonly swampRain = new SwampRain();
 
   private readonly interactionHost: InteractionHost;
   private readonly mapSkip: MapSkipInteractions;
   private readonly wedding: WeddingInteractions;
   private readonly bali: BaliInteractions;
   private readonly dubai: DubaiInteractions;
+  private readonly planets: PlanetInteractions;
+  private readonly spaceFlight: SpaceFlight;
+  private readonly galaxyMap: GalaxyMapOverlay;
+  private readonly aiChat: AiChatBox;
+  private gameMode: GameMode = 'surface';
+  private spaceNearPlanet: PlanetDefinition | null = null;
+  private lastPlanetId: string | null = null;
+  private spaceChaseCam = true;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -213,6 +253,20 @@ export class Game {
     this.wedding = new WeddingInteractions(this.interactionHost);
     this.bali = new BaliInteractions(this.interactionHost);
     this.dubai = new DubaiInteractions(this.interactionHost, this.createDubaiCarHost());
+    this.planets = new PlanetInteractions(this.interactionHost, this.createPlanetAiHost());
+    this.spaceFlight = new SpaceFlight({
+      onNearPlanet: (planet) => {
+        this.spaceNearPlanet = planet;
+      },
+    });
+    this.scene.add(this.spaceFlight.group);
+    this.galaxyMap = new GalaxyMapOverlay(container, {
+      onSelectPlanet: (planet) => this.landOnPlanet(planet),
+      onClose: () => this.closeGalaxyMap(),
+    });
+    this.aiChat = new AiChatBox(container, {
+      onClose: () => this.onAiChatClosed(),
+    });
 
     this.loadMap(0);
 
@@ -221,6 +275,8 @@ export class Game {
 
     this.carTurbo = new CarTurboEffects(container);
     this.carTurbo.setBaseFov(this.player.camera.fov);
+    this.heliFx = new HeliFlightEffects(container);
+    this.heliFx.setBaseFov(this.player.camera.fov);
 
     this.effects = new ProjectileEffects(this.scene);
     this.enemyProjectiles = new EnemyProjectileManager(this.scene);
@@ -265,10 +321,14 @@ export class Game {
       this.enemyProjectiles?.clear();
       this.world.disposeMesh();
     }
+    this.swampRain.dispose(this.scene);
 
     this.world = new World(mapDef);
     this.worldGroup = this.world.buildMesh();
     this.scene.add(this.worldGroup);
+    if (mapDef.id === 'planet-swamp') {
+      this.swampRain.attach(this.scene);
+    }
     this.renderer.setPixelRatio(
       mapDef.id === 'dubai' ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2),
     );
@@ -281,20 +341,32 @@ export class Game {
     this.audio?.setBgm(mapDef.bgm ?? null);
     this.drivingCar = false;
     this.carCameraChase = true;
+    this.flyingHeli = false;
+    this.heliCameraChase = true;
+    this.heliPitch = HELI_DEFAULT_PITCH;
+    this.heliInteractArmed = false;
     this.chaseCamInitialized = false;
     this.player?.setExternalDrive(false);
     this.player?.setEyeHeightOverride(null);
     if (this.player) this.player.rig.setDrivingMode(false);
     this.setCabinOccludersVisible(true);
+    this.setHeliCabinOccludersVisible(true);
     this.audio?.stopCarEngine();
+    this.audio?.stopHeliRotor();
+    this.heliFx?.detach();
 
     this.weapon?.setWorld(this.world);
     this.enemies?.setWorld(this.world);
     this.player?.setWorld(this.world);
 
-    if (mapDef.id === 'bali' && this.player) {
+    if (mapDef.isPlanet && this.player) {
+      this.setActiveWeapon('alien');
+    } else if (mapDef.id === 'bali' && this.player) {
       this.setActiveWeapon('banana');
-    } else if (this.activeWeapon === 'banana' && this.player) {
+    } else if (
+      this.player &&
+      (this.activeWeapon === 'banana' || this.activeWeapon === 'alien')
+    ) {
       this.setActiveWeapon('pistol');
     }
   }
@@ -323,6 +395,9 @@ export class Game {
     this.bali.setBananaTreeMesh(null);
     this.plasmaTvMesh = null;
     this.plasmaTvOn = false;
+    this.lamborghiniMesh = null;
+    this.heliMesh = null;
+    this.heliHandle = null;
     this.tvSlideshow.dispose();
     this.tvSlideshow = new TvSlideshow();
     this.balloons.clear();
@@ -334,6 +409,11 @@ export class Game {
         if (child.name === 'eating-cat') this.mapSkip.setCatMesh(child);
         if (child.name === 'suzy-cat') this.wedding.setSuzyCatMesh(child);
         if (child.name === 'lamborghini') this.lamborghiniMesh = child as THREE.Group;
+        if (child.name === 'helicopter') {
+          this.heliMesh = child as THREE.Group;
+          const handle = child.userData.heliHandle as HelicopterHandle | undefined;
+          this.heliHandle = handle ?? null;
+        }
         if (child.name === 'plasma-tv') this.plasmaTvMesh = child as THREE.Group;
         if (child.name === 'giant-banana-tree') this.bali.setBananaTreeMesh(child);
       });
@@ -343,6 +423,7 @@ export class Game {
     }
     this.setPlasmaTvPower(false);
     this.initLamborghiniFromWorld();
+    this.initHelicopterFromWorld();
   }
 
   private initLamborghiniFromWorld(): void {
@@ -376,6 +457,33 @@ export class Game {
     }
   }
 
+  private initHelicopterFromWorld(): void {
+    this.flyingHeli = false;
+    this.heliCameraChase = true;
+    this.heliPitch = HELI_DEFAULT_PITCH;
+    this.heliInteractArmed = false;
+    this.chaseCamInitialized = false;
+
+    const spec = this.world.props.find((p) => p.kind === 'helicopter');
+    if (!spec) return;
+
+    this.heliFlight.reset(spec.x, spec.y, spec.z, spec.rotationY ?? 0);
+    this.syncHelicopterMesh();
+    this.heliHandle?.setRotorSpeed(0);
+  }
+
+  private syncHelicopterMesh(): void {
+    if (!this.heliMesh) return;
+    this.heliFlight.applyMeshTransform(this.heliMesh);
+
+    const boardSpot = this.world.interactables.find((i) => i.kind === 'helicopter-board');
+    if (boardSpot) {
+      boardSpot.x = this.heliFlight.x;
+      boardSpot.y = this.heliFlight.y;
+      boardSpot.z = this.heliFlight.z;
+    }
+  }
+
   private onResize = (): void => {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
@@ -390,6 +498,8 @@ export class Game {
         this.intentionalUnlock = false;
         return;
       }
+      // Space mode manages pause via Esc; ignore async unlock races on entry.
+      if (isSpaceMode(this.gameMode)) return;
       if (this.state === 'playing') this.enterPause();
     }
   }
@@ -405,6 +515,8 @@ export class Game {
     if (!this.settings.muted) {
       if (this.state === 'menu') {
         this.audio.setBgm('menu-peace');
+      } else if (isSpaceMode(this.gameMode)) {
+        this.audio.setBgm('space-calm');
       } else if (this.state === 'playing' || this.state === 'paused') {
         const bgm = MAPS[this.mapIndex]?.bgm ?? null;
         if (bgm) this.audio.setBgm(bgm);
@@ -429,6 +541,16 @@ export class Game {
   }
 
   private returnToMainMenu(): void {
+    if (isSpaceMode(this.gameMode)) {
+      this.closeGalaxyMap();
+      this.spaceFlight.exit();
+      this.gameMode = 'surface';
+      this.player.setExternalDrive(false);
+      this.player.rig.setDrivingMode(false);
+    }
+    if (this.flyingHeli) this.exitHeliFlight(true);
+    if (this.drivingCar) this.exitCarDrive();
+    if (this.aiChat.isVisible()) this.aiChat.close();
     this.state = 'menu';
     this.pause.hide();
     this.dialogue.hide();
@@ -459,6 +581,11 @@ export class Game {
       return;
     }
     if (this.state !== 'playing' && this.state !== 'paused') return;
+
+    if (isSpaceMode(this.gameMode)) {
+      this.audio.setBgm('space-calm');
+      return;
+    }
 
     if (MAPS[this.mapIndex]?.id === 'wedding-hall' && this.levelState.phase === 'celebration') {
       this.audio.setBgm('wedding-celebration');
@@ -505,6 +632,7 @@ export class Game {
 
   private update(dt: number): void {
     if (this.commandConsole.isOpen()) return;
+    if (this.aiChat.isVisible()) return;
 
     if (
       (this.state === 'menu' || this.state === 'playing' || this.state === 'paused') &&
@@ -513,14 +641,26 @@ export class Game {
       this.toggleMute();
     }
 
+    if (isSpaceMode(this.gameMode)) {
+      this.updateSpaceMode(dt);
+      return;
+    }
+
     const active = this.state === 'playing' && this.input.isLocked();
 
-    if (this.drivingCar) {
+    if (this.flyingHeli) {
+      this.tickHeliFlight(dt, active);
+    } else if (this.drivingCar) {
       this.tickCarDriving(dt, active);
     } else {
       this.player.update(dt, active);
+      this.tickHeliSettle(dt);
     }
+    this.tickHeliRotors();
     this.tickWaterEffects();
+    if (this.swampRain.isActive()) {
+      this.swampRain.update(dt, this.player.camera);
+    }
     this.weapon.update(dt);
     this.effects.update(dt);
 
@@ -548,7 +688,9 @@ export class Game {
         this.enemies.enemies,
         this.player.position,
         this.audio,
-        this.state === 'playing' && this.levelState.phase !== 'celebration',
+        this.state === 'playing' &&
+          this.levelState.phase !== 'celebration' &&
+          !this.isSilentHostilePlanet(),
       );
       this.npcs.update(dt, this.world, this.world.interactables);
       this.enemyProjectiles.update(dt, this.player.position, this.world, (amount) => {
@@ -564,6 +706,7 @@ export class Game {
       this.wedding.tickAltar();
       this.wedding.tickWeddingNpc();
       this.dubai.tickExplore();
+      this.planets.tick();
       if (this.plasmaTvOn) this.tvSlideshow.update(dt);
       this.wedding.tickSuzyCat(dt);
       this.wedding.tickCake();
@@ -575,8 +718,17 @@ export class Game {
         if (this.flashWarningTimer <= 0) this.hud.setSubtitle([]);
       }
 
-      if (active && this.levelState.phase !== 'celebration') {
-        if (MAPS[this.mapIndex].id === 'bali' || this.lightsaberMode) {
+      const allowCombat =
+        this.levelState.phase !== 'celebration' ||
+        this.isHostilePlanetCombat() ||
+        !!MAPS[this.mapIndex].isPlanet;
+
+      if (active && allowCombat) {
+        if (
+          MAPS[this.mapIndex].id === 'bali' ||
+          MAPS[this.mapIndex].isPlanet ||
+          this.lightsaberMode
+        ) {
           this.input.consumeWeaponSelect();
           this.input.consumeWeaponScroll();
         } else {
@@ -587,11 +739,7 @@ export class Game {
         }
       }
 
-      if (
-        active &&
-        this.levelState.phase !== 'celebration' &&
-        this.input.consumeFire()
-      ) {
+      if (active && allowCombat && this.input.consumeFire()) {
         const origin = this.player.getEyePosition();
         const dir = this.player.getAimDirection();
         const muzzle = this.player.rig.getMuzzleWorldPosition();
@@ -638,15 +786,19 @@ export class Game {
     }
 
     const mapDef = MAPS[this.mapIndex];
+    const hostilePlanet = this.isHostilePlanetCombat();
     const exploreMode =
-      mapDef.explorationOnly || this.levelState.phase === 'celebration' || this.drivingCar;
+      (mapDef.explorationOnly && !hostilePlanet) ||
+      (this.levelState.phase === 'celebration' && !hostilePlanet) ||
+      this.drivingCar ||
+      this.flyingHeli;
 
     this.hud.update({
       mode: exploreMode ? 'explore' : 'combat',
       anxietyPercent: this.anxiety.percent,
       mapName: mapDef.shortName,
-      mapIndex: this.mapIndex + 1,
-      totalMaps: MAPS.length,
+      mapIndex: mapDef.isPlanet ? 0 : Math.min(this.mapIndex + 1, campaignMaps().length),
+      totalMaps: campaignMaps().length,
       level: this.levelIndex + 1,
       totalLevels: mapDef.levels.length,
       overallStage: this.stagesCleared + 1,
@@ -669,7 +821,9 @@ export class Game {
 
   private advanceStageAfterSkip(): void {
     const currentMap = MAPS[this.mapIndex];
-    const isLastMap = this.mapIndex >= MAPS.length - 1;
+    const campaign = campaignMaps();
+    const campaignIdx = campaign.findIndex((m) => m.id === currentMap.id);
+    const isLastMap = campaignIdx < 0 || campaignIdx >= campaign.length - 1;
 
     // Count remaining levels in this map as cleared (including the current one)
     const levelsLeftInMap = currentMap.levels.length - this.levelIndex;
@@ -682,7 +836,8 @@ export class Game {
     }
 
     const fromMapId = currentMap.id;
-    this.mapIndex += 1;
+    const nextCampaign = campaign[campaignIdx + 1];
+    this.mapIndex = getMapIndexById(nextCampaign.id);
     this.levelIndex = 0;
     this.loadMap(this.mapIndex);
     this.anxiety.reduce(25);
@@ -1125,6 +1280,7 @@ export class Game {
 
   private enterCarDrive(): void {
     if (!this.lamborghiniMesh) return;
+    if (this.flyingHeli) this.exitHeliFlight(true);
     this.drivingCar = true;
     this.carSpeed = 0;
     this.carPitch = CAR_DEFAULT_PITCH;
@@ -1326,6 +1482,200 @@ export class Game {
     );
   }
 
+  private heliInteractPrompt(): string {
+    const exitLine = this.heliFlight.canExit(this.world)
+      ? HELI_FLIGHT_MESSAGES.exitPrompt
+      : HELI_FLIGHT_MESSAGES.exitTooHigh;
+    return `${exitLine}  ·  ${HELI_FLIGHT_MESSAGES.controls}  ·  ${HELI_FLIGHT_MESSAGES.cameraToggle}`;
+  }
+
+  private applyHeliCameraMode(): void {
+    if (this.heliCameraChase) {
+      this.player.setEyeHeightOverride(null);
+      this.setHeliCabinOccludersVisible(true);
+      this.player.rig.setDrivingMode(true, 'chase');
+      this.chaseCamInitialized = false;
+    } else {
+      this.heliPitch = HELI_DEFAULT_PITCH;
+      this.player.setEyeHeightOverride(null);
+      this.setHeliCabinOccludersVisible(false);
+      this.player.rig.setDrivingMode(true, 'fps');
+      this.player.position.set(this.heliFlight.x, this.heliFlight.y, this.heliFlight.z);
+      this.syncHeliFpsCamera();
+    }
+  }
+
+  private setHeliCabinOccludersVisible(visible: boolean): void {
+    if (!this.heliMesh) return;
+    this.heliMesh.traverse((obj) => {
+      if (obj.name === HELI_CABIN_HIDE) obj.visible = visible;
+    });
+  }
+
+  /** Place eye in the canopy bubble, ahead of the fuselage mass. */
+  private syncHeliFpsCamera(): void {
+    const yaw = this.heliFlight.yaw;
+    const fx = -Math.sin(yaw);
+    const fz = -Math.cos(yaw);
+    this.player.camera.position.set(
+      this.heliFlight.x + fx * HELI_COCKPIT_FORWARD,
+      this.heliFlight.y + HELI_COCKPIT_HEIGHT,
+      this.heliFlight.z + fz * HELI_COCKPIT_FORWARD,
+    );
+    this.player.camera.rotation.order = 'YXZ';
+    this.player.camera.rotation.set(this.heliPitch, yaw, 0);
+  }
+
+  private enterHeliFlight(): void {
+    if (!this.heliMesh) return;
+    if (this.drivingCar) this.exitCarDrive();
+    this.heliFlight.cancelSettle();
+    this.flyingHeli = true;
+    this.heliCameraChase = true;
+    this.heliPitch = HELI_DEFAULT_PITCH;
+    this.chaseCamInitialized = false;
+    this.player.setExternalDrive(true);
+    this.player.position.set(this.heliFlight.x, this.heliFlight.y, this.heliFlight.z);
+    this.applyHeliCameraMode();
+    this.hud.setCrosshairVisible(false);
+    this.hud.setInteractPrompt(this.heliInteractPrompt());
+    this.audio.ensureStarted();
+    this.audio.startHeliRotor();
+    if (this.heliMesh) this.heliFx.attach(this.heliMesh);
+  }
+
+  /** @param force skip near-ground check (menu / space / vehicle swap). */
+  private exitHeliFlight(force = false): void {
+    if (!this.flyingHeli) return;
+    if (!force && !this.heliFlight.canExit(this.world)) return;
+
+    this.flyingHeli = false;
+    this.heliCameraChase = true;
+    this.heliPitch = HELI_DEFAULT_PITCH;
+    this.chaseCamInitialized = false;
+    this.player.camera.fov = 75;
+    this.player.camera.updateProjectionMatrix();
+    this.player.setExternalDrive(false);
+    this.player.setEyeHeightOverride(null);
+    this.setHeliCabinOccludersVisible(true);
+    this.player.rig.setDrivingMode(false);
+    this.player.rig.setHeldItem('money');
+
+    const exitSide = 2.2;
+    const exitX = this.heliFlight.x - Math.cos(this.heliFlight.yaw) * exitSide;
+    const exitZ = this.heliFlight.z + Math.sin(this.heliFlight.yaw) * exitSide;
+    const stand = this.world.resolveStandingPoint(exitX, exitZ, 0.35, 1.7, 4);
+    this.player.position.set(
+      stand?.x ?? exitX,
+      stand?.y ?? this.heliFlight.y,
+      stand?.z ?? exitZ,
+    );
+    this.player.setViewAngles(this.heliFlight.yaw + Math.PI * 0.5, 0);
+    if (force) {
+      this.heliFlight.cancelSettle();
+      this.audio.stopHeliRotor();
+      this.heliFx.detach();
+    } else {
+      this.heliFlight.beginSettleAfterExit();
+      if (!this.heliFlight.isSettling()) {
+        this.audio.stopHeliRotor();
+        this.heliFx.detach();
+      }
+    }
+    this.syncHelicopterMesh();
+    this.hud.setCrosshairVisible(false);
+    this.hud.setInteractPrompt(null);
+  }
+
+  private tickHeliFlight(dt: number, active: boolean): void {
+    if (active && this.input.consumeCameraToggle()) {
+      this.heliCameraChase = !this.heliCameraChase;
+      this.applyHeliCameraMode();
+      this.hud.setInteractPrompt(this.heliInteractPrompt());
+    }
+
+    if (active && !this.heliCameraChase) {
+      const { dx, dy } = this.input.consumeMouseDelta();
+      const sens = this.player.getMouseSensitivity();
+      this.heliFlight.yaw -= dx * sens;
+      this.heliPitch -= dy * sens;
+      if (this.heliPitch > HELI_MAX_PITCH) this.heliPitch = HELI_MAX_PITCH;
+      if (this.heliPitch < HELI_MIN_PITCH) this.heliPitch = HELI_MIN_PITCH;
+    } else if (active && this.heliCameraChase) {
+      // Drain mouse delta so look doesn't accumulate into next mode
+      this.input.consumeMouseDelta();
+    }
+
+    this.heliFlight.update(
+      dt,
+      {
+        forward: active && this.input.isDown('forward'),
+        back: active && this.input.isDown('back'),
+        left: active && this.input.isDown('left'),
+        right: active && this.input.isDown('right'),
+        up: active && this.input.isDown('jump'),
+        down: active && this.input.isDown('sprint'),
+      },
+      this.world,
+      active,
+    );
+
+    this.player.position.set(this.heliFlight.x, this.heliFlight.y, this.heliFlight.z);
+    if (this.heliCameraChase) {
+      const init = { value: this.chaseCamInitialized };
+      this.heliFlight.syncChaseCamera(
+        this.player.camera,
+        this.chaseCamPos,
+        this.chaseLookAt,
+        this.chaseIdealPos,
+        init,
+        dt,
+      );
+      this.chaseCamInitialized = init.value;
+    } else {
+      this.syncHeliFpsCamera();
+    }
+    this.syncHelicopterMesh();
+    if (active) this.hud.setInteractPrompt(this.heliInteractPrompt());
+    this.player.rig.update(dt, Math.abs(this.heliFlight.getSpeed()) > 0.5, this.heliFlight.getSpeed(), 0);
+    this.updateHeliAudioAndFx(dt);
+  }
+
+  /** Soft-land empty helicopter after near-ground exit. */
+  private tickHeliSettle(dt: number): void {
+    if (!this.heliMesh || this.flyingHeli || !this.heliFlight.isSettling()) return;
+    this.heliFlight.updateSettle(dt, this.world);
+    this.syncHelicopterMesh();
+    this.updateHeliAudioAndFx(dt);
+    if (!this.heliFlight.isSettling()) {
+      this.audio.stopHeliRotor();
+      this.heliFx.detach();
+      this.player.camera.fov = 75;
+      this.player.camera.updateProjectionMatrix();
+    }
+  }
+
+  private updateHeliAudioAndFx(dt: number): void {
+    const intensity = this.heliFlight.getRotorIntensity();
+    this.audio.updateHeliRotor(intensity);
+    this.heliFx.update(dt, this.player.camera, this.scene, {
+      rotorIntensity: intensity,
+      speed: this.heliFlight.getSpeed(),
+      altitude: this.heliFlight.getAltitudeAboveGround(this.world),
+      grounded: this.heliFlight.isGrounded(),
+      chaseCam: this.flyingHeli ? this.heliCameraChase : true,
+    });
+  }
+
+  private tickHeliRotors(): void {
+    if (!this.heliHandle) return;
+    if (this.flyingHeli || this.heliFlight.isSettling()) {
+      this.heliHandle.setRotorSpeed(this.heliFlight.getRotorIntensity());
+    } else {
+      this.heliHandle.setRotorSpeed(0);
+    }
+  }
+
   private finishLevel(): void {
     this.audio.play('wave-clear');
     this.stagesCleared++;
@@ -1343,7 +1693,9 @@ export class Game {
       return;
     }
 
-    const isLastMap = this.mapIndex >= MAPS.length - 1;
+    const campaign = campaignMaps();
+    const campaignIdx = campaign.findIndex((m) => m.id === currentMap.id);
+    const isLastMap = campaignIdx < 0 || campaignIdx >= campaign.length - 1;
     if (isLastLevelInMap && isLastMap) {
       this.transitionToWin();
       return;
@@ -1372,7 +1724,14 @@ export class Game {
 
   private transitionToNextMap(): void {
     const currentMap = MAPS[this.mapIndex];
-    const nextMapIndex = this.mapIndex + 1;
+    const campaign = campaignMaps();
+    const campaignIdx = campaign.findIndex((m) => m.id === currentMap.id);
+    const nextCampaign = campaign[campaignIdx + 1];
+    if (!nextCampaign) {
+      this.transitionToWin();
+      return;
+    }
+    const nextMapIndex = getMapIndexById(nextCampaign.id);
     const nextMap = MAPS[nextMapIndex];
     this.state = 'map-intro';
     this.dialogue.show({
@@ -1456,13 +1815,37 @@ export class Game {
     if (mapDef.explorationOnly) {
       this.levelState.phase = 'celebration';
       this.levelState.timer = 0;
-      this.player.rig.setHeldItem('money');
-      this.hud.setCrosshairVisible(false);
+      if (mapDef.isPlanet) {
+        this.player.rig.setHeldItem('none');
+        this.setActiveWeapon('alien');
+        this.hud.setCrosshairVisible(true);
+      } else {
+        this.player.rig.setHeldItem('money');
+        this.hud.setCrosshairVisible(false);
+      }
       this.hud.setInteractPrompt(null);
       this.hud.setSubtitle([]);
       this.anxiety.lockAtZero();
       this.enemies.clear();
       this.enemyProjectiles.clear();
+      if (mapDef.id === 'planet-snow') {
+        this.anxiety.unlock();
+        this.hud.setCrosshairVisible(true);
+        this.player.rig.setHeldItem('none');
+        this.setActiveWeapon('alien');
+        for (let i = 0; i < 4; i++) {
+          this.enemies.spawn('uzayli-dusmanca', this.player.position, 7);
+        }
+      }
+      if (mapDef.id === 'planet-void') {
+        this.anxiety.unlock();
+        this.hud.setCrosshairVisible(true);
+        this.player.rig.setHeldItem('none');
+        this.setActiveWeapon('alien');
+        for (let i = 0; i < 5; i++) {
+          this.enemies.spawn('golge-canavar', this.player.position, 6);
+        }
+      }
       this.hud.show();
       this.input.requestPointerLock();
       return;
@@ -1471,7 +1854,9 @@ export class Game {
     this.levelState.phase = 'active';
     this.levelState.timer = 2.5;
     this.player.rig.setHeldItem('none');
-    if (mapDef.id === 'bali') {
+    if (mapDef.isPlanet) {
+      this.setActiveWeapon('alien');
+    } else if (mapDef.id === 'bali') {
       this.setActiveWeapon('banana');
     }
     this.hud.setCrosshairVisible(true);
@@ -1658,7 +2043,257 @@ export class Game {
       releasePointerLock: () => game.input.releasePointerLock(),
       findInteractable: (kind) => game.world.interactables.find((item) => item.kind === kind),
       unlockBaliTreasureHunt: () => game.unlockBaliTreasureHunt(),
+      enterSpaceMode: () => game.enterSpaceMode(),
     };
+  }
+
+  private createPlanetAiHost(): PlanetAiHost {
+    const game = this;
+    return {
+      openAiChat: (characterId) => game.openAiChat(characterId),
+      returnToGalaxy: () => game.returnToGalaxy(),
+    };
+  }
+
+  private isHostilePlanetCombat(): boolean {
+    const id = MAPS[this.mapIndex]?.id;
+    return (
+      (id === 'planet-snow' || id === 'planet-void') && this.enemies.aliveCount() > 0
+    );
+  }
+
+  /** Snow hostiles mute growls; void wraiths keep monster ambience. */
+  private isSilentHostilePlanet(): boolean {
+    return MAPS[this.mapIndex]?.id === 'planet-snow' && this.enemies.aliveCount() > 0;
+  }
+
+  private enterSpaceMode(options?: { fromPlanetId?: string | null }): void {
+    this.dialogue.hide();
+    if (this.flyingHeli) this.exitHeliFlight(true);
+    if (this.drivingCar) this.exitCarDrive();
+    this.gameMode = 'spaceFlight';
+    this.spaceNearPlanet = null;
+
+    const fromPlanetId = options?.fromPlanetId ?? null;
+    this.lastPlanetId = fromPlanetId;
+
+    if (this.worldGroup) this.worldGroup.visible = false;
+    this.enemies.clear();
+    this.npcs.clear();
+    this.enemyProjectiles.clear();
+
+    this.spaceFlight.enter();
+    if (fromPlanetId) {
+      this.spaceFlight.warpNearPlanet(fromPlanetId);
+    }
+
+    this.scene.background = new THREE.Color(0x020208);
+    this.scene.fog = null;
+    this.player.setExternalDrive(true);
+    this.player.rig.setHeldItem('none');
+    this.player.rig.setDrivingMode(true, 'chase');
+    this.hud.setCrosshairVisible(false);
+    this.hud.setSubtitle([SPACE_UFO_MESSAGES.flightHint]);
+    this.hud.setInteractPrompt(SPACE_UFO_MESSAGES.mapPrompt);
+    this.hud.show();
+    this.state = 'playing';
+    // Prefer keeping an existing lock (Dubai UFO board). Only mark intentional
+    // unlock when we must reacquire — avoids pause races and unlock/request races.
+    if (this.input.isLocked()) {
+      this.intentionalUnlock = false;
+    } else {
+      this.intentionalUnlock = true;
+      this.input.requestPointerLock();
+    }
+    this.audio.play('win');
+    this.audio.setBgm('space-calm');
+  }
+
+  private updateSpaceMode(dt: number): void {
+    if (this.gameMode === 'galaxyMap') {
+      this.input.consumeMouseDelta();
+      if (this.input.consumeGalaxyMap()) {
+        this.closeGalaxyMap();
+        return;
+      }
+      this.input.consumePause();
+      this.input.consumeInteract();
+      this.spaceFlight.syncCamera(this.player.camera, this.spaceChaseCam);
+      this.hud.update({
+        mode: 'explore',
+        anxietyPercent: 0,
+        mapName: 'Galaksi',
+        mapIndex: 0,
+        totalMaps: campaignMaps().length,
+        level: 1,
+        totalLevels: 1,
+        overallStage: this.stagesCleared + 1,
+        totalStages: totalLevelCount(),
+        score: this.score,
+        enemiesLeft: 0,
+        reloadRatio: 0,
+        weaponName: 'Uzay Gemisi',
+        bossHpRatio: null,
+        bossLabel: '',
+      });
+      return;
+    }
+
+    if (this.state === 'paused') {
+      if (this.input.consumePause()) this.resumeFromPause();
+      this.input.consumeMouseDelta();
+      this.input.flushInteract();
+      this.spaceFlight.syncCamera(this.player.camera, this.spaceChaseCam);
+      return;
+    }
+
+    if (this.input.consumePause()) {
+      this.enterPause();
+      return;
+    }
+
+    if (this.input.consumeGalaxyMap()) {
+      this.openGalaxyMap();
+      return;
+    }
+
+    if (this.input.consumeCameraToggle()) {
+      this.spaceChaseCam = !this.spaceChaseCam;
+    }
+
+    const locked = this.input.isLocked();
+    const mouse = this.input.consumeMouseDelta();
+    this.spaceFlight.update(dt, {
+      forward: locked && this.input.isDown('forward'),
+      back: locked && this.input.isDown('back'),
+      left: locked && this.input.isDown('left'),
+      right: locked && this.input.isDown('right'),
+      boost: locked && this.input.isDown('sprint'),
+      up: locked && this.input.isDown('jump'),
+      down: locked && this.input.isDown('descend'),
+      mouseDx: locked ? mouse.dx : 0,
+      mouseDy: locked ? mouse.dy : 0,
+      sens: this.settings.mouseSensitivity,
+    });
+    this.spaceFlight.syncCamera(this.player.camera, this.spaceChaseCam);
+
+    const near = this.spaceNearPlanet;
+    if (near) {
+      this.hud.setInteractPrompt(
+        near.isHomeWorld
+          ? SPACE_UFO_MESSAGES.earthLandPrompt
+          : SPACE_UFO_MESSAGES.landPrompt(near.name),
+      );
+      if (locked && this.input.consumeInteract()) {
+        this.landOnPlanet(near);
+        return;
+      }
+    } else {
+      this.hud.setInteractPrompt(SPACE_UFO_MESSAGES.mapPrompt);
+      this.input.flushInteract();
+    }
+
+    this.hud.setSubtitle([SPACE_UFO_MESSAGES.flightHint]);
+    this.hud.update({
+      mode: 'explore',
+      anxietyPercent: 0,
+      mapName: 'Uzay',
+      mapIndex: 0,
+      totalMaps: campaignMaps().length,
+      level: 1,
+      totalLevels: 1,
+      overallStage: this.stagesCleared + 1,
+      totalStages: totalLevelCount(),
+      score: this.score,
+      enemiesLeft: 0,
+      reloadRatio: 0,
+      weaponName: 'Uzay Gemisi',
+      bossHpRatio: null,
+      bossLabel: '',
+    });
+  }
+
+  private openGalaxyMap(): void {
+    this.gameMode = 'galaxyMap';
+    this.intentionalUnlock = true;
+    this.input.releasePointerLock();
+    const ship = this.spaceFlight.getShipPosition();
+    // Rough project into galaxy % coords from space positions
+    const gx = 50 + (ship.x / 400) * 40;
+    const gy = 50 + (ship.z / 400) * 40;
+    this.galaxyMap.show({
+      x: Math.max(5, Math.min(95, gx)),
+      y: Math.max(5, Math.min(95, gy)),
+    });
+  }
+
+  private closeGalaxyMap(): void {
+    this.galaxyMap.hide();
+    if (this.gameMode === 'galaxyMap') {
+      this.gameMode = 'spaceFlight';
+      this.intentionalUnlock = false;
+      this.input.requestPointerLock();
+    }
+  }
+
+  private landOnPlanet(planet: PlanetDefinition): void {
+    this.closeGalaxyMap();
+    this.spaceFlight.exit();
+    this.gameMode = 'surface';
+    this.lastPlanetId = planet.isHomeWorld ? null : planet.id;
+    this.spaceNearPlanet = null;
+    this.player.setExternalDrive(false);
+    this.player.rig.setDrivingMode(false);
+    this.hud.setSubtitle([]);
+    this.hud.setInteractPrompt(null);
+
+    const idx = getMapIndexById(planet.mapId);
+    if (idx < 0) return;
+    this.mapIndex = idx;
+    this.levelIndex = 0;
+    this.loadMap(idx);
+    if (this.worldGroup) this.worldGroup.visible = true;
+    this.beginLevel(idx, 0, { skipDialogue: true });
+    // beginLevel respawns at default spawn; place beside UFO after that.
+    if (planet.isHomeWorld) {
+      this.spawnBesideUfoOrRespawn();
+    }
+    this.audio.play('wave-clear');
+  }
+
+  /** After returning from space, stand beside the Dubai UFO pad when available. */
+  private spawnBesideUfoOrRespawn(): void {
+    const pad = this.world.getUfoBoardSpawn();
+    if (pad) {
+      const facing = this.world.getUfoBoardFacing() ?? this.world.spawnFacing;
+      this.player.teleportTo(pad, facing);
+    } else {
+      this.player.respawn();
+    }
+  }
+
+  private returnToGalaxy(): void {
+    this.dialogue.hide();
+    if (this.aiChat.isVisible()) this.aiChat.close();
+    const planetId = this.lastPlanetId;
+    this.enterSpaceMode({ fromPlanetId: planetId });
+  }
+
+  private openAiChat(characterId: AiCharacterId): void {
+    this.aiChat.open(characterId);
+  }
+
+  private onAiChatClosed(): void {
+    if (this.state === 'playing' && this.levelState.phase === 'celebration') {
+      this.hud.setCrosshairVisible(this.shouldShowPlanetCrosshair());
+      this.intentionalUnlock = false;
+      this.input.requestPointerLock();
+    }
+  }
+
+  /** Alien carbine is equipped on all planet surfaces. */
+  private shouldShowPlanetCrosshair(): boolean {
+    return !!MAPS[this.mapIndex]?.isPlanet;
   }
 
   private createDubaiCarHost(): DubaiCarHost {
@@ -1667,6 +2302,10 @@ export class Game {
       isDriving: () => game.drivingCar,
       enterDrive: () => game.enterCarDrive(),
       exitDrive: () => game.exitCarDrive(),
+      isFlyingHeli: () => game.flyingHeli,
+      canExitHeli: () => game.heliFlight.canExit(game.world),
+      enterHeli: () => game.enterHeliFlight(),
+      exitHeli: () => game.exitHeliFlight(),
       isTvOn: () => game.plasmaTvOn,
       setTvPower: (on) => game.setPlasmaTvPower(on),
       isLamboInteractArmed: () => game.lamboInteractArmed,
@@ -1675,6 +2314,13 @@ export class Game {
       },
       disarmLamboInteract: () => {
         game.lamboInteractArmed = false;
+      },
+      isHeliInteractArmed: () => game.heliInteractArmed,
+      armHeliInteract: () => {
+        game.heliInteractArmed = true;
+      },
+      disarmHeliInteract: () => {
+        game.heliInteractArmed = false;
       },
       flushInteract: () => game.input.flushInteract(),
     };

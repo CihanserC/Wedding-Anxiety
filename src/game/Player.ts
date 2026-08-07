@@ -138,6 +138,14 @@ export class Player {
     this.syncCamera();
   }
 
+  teleportTo(pos: THREE.Vector3, facing?: number): void {
+    this.position.set(pos.x, pos.y, pos.z);
+    this.velocity.set(0, 0, 0);
+    if (facing !== undefined) this.yaw = facing;
+    this.pitch = 0;
+    this.syncCamera();
+  }
+
   getForwardXZ(): THREE.Vector3 {
     return new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
   }

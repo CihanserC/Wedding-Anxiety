@@ -14,6 +14,7 @@ import {
 } from './tropicalProps';
 import { buildTreasureChest } from './TreasureChest';
 import { buildLamborghini } from './lamborghini';
+import { createHelicopter } from './Helicopter';
 import {
   buildBoat,
   buildDiningChair,
@@ -32,6 +33,9 @@ import {
 import { buildCoastalPicnic, buildCoastalPine, buildCoastalTree } from './coastalProps';
 import { buildGardenFlower } from './gardenFlowers';
 import { buildWallPainting } from './famousPaintings';
+import { createSpaceFighter } from './SpaceFighter';
+import { createTieAdvanced } from './TieAdvanced';
+import { buildVaderThrone } from './VaderThrone';
 
 /**
  * Non-voxel decorative props placed by map generators: stage instruments
@@ -108,8 +112,28 @@ function buildProp(spec: PropSpec): THREE.Group {
       return buildDiningTable();
     case 'lamborghini':
       return buildLamborghini();
-    case 'ufo':
-      return buildUfo();
+    case 'helicopter':
+      return createHelicopter().root;
+    case 'ufo': {
+      // Same starfighter as space flight; wrap + lift so hull clears the pad.
+      const wrap = new THREE.Group();
+      wrap.name = 'ufo';
+      const fighter = createSpaceFighter();
+      fighter.setEngineIntensity(0.25);
+      fighter.root.position.y = 0.5;
+      wrap.add(fighter.root);
+      return wrap;
+    }
+    case 'ufo-beacon':
+      return buildUfoBeacon();
+    case 'ufo-crate':
+      return buildUfoCrate();
+    case 'ufo-sign':
+      return buildUfoSign();
+    case 'tie-advanced':
+      return createTieAdvanced();
+    case 'vader-throne':
+      return buildVaderThrone();
     case 'conductor-podium':
       return buildConductorPodium();
     case 'stage-spotlight':
@@ -138,82 +162,92 @@ function buildProp(spec: PropSpec): THREE.Group {
   return new THREE.Group();
 }
 
-/** Classic saucer — desert secret for the space route stub. */
-function buildUfo(): THREE.Group {
+/** Short neon beacon pole for the UFO landing ring corners. */
+function buildUfoBeacon(): THREE.Group {
   const g = new THREE.Group();
-  g.name = 'ufo';
+  g.name = 'ufo-beacon';
+  const metal = lambert(0x3a4250);
+  const glow = new THREE.MeshBasicMaterial({ color: 0x66ffe0 });
 
-  const hull = lambert(0xb8c0cc);
-  const dark = lambert(0x3a4250);
-  const rim = lambert(0x8a94a4);
-  const glow = new THREE.MeshBasicMaterial({
-    color: 0x66ffe0,
-    transparent: true,
-    opacity: 0.85,
-  });
-  const domeGlass = new THREE.MeshLambertMaterial({
-    color: 0xa8e8ff,
-    transparent: true,
-    opacity: 0.55,
-  });
+  const pole = box(0.12, 1.35, 0.12, metal);
+  pole.position.y = 0.68;
+  g.add(pole);
 
-  const disc = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.8, 0.45, 28), hull);
-  disc.position.y = 1.35;
-  g.add(disc);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 0.1, 10), metal);
+  base.position.y = 0.05;
+  g.add(base);
 
-  const underside = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.2, 0.35, 24), dark);
-  underside.position.y = 1.05;
-  g.add(underside);
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 10), glow);
+  lamp.position.y = 1.45;
+  g.add(lamp);
 
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(2.55, 0.08, 8, 36), rim);
-  ring.rotation.x = Math.PI / 2;
-  ring.position.y = 1.35;
-  g.add(ring);
-
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(1.05, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2), domeGlass);
-  dome.position.y = 1.55;
-  g.add(dome);
-
-  const cockpit = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 10), glow);
-  cockpit.position.y = 1.85;
-  g.add(cockpit);
-
-  const lightColors = [0x66ffe0, 0xff66aa, 0xffe066, 0x66aaff];
-  for (let i = 0; i < 8; i++) {
-    const angle = (i / 8) * Math.PI * 2;
-    const light = new THREE.Mesh(
-      new THREE.SphereGeometry(0.12, 8, 8),
-      new THREE.MeshBasicMaterial({ color: lightColors[i % lightColors.length] }),
-    );
-    light.position.set(Math.cos(angle) * 2.35, 1.2, Math.sin(angle) * 2.35);
-    g.add(light);
-  }
-
-  for (let i = 0; i < 3; i++) {
-    const angle = (i / 3) * Math.PI * 2 + 0.4;
-    const leg = box(0.1, 0.7, 0.1, dark);
-    leg.position.set(Math.cos(angle) * 1.5, 0.45, Math.sin(angle) * 1.5);
-    leg.rotation.z = Math.cos(angle) * 0.25;
-    leg.rotation.x = -Math.sin(angle) * 0.25;
-    g.add(leg);
-    const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.08, 10), rim);
-    pad.position.set(Math.cos(angle) * 1.65, 0.08, Math.sin(angle) * 1.65);
-    g.add(pad);
-  }
-
-  const beam = new THREE.Mesh(
-    new THREE.ConeGeometry(1.1, 1.4, 16, 1, true),
-    new THREE.MeshBasicMaterial({
-      color: 0x66ffe0,
-      transparent: true,
-      opacity: 0.12,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    }),
+  const halo = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.28, 0.28, 0.04, 12),
+    new THREE.MeshBasicMaterial({ color: 0x66ffe0, transparent: true, opacity: 0.35 }),
   );
-  beam.position.y = 0.35;
-  beam.rotation.x = Math.PI;
-  g.add(beam);
+  halo.position.y = 1.28;
+  g.add(halo);
+
+  return g;
+}
+
+/** Metal cargo crate beside the saucer. */
+function buildUfoCrate(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'ufo-crate';
+  const hull = lambert(0x6a7380);
+  const dark = lambert(0x2e3440);
+  const accent = lambert(0x66ffe0);
+
+  const body = box(0.85, 0.55, 0.65, hull);
+  body.position.y = 0.28;
+  g.add(body);
+
+  const lid = box(0.88, 0.08, 0.68, dark);
+  lid.position.y = 0.58;
+  g.add(lid);
+
+  const stripe = box(0.9, 0.08, 0.08, accent);
+  stripe.position.set(0, 0.32, 0.34);
+  g.add(stripe);
+
+  const latch = box(0.14, 0.1, 0.06, dark);
+  latch.position.set(0, 0.52, 0.36);
+  g.add(latch);
+
+  return g;
+}
+
+/** Neon warning panel at the start of the approach path. */
+function buildUfoSign(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'ufo-sign';
+  const post = lambert(0x3a3a42);
+  const panel = lambert(0x1a2030);
+  const neon = new THREE.MeshBasicMaterial({ color: 0x66ffe0 });
+  const warn = new THREE.MeshBasicMaterial({ color: 0xff66aa });
+
+  const pole = box(0.1, 1.5, 0.1, post);
+  pole.position.y = 0.75;
+  g.add(pole);
+
+  const board = box(1.1, 0.7, 0.08, panel);
+  board.position.set(0, 1.55, 0.02);
+  g.add(board);
+
+  const frame = box(1.18, 0.78, 0.04, neon);
+  frame.position.set(0, 1.55, -0.02);
+  g.add(frame);
+
+  // Abstract "saucer" glyph
+  const glyph = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 0.06, 16), warn);
+  glyph.rotation.x = Math.PI / 2;
+  glyph.position.set(0, 1.58, 0.08);
+  g.add(glyph);
+
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), neon);
+  dome.position.set(0, 1.62, 0.08);
+  g.add(dome);
 
   return g;
 }

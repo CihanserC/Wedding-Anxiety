@@ -5,6 +5,8 @@ import { buildFotografFlasoru } from './flasoru';
 import { buildInek } from './inek';
 import { buildKertenkele } from './kertenkele';
 import { buildMaymun } from './maymun';
+import { buildUzayliDusmanca } from './uzayli';
+import { buildGolgeCanavar } from './golgeCanavar';
 
 export interface EnemyMeshResult {
   root: THREE.Group;
@@ -40,6 +42,10 @@ export function buildEnemyMesh(type: EnemyType, stats: EnemyStats): EnemyMeshRes
       return buildKertenkele(stats);
     case 'ari':
       return buildAri(stats);
+    case 'uzayli-dusmanca':
+      return buildUzayliDusmanca(stats);
+    case 'golge-canavar':
+      return buildGolgeCanavar(stats);
   }
 }
 

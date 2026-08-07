@@ -4,7 +4,8 @@ export type KeyBinding =
   | 'left'
   | 'right'
   | 'jump'
-  | 'sprint';
+  | 'sprint'
+  | 'descend';
 
 const KEY_MAP: Record<string, KeyBinding> = {
   KeyW: 'forward',
@@ -18,6 +19,8 @@ const KEY_MAP: Record<string, KeyBinding> = {
   Space: 'jump',
   ShiftLeft: 'sprint',
   ShiftRight: 'sprint',
+  ControlLeft: 'descend',
+  ControlRight: 'descend',
 };
 
 export class InputManager {
@@ -31,7 +34,13 @@ export class InputManager {
   private pausePressed = false;
   private mutePressed = false;
   private cameraTogglePressed = false;
+  private galaxyMapPressed = false;
+  private boardShipPressed = false;
   private pointerLocked = false;
+  /** Re-request lock after an in-flight unlock (release then request race). */
+  private pendingPointerLock = false;
+  /** True between exitPointerLock() and the matching pointerlockchange. */
+  private releasingPointerLock = false;
   private readonly target: HTMLElement;
   private readonly listeners = new Set<() => void>();
 
@@ -71,9 +80,20 @@ export class InputManager {
     this.pausePressed = false;
     this.mutePressed = false;
     this.cameraTogglePressed = false;
+    this.galaxyMapPressed = false;
+    this.boardShipPressed = false;
   };
 
+  private isTypingTarget(event: KeyboardEvent): boolean {
+    const el = event.target;
+    if (!(el instanceof HTMLElement)) return false;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+  }
+
   private onKeyDown = (event: KeyboardEvent): void => {
+    if (this.isTypingTarget(event)) return;
+
     const binding = KEY_MAP[event.code];
     if (binding) {
       this.keys.add(binding);
@@ -93,10 +113,18 @@ export class InputManager {
       this.mutePressed = true;
     } else if (event.code === 'KeyV') {
       this.cameraTogglePressed = true;
+    } else if (event.code === 'KeyF') {
+      this.boardShipPressed = true;
+      event.preventDefault();
+    } else if (event.code === 'Tab') {
+      this.galaxyMapPressed = true;
+      event.preventDefault();
     }
   };
 
   private onKeyUp = (event: KeyboardEvent): void => {
+    if (this.isTypingTarget(event)) return;
+
     const binding = KEY_MAP[event.code];
     if (binding) {
       this.keys.delete(binding);
@@ -125,8 +153,19 @@ export class InputManager {
 
   private onPointerLockChange = (): void => {
     this.pointerLocked = document.pointerLockElement === this.target;
-    if (!this.pointerLocked) {
+    this.releasingPointerLock = false;
+    if (this.pointerLocked) {
+      this.pendingPointerLock = false;
+    } else {
       this.clearAll();
+      if (this.pendingPointerLock) {
+        this.pendingPointerLock = false;
+        try {
+          this.target.requestPointerLock();
+        } catch {
+          // ignore
+        }
+      }
     }
     for (const cb of this.listeners) cb();
   };
@@ -137,6 +176,13 @@ export class InputManager {
   }
 
   requestPointerLock(): void {
+    if (document.pointerLockElement === this.target) {
+      this.pointerLocked = true;
+      // release() may still be in flight — re-lock once unlock completes.
+      this.pendingPointerLock = this.releasingPointerLock;
+      return;
+    }
+    this.pendingPointerLock = true;
     if (this.pointerLocked) return;
     try {
       this.target.requestPointerLock();
@@ -146,8 +192,12 @@ export class InputManager {
   }
 
   releasePointerLock(): void {
+    this.pendingPointerLock = false;
     if (document.pointerLockElement) {
+      this.releasingPointerLock = true;
       document.exitPointerLock();
+    } else {
+      this.releasingPointerLock = false;
     }
   }
 
@@ -210,6 +260,18 @@ export class InputManager {
   consumeCameraToggle(): boolean {
     const pressed = this.cameraTogglePressed;
     this.cameraTogglePressed = false;
+    return pressed;
+  }
+
+  consumeGalaxyMap(): boolean {
+    const pressed = this.galaxyMapPressed;
+    this.galaxyMapPressed = false;
+    return pressed;
+  }
+
+  consumeBoardShip(): boolean {
+    const pressed = this.boardShipPressed;
+    this.boardShipPressed = false;
     return pressed;
   }
 }

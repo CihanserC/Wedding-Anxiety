@@ -14,6 +14,13 @@ import { generateConcertHall } from './worldGen/concertHall';
 import { generateDubai } from './worldGen/dubai';
 import { generateLighthouse } from './worldGen/lighthouse';
 import { generateWeddingHall } from './worldGen/weddingHall';
+import { generatePlanetDesert } from './worldGen/planetDesert';
+import { generatePlanetSnow } from './worldGen/planetSnow';
+import { generatePlanetRainforest } from './worldGen/planetRainforest';
+import { generatePlanetSwamp } from './worldGen/planetSwamp';
+import { generatePlanetLava } from './worldGen/planetLava';
+import { generatePlanetOceanMini } from './worldGen/planetOceanMini';
+import { generatePlanetVoid } from './worldGen/planetVoid';
 import type {
   GeneratorResult,
   SpawnRegion,
@@ -59,6 +66,8 @@ export class World {
   readonly ambientFauna: FaunaSpawnSpec[];
   readonly treasureChest: TreasureChestSpec | null;
   readonly theaterSeats: TheaterSeatSpec[];
+  readonly ufoBoardSpawn: THREE.Vector3 | null;
+  readonly ufoBoardFacing: number | null;
   private readonly cells: Uint8Array;
   private group: THREE.Group | null = null;
   private meshes: THREE.InstancedMesh[] = [];
@@ -93,6 +102,8 @@ export class World {
     this.ambientFauna = result.ambientFauna ?? [];
     this.treasureChest = result.treasureChest ?? null;
     this.theaterSeats = result.theaterSeats ?? [];
+    this.ufoBoardSpawn = result.ufoBoardSpawn?.clone() ?? null;
+    this.ufoBoardFacing = result.ufoBoardFacing ?? null;
   }
 
   private runGenerator(mapDef: MapDefinition, writer: WorldWriter): GeneratorResult {
@@ -107,6 +118,20 @@ export class World {
         return generateBali(writer);
       case 'dubai':
         return generateDubai(writer);
+      case 'planet-desert':
+        return generatePlanetDesert(writer);
+      case 'planet-snow':
+        return generatePlanetSnow(writer);
+      case 'planet-rainforest':
+        return generatePlanetRainforest(writer);
+      case 'planet-swamp':
+        return generatePlanetSwamp(writer);
+      case 'planet-lava':
+        return generatePlanetLava(writer);
+      case 'planet-ocean-mini':
+        return generatePlanetOceanMini(writer);
+      case 'planet-void':
+        return generatePlanetVoid(writer);
     }
   }
 
@@ -235,6 +260,14 @@ export class World {
 
   playerSpawn(): THREE.Vector3 {
     return this.spawn.clone();
+  }
+
+  getUfoBoardSpawn(): THREE.Vector3 | null {
+    return this.ufoBoardSpawn?.clone() ?? null;
+  }
+
+  getUfoBoardFacing(): number | null {
+    return this.ufoBoardFacing;
   }
 
   /**

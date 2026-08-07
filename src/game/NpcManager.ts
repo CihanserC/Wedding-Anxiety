@@ -50,18 +50,34 @@ export class NpcManager {
     if (interactables) this.syncLocalChatInteractables(interactables);
   }
 
-  /** Keep camel/arab chat zones glued to wandering NPC feet. */
+  /** Keep camel/arab/frog chat zones glued to wandering NPC feet. */
   private syncLocalChatInteractables(interactables: InteractableSpec[]): void {
-    const wanderers = this.npcs.filter((n) => n.wander);
-    const chats = interactables.filter(
-      (i) => i.kind === 'camel-chat' || i.kind === 'arab-chat',
+    const glue = (
+      chats: InteractableSpec[],
+      wanderers: typeof this.npcs,
+    ): void => {
+      const n = Math.min(wanderers.length, chats.length);
+      for (let i = 0; i < n; i++) {
+        chats[i].x = wanderers[i].position.x;
+        chats[i].y = wanderers[i].position.y;
+        chats[i].z = wanderers[i].position.z;
+      }
+    };
+
+    glue(
+      interactables.filter((i) => i.kind === 'camel-chat' || i.kind === 'arab-chat'),
+      this.npcs.filter(
+        (n) =>
+          n.wander &&
+          (n.stats.type === 'camel' ||
+            n.stats.type === 'arab-man' ||
+            n.stats.type === 'arab-woman'),
+      ),
     );
-    const n = Math.min(wanderers.length, chats.length);
-    for (let i = 0; i < n; i++) {
-      chats[i].x = wanderers[i].position.x;
-      chats[i].y = wanderers[i].position.y;
-      chats[i].z = wanderers[i].position.z;
-    }
+    glue(
+      interactables.filter((i) => i.kind === 'frog-chat'),
+      this.npcs.filter((n) => n.wander && n.stats.type === 'frog'),
+    );
   }
 
   clear(): void {

@@ -23,9 +23,14 @@ export const START_MESSAGES = {
 export const SPACE_UFO_MESSAGES = {
   prompt: 'E - Uzaya Git',
   title: 'Uzay Gemisi',
-  body:
-    'Çölün ortasında parlayan bir gemi… Kapılar açılıyor, yıldızlar seni çağırıyor. Rota henüz çizilmedi, yakında.',
-  continueLabel: 'Şimdilik Kal',
+  body: 'Çölün ortasında parlayan bir gemi… Kapılar açılıyor, yıldızlar seni çağırıyor.',
+  continueLabel: 'Kalkış',
+  flightHint:
+    'WASD uç · Space/Ctrl irtifa · Shift hızlan · V kamera · Tab harita · E iniş · Esc duraklat',
+  landPrompt: (name: string) => `E — ${name} gezegenine in`,
+  earthLandPrompt: 'E — Dünya\'ya dön',
+  mapPrompt: 'Tab — Galaksi Haritası',
+  boardShipPrompt: 'F - Uzay gemisine dön',
 };
 
 export const WIN_MESSAGES = {
@@ -226,6 +231,14 @@ export const LAMBO_DRIVE_MESSAGES = {
   exitPrompt: 'E - Arabadan in',
   cameraToggle: 'V - Kamera değiştir',
   turbo: 'Shift - Turbo',
+};
+
+export const HELI_FLIGHT_MESSAGES = {
+  prompt: 'E - Helikoptere bin',
+  exitPrompt: 'E - Helikopterden in',
+  exitTooHigh: 'İnmek için yere yaklaş',
+  cameraToggle: 'V - Kamera değiştir',
+  controls: 'WASD yön · Space yüksel · Shift alçal',
 };
 
 export const TV_MESSAGES = {

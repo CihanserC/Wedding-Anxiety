@@ -7,6 +7,7 @@ const WANDER_SPEED: Partial<Record<NpcType, number>> = {
   camel: 0.7,
   'arab-man': 1.05,
   'arab-woman': 0.95,
+  frog: 0.85,
 };
 
 /**

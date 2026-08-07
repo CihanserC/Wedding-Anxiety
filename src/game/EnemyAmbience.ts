@@ -20,6 +20,7 @@ const GROWL_PITCH: Partial<Record<EnemyType, number>> = {
   maymun: 1.15,
   inek: 0.7,
   kertenkele: 1.4,
+  'golge-canavar': 0.45,
 };
 
 const ENEMY_TAUNTS: Partial<Record<EnemyType, string[]>> = {

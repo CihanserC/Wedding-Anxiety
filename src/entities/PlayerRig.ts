@@ -27,7 +27,8 @@ export class PlayerRig {
 
   constructor() {
     this.root = new THREE.Group();
-    this.root.position.set(0.35, -0.32, -0.65);
+    // Slightly higher / closer so the grip hand stays in frame
+    this.root.position.set(0.32, -0.26, -0.58);
 
     this.weapons.set('pistol', buildPistol());
     this.weapons.set('rifle', buildRifle());
@@ -35,6 +36,7 @@ export class PlayerRig {
     this.weapons.set('happiness', buildHappinessBlaster());
     this.weapons.set('lightsaber', buildLightsaber());
     this.weapons.set('banana', buildBanana());
+    this.weapons.set('alien', buildAlienBlaster());
 
     for (const [id, group] of this.weapons) {
       group.visible = id === this.activeId;
@@ -289,34 +291,175 @@ function addMuzzlePoint(group: THREE.Group, x: number, y: number, z: number): vo
   group.add(point);
 }
 
+function pistolVox(
+  parent: THREE.Object3D,
+  w: number,
+  h: number,
+  d: number,
+  material: THREE.Material,
+  x: number,
+  y: number,
+  z: number,
+  rx = 0,
+  ry = 0,
+  rz = 0,
+): THREE.Mesh {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+  mesh.position.set(x, y, z);
+  mesh.rotation.set(rx, ry, rz);
+  parent.add(mesh);
+  return mesh;
+}
+
+/** Voxel heart: two upper lobes + lower tip. */
+function addPistolHeart(
+  parent: THREE.Object3D,
+  size: number,
+  color: number,
+  x: number,
+  y: number,
+  z: number,
+): void {
+  const m = makeMat(color);
+  const s = size;
+  pistolVox(parent, s * 0.45, s * 0.4, s * 0.35, m, x - s * 0.22, y + s * 0.18, z);
+  pistolVox(parent, s * 0.45, s * 0.4, s * 0.35, m, x + s * 0.22, y + s * 0.18, z);
+  pistolVox(parent, s * 0.85, s * 0.45, s * 0.35, m, x, y - s * 0.05, z);
+  pistolVox(parent, s * 0.45, s * 0.4, s * 0.35, m, x, y - s * 0.4, z);
+}
+
+/** Small pink flower with yellow center and green leaves. */
+function addPistolFlower(parent: THREE.Object3D, x: number, y: number, z: number): void {
+  const petal = makeMat(0xff8fb8);
+  const center = makeMat(0xffe066);
+  const leaf = makeMat(0x6bc46d);
+  const s = 0.028;
+  pistolVox(parent, s, s, s * 0.7, petal, x - s * 0.7, y, z);
+  pistolVox(parent, s, s, s * 0.7, petal, x + s * 0.7, y, z);
+  pistolVox(parent, s, s, s * 0.7, petal, x, y + s * 0.7, z);
+  pistolVox(parent, s, s, s * 0.7, petal, x, y - s * 0.7, z);
+  pistolVox(parent, s * 0.7, s * 0.7, s * 0.8, center, x, y, z + 0.005);
+  pistolVox(parent, s * 0.9, s * 0.45, s * 0.5, leaf, x - s * 1.1, y - s * 0.9, z, 0, 0, 0.5);
+  pistolVox(parent, s * 0.9, s * 0.45, s * 0.5, leaf, x + s * 0.6, y - s * 1.0, z, 0, 0, -0.4);
+}
+
+/**
+ * First-person voxel hand gripping a weapon. Scaled large so it reads clearly
+ * in the bottom-right viewmodel (palm, fingers, thumb, wrist/forearm).
+ */
+function addGripHand(
+  parent: THREE.Object3D,
+  ox = 0.02,
+  oy = -0.28,
+  oz = 0.18,
+  scale = 1.45,
+): void {
+  const skinMat = makeMat(0xf0c8a8);
+  const skinDeep = makeMat(0xe0b090);
+  const nailMat = makeMat(0xffc0d0);
+  const sleeve = makeMat(0x3a4a68);
+  const s = scale;
+
+  // Palm — wide block behind / under the grip
+  pistolVox(parent, 0.2 * s, 0.22 * s, 0.14 * s, skinMat, ox + 0.02, oy, oz, 0.18);
+  pistolVox(parent, 0.16 * s, 0.14 * s, 0.11 * s, skinDeep, ox + 0.02, oy - 0.1 * s, oz + 0.04, 0.18);
+
+  // Knuckle ridge
+  pistolVox(parent, 0.18 * s, 0.06 * s, 0.1 * s, skinDeep, ox + 0.04, oy + 0.08 * s, oz - 0.02, 0.1);
+
+  // Four fingers wrapping the front of the grip
+  const fingerYs = [-0.02, -0.1, -0.18, -0.26];
+  for (let i = 0; i < fingerYs.length; i++) {
+    const fy = oy + fingerYs[i] * s;
+    const len = (0.14 - i * 0.012) * s;
+    pistolVox(parent, 0.065 * s, 0.055 * s, len, skinMat, ox + 0.1, fy, oz - 0.14, 0.12);
+    pistolVox(
+      parent,
+      0.05 * s,
+      0.042 * s,
+      0.045 * s,
+      nailMat,
+      ox + 0.105,
+      fy,
+      oz - 0.14 - len * 0.42,
+      0.12,
+    );
+  }
+
+  // Thumb on the outer (−X) side
+  pistolVox(parent, 0.07 * s, 0.06 * s, 0.13 * s, skinMat, ox - 0.12, oy + 0.1 * s, oz - 0.06, 0.1, 0, 0.4);
+  pistolVox(
+    parent,
+    0.05 * s,
+    0.042 * s,
+    0.05 * s,
+    nailMat,
+    ox - 0.14,
+    oy + 0.12 * s,
+    oz - 0.14,
+    0.1,
+    0,
+    0.4,
+  );
+
+  // Wrist + short forearm stub toward camera
+  pistolVox(parent, 0.16 * s, 0.14 * s, 0.16 * s, skinDeep, ox + 0.02, oy - 0.16 * s, oz + 0.16, 0.25);
+  pistolVox(parent, 0.18 * s, 0.16 * s, 0.2 * s, sleeve, ox + 0.02, oy - 0.22 * s, oz + 0.32, 0.28);
+}
+
+/** Cute pastel voxel pistol matching the smile-gun reference art. */
 function buildPistol(): THREE.Group {
   const g = new THREE.Group();
-  const bodyMat = makeMat(0x2a2a30);
-  const gripMat = makeMat(0x3a2418);
-  const detailMat = makeMat(0xd0d0d8);
 
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.4), bodyMat);
-  body.position.set(0, 0, 0);
-  g.add(body);
+  const slideMat = makeMat(0x7ec8e8);
+  const slideDeep = makeMat(0x5eb0d8);
+  const frameMat = makeMat(0xb8a0d8);
+  const frameDeep = makeMat(0x9a82c0);
+  const pinkMat = makeMat(0xff8fb8);
+  const pinkDeep = makeMat(0xf06098);
+  const triggerMat = makeMat(0xd4b0e8);
 
-  const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.5), bodyMat);
-  barrel.position.set(0, 0.02, -0.3);
-  g.add(barrel);
+  // ── Sky-blue slide / upper body ──────────────────────────────────────
+  pistolVox(g, 0.15, 0.14, 0.42, slideMat, 0, 0.04, -0.02);
+  pistolVox(g, 0.12, 0.11, 0.38, slideDeep, 0, 0.05, -0.28);
+  // Slightly thicker breech at the back
+  pistolVox(g, 0.16, 0.16, 0.12, slideMat, 0, 0.05, 0.16);
 
-  const sight = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.06), detailMat);
-  sight.position.set(0, 0.12, -0.15);
-  g.add(sight);
+  // ── Lavender frame under the slide ───────────────────────────────────
+  pistolVox(g, 0.14, 0.08, 0.36, frameMat, 0, -0.05, 0.0);
+  pistolVox(g, 0.13, 0.06, 0.1, frameDeep, 0, -0.04, -0.2);
 
-  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.28, 0.14), gripMat);
-  grip.position.set(0, -0.2, 0.08);
-  grip.rotation.x = 0.25;
-  g.add(grip);
+  // ── Grip ─────────────────────────────────────────────────────────────
+  pistolVox(g, 0.12, 0.28, 0.14, frameMat, 0, -0.2, 0.1, 0.22);
+  pistolVox(g, 0.1, 0.2, 0.05, frameDeep, 0, -0.18, 0.16, 0.22);
 
-  const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.06, 0.05), detailMat);
-  trigger.position.set(0, -0.05, 0.04);
-  g.add(trigger);
+  // Trigger guard + trigger
+  pistolVox(g, 0.08, 0.1, 0.12, frameDeep, 0, -0.1, 0.0);
+  pistolVox(g, 0.04, 0.06, 0.04, triggerMat, 0, -0.08, 0.02);
 
-  addMuzzlePoint(g, 0, 0.02, -0.55);
+  // ── Pink muzzle ring ─────────────────────────────────────────────────
+  pistolVox(g, 0.13, 0.13, 0.05, pinkMat, 0, 0.05, -0.5);
+  pistolVox(g, 0.1, 0.1, 0.04, pinkDeep, 0, 0.05, -0.53);
+  // Dark bore
+  pistolVox(g, 0.055, 0.055, 0.03, makeMat(0x3a2848), 0, 0.05, -0.55);
+
+  // Front sight nub
+  pistolVox(g, 0.03, 0.035, 0.04, pinkMat, 0, 0.14, -0.42);
+
+  // ── Side decorations (camera-facing / outer +X side) ──────────────────
+  const sideX = 0.09;
+  addPistolFlower(g, sideX, 0.06, 0.12);
+  addPistolHeart(g, 0.07, 0xff7aaa, sideX, 0.04, -0.02);
+  addPistolHeart(g, 0.055, 0xffe066, sideX, 0.05, -0.16);
+  addPistolHeart(g, 0.04, 0xff8fb8, sideX, 0.04, -0.32);
+
+  // Soft top accents
+  pistolVox(g, 0.04, 0.02, 0.04, pinkMat, -0.04, 0.12, 0.05);
+  pistolVox(g, 0.03, 0.02, 0.03, makeMat(0xffe066), 0.04, 0.12, -0.1);
+
+  addGripHand(g, 0.02, -0.26, 0.2, 1.5);
+
+  addMuzzlePoint(g, 0, 0.05, -0.58);
   return g;
 }
 
@@ -355,6 +498,8 @@ function buildRifle(): THREE.Group {
   const mag = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.24, 0.14), barrelMat);
   mag.position.set(0, -0.2, -0.05);
   g.add(mag);
+
+  addGripHand(g, 0.02, -0.28, 0.22, 1.45);
 
   addMuzzlePoint(g, 0, 0.03, -1.11);
   return g;
@@ -397,6 +542,8 @@ function buildShield(): THREE.Group {
     ray.position.set(rx, 0.1 + ry, -0.35);
     g.add(ray);
   }
+
+  addGripHand(g, 0.02, -0.22, 0.24, 1.4);
 
   addMuzzlePoint(g, 0, 0.1, -0.39);
   return g;
@@ -478,6 +625,8 @@ function buildHappinessBlaster(): THREE.Group {
   loop.position.set(0, 0.02, 0.34);
   g.add(loop);
 
+  addGripHand(g, 0.02, -0.28, 0.2, 1.45);
+
   addMuzzlePoint(g, 0, 0.02, -0.88);
   return g;
 }
@@ -533,7 +682,176 @@ function buildBanana(): THREE.Group {
   stemTip.rotation.x = 0.5;
   g.add(stemTip);
 
+  addGripHand(g, 0.02, -0.18, 0.28, 1.4);
+
   addMuzzlePoint(g, 0, -0.12, -0.72);
+  return g;
+}
+
+/** Tiny voxel star (plus + diagonals). */
+function addKawaiiStar(
+  parent: THREE.Object3D,
+  size: number,
+  color: number,
+  x: number,
+  y: number,
+  z: number,
+): void {
+  const m = makeMat(color);
+  const s = size;
+  pistolVox(parent, s * 0.35, s, s * 0.3, m, x, y, z);
+  pistolVox(parent, s, s * 0.35, s * 0.3, m, x, y, z);
+  pistolVox(parent, s * 0.55, s * 0.55, s * 0.25, m, x, y, z);
+}
+
+/** Calico voxel cat head — white face, orange patches, pink nose. */
+function addKawaiiCat(
+  parent: THREE.Object3D,
+  x: number,
+  y: number,
+  z: number,
+): void {
+  const white = makeMat(0xfff8f0);
+  const orange = makeMat(0xf0a060);
+  const tan = makeMat(0xd4884a);
+  const pink = makeMat(0xff9ab8);
+  const eye = makeMat(0x3a2820);
+  const s = 0.055;
+
+  // Face
+  pistolVox(parent, s * 1.5, s * 1.35, s * 0.7, white, x, y, z);
+  // Orange cheek / forehead patches
+  pistolVox(parent, s * 0.55, s * 0.55, s * 0.55, orange, x - s * 0.45, y + s * 0.2, z + 0.01);
+  pistolVox(parent, s * 0.4, s * 0.4, s * 0.45, tan, x + s * 0.5, y + s * 0.35, z + 0.01);
+  // Ears
+  pistolVox(parent, s * 0.4, s * 0.45, s * 0.35, white, x - s * 0.55, y + s * 0.85, z);
+  pistolVox(parent, s * 0.4, s * 0.45, s * 0.35, orange, x + s * 0.55, y + s * 0.85, z);
+  pistolVox(parent, s * 0.22, s * 0.22, s * 0.2, pink, x - s * 0.55, y + s * 0.8, z + 0.015);
+  pistolVox(parent, s * 0.22, s * 0.22, s * 0.2, pink, x + s * 0.55, y + s * 0.8, z + 0.015);
+  // Eyes + nose
+  pistolVox(parent, s * 0.22, s * 0.28, s * 0.25, eye, x - s * 0.32, y + s * 0.05, z + 0.03);
+  pistolVox(parent, s * 0.22, s * 0.28, s * 0.25, eye, x + s * 0.32, y + s * 0.05, z + 0.03);
+  pistolVox(parent, s * 0.2, s * 0.16, s * 0.22, pink, x, y - s * 0.25, z + 0.03);
+}
+
+/**
+ * Kawaii pastel voxel ray gun — matches the cute cat-blaster reference.
+ * Planet-surface only.
+ */
+function buildAlienBlaster(): THREE.Group {
+  const g = new THREE.Group();
+
+  const magenta = makeMat(0xb05098);
+  const magentaDeep = makeMat(0x8a3a78);
+  const lavender = makeMat(0xc8a8e0);
+  const lavenderDeep = makeMat(0xa888c8);
+  const pink = makeMat(0xff8fb8);
+  const pinkDeep = makeMat(0xf068a0);
+  const mint = makeMat(0x88e0d8);
+  const mintDeep = makeMat(0x68c8c0);
+  const pearl = makeMat(0xf8f4ff, { emissive: 0xe8d0ff, emissiveIntensity: 0.25 });
+  const pearlSoft = makeMat(0xfff0f8, { emissive: 0xffd0e8, emissiveIntensity: 0.2 });
+  const gold = makeMat(0xe8c878, { emissive: 0xc8a040, emissiveIntensity: 0.35 });
+  const yellow = makeMat(0xffe066);
+  const sky = makeMat(0x90d0f0);
+  const white = makeMat(0xfff8fc);
+  const purpleTrig = makeMat(0x9a68c8);
+  const heartPink = 0xff7aaa;
+  const heartLav = 0xc8a0e8;
+  const heartMint = 0x7ad8c0;
+
+  // ── Main body (teardrop: thick rear → taper front) ───────────────────
+  pistolVox(g, 0.2, 0.2, 0.38, lavender, 0, 0.04, 0.02);
+  pistolVox(g, 0.18, 0.17, 0.16, lavenderDeep, 0, 0.04, -0.22);
+  pistolVox(g, 0.15, 0.14, 0.12, lavender, 0, 0.05, -0.34);
+  // Magenta top ridge
+  pistolVox(g, 0.12, 0.07, 0.34, magenta, 0, 0.16, 0.0);
+  pistolVox(g, 0.1, 0.05, 0.14, magentaDeep, 0, 0.17, -0.2);
+  // Soft underside
+  pistolVox(g, 0.16, 0.06, 0.3, lavenderDeep, 0, -0.06, 0.02);
+
+  // ── Top fin (sky blue + yellow serrated crest) ───────────────────────
+  pistolVox(g, 0.05, 0.1, 0.12, sky, 0, 0.24, 0.12);
+  pistolVox(g, 0.04, 0.04, 0.05, yellow, 0, 0.3, 0.16);
+  pistolVox(g, 0.04, 0.035, 0.04, yellow, 0, 0.29, 0.11);
+  pistolVox(g, 0.04, 0.03, 0.035, yellow, 0, 0.28, 0.07);
+
+  // ── Side panel (camera-facing +X) with cloud + cat ───────────────────
+  const sideX = 0.12;
+  // Lavender cloud behind panel
+  pistolVox(g, 0.04, 0.1, 0.16, lavenderDeep, sideX - 0.01, 0.06, 0.0);
+  pistolVox(g, 0.035, 0.08, 0.1, lavender, sideX - 0.01, 0.1, 0.06);
+  pistolVox(g, 0.035, 0.07, 0.08, lavender, sideX - 0.01, 0.09, -0.08);
+  // Raised pink plaque
+  pistolVox(g, 0.05, 0.14, 0.22, pink, sideX + 0.02, 0.05, -0.02);
+  pistolVox(g, 0.03, 0.11, 0.18, pinkDeep, sideX + 0.035, 0.05, -0.02);
+
+  addKawaiiCat(g, sideX + 0.06, 0.06, -0.02);
+  addPistolHeart(g, 0.035, heartPink, sideX + 0.055, 0.12, 0.08);
+  addPistolHeart(g, 0.03, heartLav, sideX + 0.055, 0.0, 0.08);
+  addPistolHeart(g, 0.028, heartMint, sideX + 0.055, -0.01, -0.1);
+  addPistolHeart(g, 0.025, heartPink, sideX + 0.055, 0.11, -0.12);
+  addKawaiiStar(g, 0.04, 0xffe066, sideX + 0.055, 0.13, -0.02);
+  addKawaiiStar(g, 0.032, 0xa8e0ff, sideX + 0.055, -0.02, 0.0);
+
+  // Far side (−X) soft accent strip
+  pistolVox(g, 0.04, 0.12, 0.28, magenta, -0.11, 0.06, 0.0);
+
+  // ── Muzzle: concentric pearl rings + gold rim + bulb tip ─────────────
+  // Neck from body
+  pistolVox(g, 0.1, 0.1, 0.1, lavenderDeep, 0, 0.05, -0.44);
+  // Large rear ring
+  pistolVox(g, 0.22, 0.22, 0.05, pearl, 0, 0.05, -0.52);
+  pistolVox(g, 0.24, 0.24, 0.02, gold, 0, 0.05, -0.5);
+  // Mid ring
+  pistolVox(g, 0.17, 0.17, 0.045, pearlSoft, 0, 0.05, -0.58);
+  pistolVox(g, 0.19, 0.19, 0.018, gold, 0, 0.05, -0.56);
+  // Front ring
+  pistolVox(g, 0.13, 0.13, 0.04, pearl, 0, 0.05, -0.64);
+  // Cylindrical tip + bulb
+  pistolVox(g, 0.08, 0.08, 0.08, pearlSoft, 0, 0.05, -0.7);
+  pistolVox(g, 0.1, 0.1, 0.08, pearl, 0, 0.05, -0.76);
+  pistolVox(g, 0.07, 0.07, 0.05, pearlSoft, 0, 0.05, -0.82);
+  // Dark bore
+  pistolVox(g, 0.04, 0.04, 0.03, makeMat(0x4a3858), 0, 0.05, -0.85);
+
+  // ── Grip (mint core + white diamond quilt) ───────────────────────────
+  const gripRoot = new THREE.Group();
+  gripRoot.position.set(0, -0.08, 0.12);
+  gripRoot.rotation.x = 0.32;
+  g.add(gripRoot);
+
+  pistolVox(gripRoot, 0.11, 0.28, 0.13, mint, 0, -0.12, 0);
+  pistolVox(gripRoot, 0.09, 0.22, 0.05, mintDeep, 0, -0.12, 0.05);
+  // Quilted diamond lattice on outer (+X) face
+  const q = white;
+  const qx = 0.065;
+  const diamonds: Array<[number, number]> = [
+    [0.02, -0.02],
+    [-0.02, -0.08],
+    [0.02, -0.14],
+    [-0.02, -0.2],
+    [0.02, -0.24],
+  ];
+  for (const [dy, dz] of diamonds) {
+    pistolVox(gripRoot, 0.025, 0.04, 0.04, q, qx, dy, dz, 0, 0, Math.PI / 4);
+  }
+
+  // Pink bow at grip / body junction
+  pistolVox(g, 0.08, 0.045, 0.03, pink, 0.08, -0.02, 0.14);
+  pistolVox(g, 0.03, 0.035, 0.025, pinkDeep, 0.05, -0.02, 0.14);
+  pistolVox(g, 0.03, 0.035, 0.025, pinkDeep, 0.11, -0.02, 0.14);
+  pistolVox(g, 0.025, 0.025, 0.03, pink, 0.08, -0.02, 0.155);
+
+  // Trigger guard (pink loop) + purple trigger
+  pistolVox(g, 0.06, 0.02, 0.12, pink, 0, -0.04, 0.02);
+  pistolVox(g, 0.06, 0.1, 0.02, pink, 0, -0.08, -0.04);
+  pistolVox(g, 0.06, 0.02, 0.1, pink, 0, -0.12, 0.02);
+  pistolVox(g, 0.04, 0.06, 0.035, purpleTrig, 0, -0.07, 0.04);
+
+  addGripHand(g, 0.02, -0.3, 0.22, 1.55);
+
+  addMuzzlePoint(g, 0, 0.05, -0.88);
   return g;
 }
 

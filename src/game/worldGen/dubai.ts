@@ -49,11 +49,14 @@ export function generateDubai(w: WorldWriter): GeneratorResult {
   }
 
   // Soft dune undulation — keep the highway corridor flat
+  const ufoX = Math.max(8, villaX - 22);
+  const ufoZ = villaZ + 38;
   for (let z = 2; z < D - 2; z++) {
     for (let x = 2; x < W - 2; x++) {
       if (isNearHighway(x, z, roadCenterX, roadHalfW, roadNorthZ, roadSouthZ, villaX, villaZ)) {
         continue;
       }
+      if (isNearUfoSite(x, z, ufoX, ufoZ)) continue;
       const dx = x - cx;
       const dz = z - villaZ;
       const dist = Math.sqrt(dx * dx + dz * dz * 0.35);
@@ -72,12 +75,11 @@ export function generateDubai(w: WorldWriter): GeneratorResult {
   placeSkyline(w, cx);
   placeVillaEntranceStepFloor(w, villaX, villaZ);
   flattenLamborghiniPad(w, villaX, villaZ);
+  flattenHelipad(w, villaX, villaZ);
   buildInfinityPool(w, villaX, villaZ);
 
   // Secret UFO landing pad — west dunes, off the highway
-  const ufoX = Math.max(8, villaX - 22);
-  const ufoZ = villaZ + 38;
-  flattenUfoPad(w, ufoX, ufoZ);
+  buildUfoLandingSite(w, ufoX, ufoZ);
   const ufoY = 3.01;
 
   const stairsOrigin = {
@@ -92,6 +94,12 @@ export function generateDubai(w: WorldWriter): GeneratorResult {
   const lamboZ = villaZ + VILLA_DEPTH + 12;
   // Model nose is -Z locally; Math.PI aims +Z south down the highway
   const lamboRotation = Math.PI;
+
+  // Helipad southwest of the villa driveway — clear of Lambo pad and UFO site
+  const heliX = villaX - 8;
+  const heliY = 3.01;
+  const heliZ = villaZ + VILLA_DEPTH + 28;
+  const heliRotation = Math.PI;
 
   const salonX = villaX + 9;
   const salonZ = villaZ + 6.5;
@@ -111,13 +119,21 @@ export function generateDubai(w: WorldWriter): GeneratorResult {
       rotationY: Math.PI,
     },
     ...placeVillaFurniture(villaX, villaZ),
-    ...placePalmTrees(cx, villaZ, villaX, roadCenterX, roadNorthZ, roadSouthZ),
+    ...placePalmTrees(cx, villaZ, villaX, roadCenterX, roadNorthZ, roadSouthZ, ufoX, ufoZ),
     {
       kind: 'lamborghini',
       x: lamboX,
       y: lamboY,
       z: lamboZ,
       rotationY: lamboRotation,
+      scale: 1,
+    },
+    {
+      kind: 'helicopter',
+      x: heliX + 0.5,
+      y: heliY,
+      z: heliZ + 0.5,
+      rotationY: heliRotation,
       scale: 1,
     },
     {
@@ -128,6 +144,7 @@ export function generateDubai(w: WorldWriter): GeneratorResult {
       rotationY: 0.35,
       scale: 1,
     },
+    ...placeUfoSiteProps(ufoX, ufoZ, ufoY),
   ];
 
   const locals = placeFriendlyLocals(villaX, villaZ, cx, roadCenterX);
@@ -175,6 +192,13 @@ export function generateDubai(w: WorldWriter): GeneratorResult {
       radius: 3.2,
     },
     {
+      kind: 'helicopter-board',
+      x: heliX + 0.5,
+      y: heliY,
+      z: heliZ + 0.5,
+      radius: 4,
+    },
+    {
       kind: 'plasma-tv',
       x: villaX + 18.5,
       y: 3.01,
@@ -186,7 +210,7 @@ export function generateDubai(w: WorldWriter): GeneratorResult {
       x: ufoX + 0.5,
       y: ufoY,
       z: ufoZ + 0.5,
-      radius: 4.2,
+      radius: 5.2,
     },
     {
       kind: 'sunset-point',
@@ -204,6 +228,8 @@ export function generateDubai(w: WorldWriter): GeneratorResult {
   return {
     playerSpawn: new THREE.Vector3(spawnX + 0.5, 3.01, spawnZ + 0.5),
     playerFacing: Math.PI,
+    ufoBoardSpawn: new THREE.Vector3(ufoX + 3.5, 3.01, ufoZ + 0.5),
+    ufoBoardFacing: -Math.PI / 2,
     enemySpawnRegion: {
       minX: cx - 2,
       maxX: cx + 2,
@@ -416,6 +442,111 @@ function buildVillaEntranceStairCollisionBoxes(origin: {
   return boxes;
 }
 
+/** Flat scorched landing site under the secret UFO — platform, ring lights, approach path. */
+function buildUfoLandingSite(w: WorldWriter, cx: number, cz: number): void {
+  const outerR = 9;
+  const ringR = 7;
+  const padR = 5;
+
+  for (let z = cz - outerR; z <= cz + outerR; z++) {
+    for (let x = cx - outerR; x <= cx + outerR; x++) {
+      if (x < 1 || x >= w.width - 1 || z < 1 || z >= w.depth - 1) continue;
+      const dx = x - cx;
+      const dz = z - cz;
+      const dist2 = dx * dx + dz * dz;
+      if (dist2 > outerR * outerR) continue;
+
+      // Clear dunes / air above pad so UFO legs sit cleanly
+      for (let y = 3; y <= 6; y++) w.setBlock(x, y, z, BLOCK_AIR);
+      w.setBlock(x, 1, z, BLOCK_STONE);
+
+      if (dist2 <= padR * padR) {
+        // Scorched center — asphalt + path mix
+        const scorched = (x + z) % 3 === 0;
+        w.setBlock(x, 2, z, scorched ? BLOCK_ASPHALT : BLOCK_PATH);
+      } else if (dist2 <= ringR * ringR) {
+        // Landing ring markers
+        const onRing = dist2 >= (ringR - 1) * (ringR - 1);
+        if (onRing) {
+          const angleSlot = Math.atan2(dz, dx);
+          const lightSlot = Math.abs(angleSlot % (Math.PI / 4)) < 0.2;
+          w.setBlock(x, 2, z, lightSlot ? BLOCK_LIGHT : BLOCK_GOLD);
+        } else {
+          w.setBlock(x, 2, z, BLOCK_SAND);
+        }
+      } else {
+        // Outer flattened sand apron
+        w.setBlock(x, 2, z, BLOCK_SAND);
+      }
+    }
+  }
+
+  // Cardinal rock markers just outside the ring
+  for (const [ox, oz] of [
+    [0, -ringR - 1],
+    [0, ringR + 1],
+    [-ringR - 1, 0],
+    [ringR + 1, 0],
+  ] as Array<[number, number]>) {
+    const x = cx + ox;
+    const z = cz + oz;
+    if (x < 1 || x >= w.width - 1 || z < 1 || z >= w.depth - 1) continue;
+    w.setBlock(x, 1, z, BLOCK_STONE);
+    w.setBlock(x, 2, z, BLOCK_ROCK);
+    w.setBlock(x, 3, z, BLOCK_AIR);
+  }
+
+  // Approach path east toward the villa
+  const pathEndX = Math.min(w.width - 2, cx + 14);
+  for (let x = cx + padR; x <= pathEndX; x++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      const z = cz + dz;
+      if (z < 1 || z >= w.depth - 1) continue;
+      for (let y = 3; y <= 5; y++) w.setBlock(x, y, z, BLOCK_AIR);
+      w.setBlock(x, 1, z, BLOCK_STONE);
+      w.setBlock(x, 2, z, Math.abs(dz) === 1 ? BLOCK_SAND : BLOCK_PATH);
+    }
+  }
+}
+
+function isNearUfoSite(x: number, z: number, ufoX: number, ufoZ: number): boolean {
+  const dx = x - ufoX;
+  const dz = z - ufoZ;
+  return dx * dx + dz * dz <= 11 * 11;
+}
+
+function placeUfoSiteProps(ufoX: number, ufoZ: number, ufoY: number): PropSpec[] {
+  const groundY = ufoY;
+  return [
+    { kind: 'ufo-beacon', x: ufoX + 0.5 - 6.2, y: groundY, z: ufoZ + 0.5 - 6.2 },
+    { kind: 'ufo-beacon', x: ufoX + 0.5 + 6.2, y: groundY, z: ufoZ + 0.5 - 6.2 },
+    { kind: 'ufo-beacon', x: ufoX + 0.5 - 6.2, y: groundY, z: ufoZ + 0.5 + 6.2 },
+    { kind: 'ufo-beacon', x: ufoX + 0.5 + 6.2, y: groundY, z: ufoZ + 0.5 + 6.2 },
+    {
+      kind: 'ufo-crate',
+      x: ufoX + 0.5 + 4.2,
+      y: groundY,
+      z: ufoZ + 0.5 - 3.5,
+      rotationY: 0.4,
+    },
+    {
+      kind: 'ufo-crate',
+      x: ufoX + 0.5 + 5.0,
+      y: groundY,
+      z: ufoZ + 0.5 - 2.2,
+      rotationY: -0.25,
+      scale: 0.85,
+    },
+    {
+      kind: 'ufo-sign',
+      x: ufoX + 0.5 + 11.5,
+      y: groundY,
+      z: ufoZ + 0.5,
+      rotationY: -Math.PI / 2,
+    },
+  ];
+}
+
 /** Flat parking slab south of the infinity pool — no dunes or dips. */
 function flattenLamborghiniPad(w: WorldWriter, ox: number, oz: number): void {
   const padMinX = ox + 6;
@@ -442,20 +573,41 @@ function flattenLamborghiniPad(w: WorldWriter, ox: number, oz: number): void {
   }
 }
 
-/** Flat scorched sand circle under the secret UFO. */
-function flattenUfoPad(w: WorldWriter, cx: number, cz: number): void {
-  const r = 4;
-  for (let z = cz - r; z <= cz + r; z++) {
-    for (let x = cx - r; x <= cx + r; x++) {
+/** Asphalt helipad southwest of the villa — clear of driveway and UFO site. */
+function flattenHelipad(w: WorldWriter, ox: number, oz: number): void {
+  const padMinX = ox - 12;
+  const padMaxX = ox - 3;
+  const padMinZ = oz + VILLA_DEPTH + 24;
+  const padMaxZ = oz + VILLA_DEPTH + 33;
+
+  for (let z = padMinZ; z <= padMaxZ; z++) {
+    for (let x = padMinX; x <= padMaxX; x++) {
       if (x < 1 || x >= w.width - 1 || z < 1 || z >= w.depth - 1) continue;
-      const dx = x - cx;
-      const dz = z - cz;
-      if (dx * dx + dz * dz > r * r) continue;
       w.setBlock(x, 3, z, BLOCK_AIR);
-      w.setBlock(x, 4, z, BLOCK_AIR);
       w.setBlock(x, 2, z, BLOCK_PATH);
       w.setBlock(x, 1, z, BLOCK_STONE);
     }
+  }
+
+  // Gold H-pad border
+  for (let z = padMinZ; z <= padMaxZ; z++) {
+    w.setBlock(padMinX - 1, 2, z, BLOCK_GOLD);
+    w.setBlock(padMaxX + 1, 2, z, BLOCK_GOLD);
+  }
+  for (let x = padMinX; x <= padMaxX; x++) {
+    w.setBlock(x, 2, padMinZ - 1, BLOCK_GOLD);
+    w.setBlock(x, 2, padMaxZ + 1, BLOCK_GOLD);
+  }
+
+  // Simple H marking in the center
+  const hx = Math.floor((padMinX + padMaxX) / 2);
+  const hz = Math.floor((padMinZ + padMaxZ) / 2);
+  for (let dz = -2; dz <= 2; dz++) {
+    w.setBlock(hx - 2, 2, hz + dz, BLOCK_GOLD);
+    w.setBlock(hx + 2, 2, hz + dz, BLOCK_GOLD);
+  }
+  for (let dx = -2; dx <= 2; dx++) {
+    w.setBlock(hx + dx, 2, hz, BLOCK_GOLD);
   }
 }
 
@@ -715,6 +867,8 @@ function placePalmTrees(
   roadCenterX: number,
   roadNorthZ: number,
   roadSouthZ: number,
+  ufoX: number,
+  ufoZ: number,
 ): PropSpec[] {
   const props: PropSpec[] = [];
   const spots: Array<[number, number]> = [
@@ -739,6 +893,17 @@ function placePalmTrees(
     if (x >= villaX + 5 && x <= villaX + 15 && z >= villaZ + 26 && z <= villaZ + 32) continue;
     // Keep palms off the asphalt itself
     if (Math.abs(x - roadCenterX) <= 3) continue;
+    // Keep palms off the UFO landing site
+    if (isNearUfoSite(x, z, ufoX, ufoZ)) continue;
+    // Keep palms off the helipad
+    if (
+      x >= villaX - 14 &&
+      x <= villaX - 1 &&
+      z >= villaZ + VILLA_DEPTH + 22 &&
+      z <= villaZ + VILLA_DEPTH + 35
+    ) {
+      continue;
+    }
     // Keep palms off the south turnaround plaza
     if (
       z >= roadSouthZ - 14 &&
